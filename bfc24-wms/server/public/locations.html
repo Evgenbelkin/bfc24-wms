@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Справочник МХ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    .topbar {
+      background: #111827;
+      color: #fff;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .topbar-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .topbar-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #374151;
+    }
+    .chip.ok {
+      background: #16a34a;
+    }
+    .chip.offline {
+      background: #b91c1c;
+    }
+    .chip-role {
+      background: #4b5563;
+    }
+    .btn-top {
+      border-radius: 999px;
+      border: 1px solid #6b7280;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+    .page {
+      padding: 10px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    h2 {
+      font-size: 14px;
+      margin: 0;
+    }
+    label {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    input, select {
+      width: 100%;
+      padding: 7px;
+      font-size: 14px;
+      margin-top: 3px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+    }
+    button {
+      margin-top: 8px;
+      padding: 9px;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+    .btn-danger {
+      background: #ef4444;
+      color: #fff;
+    }
+    .btn-primary:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    .status.ok {
+      color: #059669;
+    }
+    .status.error {
+      color: #dc2626;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 6px 4px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    th {
+      background: #f9fafb;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    tr:nth-child(even) td {
+      background: #f9fafb;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 11px;
+    }
+    .badge-ok {
+      background: #dcfce7;
+      color: #15803d;
+    }
+    .badge-off {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+    .actions-cell button {
+      margin-right: 4px;
+      margin-top: 0;
+      padding: 4px 6px;
+      font-size: 11px;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 11px;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 8px;
+      border-radius: 8px;
+      max-height: 220px;
+      overflow: auto;
+      margin-top: 6px;
+    }
+    @media (min-width: 720px) {
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .form-grid label {
+        margin-top: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- ТОПБАР -->
+  <div class="topbar">
+    <div class="topbar-row">
+      <div>
+        <div class="topbar-title">BFC24 WMS — Справочник МХ</div>
+        <div class="topbar-sub" id="userInfo">Не авторизован</div>
+      </div>
+      <div class="topbar-actions">
+        <span id="onlineChip" class="chip ok">online</span>
+        <span id="roleChip" class="chip chip-role hidden"></span>
+        <button id="btnMenu" class="btn-top">Меню</button>
+        <button id="btnLogout" class="btn-top">Выйти</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page">
+    <!-- ФИЛЬТР -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Фильтр</h2>
+        <button id="btnReload" class="btn-secondary">Обновить список</button>
+      </div>
+      <div class="form-grid">
+        <label>
+          Поиск по коду / описанию:
+          <input type="text" id="filterSearch" placeholder="A-01-01 или 'стеллаж'" />
+        </label>
+        <label>
+          Только активные МХ:
+          <select id="filterActive">
+            <option value="">Все</option>
+            <option value="true">Только активные</option>
+            <option value="false">Только неактивные</option>
+          </select>
+        </label>
+      </div>
+      <div id="filterStatus" class="status"></div>
+    </div>
+
+    <!-- ФОРМА -->
+    <div class="card">
+      <div class="card-header">
+        <h2 id="formTitle">Новая ячейка (МХ)</h2>
+        <button id="btnNew" class="btn-secondary">Новая МХ</button>
+      </div>
+      <div class="form-grid">
+        <label>
+          Код МХ (code):
+          <input type="text" id="locCode" placeholder="Например, A-01-01" />
+        </label>
+        <label>
+          Зона / блок (опционально):
+          <input type="text" id="locZone" placeholder="Зона, ряд, стеллаж..." />
+        </label>
+        <label>
+          Описание (опционально):
+          <input type="text" id="locDescription" placeholder="Например, 'Стеллаж у ворот'" />
+        </label>
+        <label>
+          Активен:
+          <select id="locIsActive">
+            <option value="true">Да</option>
+            <option value="false">Нет</option>
+          </select>
+        </label>
+      </div>
+      <button id="btnSave" class="btn-primary">Сохранить</button>
+      <div id="formStatus" class="status"></div>
+    </div>
+
+    <!-- ТАБЛИЦА МХ -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Список МХ</h2>
+        <div id="listSummary" style="font-size:12px; color:#6b7280;"></div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Код МХ</th>
+              <th>Зона</th>
+              <th>Описание</th>
+              <th>Активен</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="locationsTableBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ОТЛАДКА -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Отладка</h2>
+      </div>
+      <pre id="debugBox">{}</pre>
+    </div>
+  </div>
+
+  <script>
+    let token = null;
+    let userRole = null;
+    let usernameGlobal = null;
+
+    let locations = [];
+    let editingId = null;
+
+    function setUserInfo(text) {
+      document.getElementById('userInfo').textContent = text || '';
+    }
+
+    function setRoleChip(role) {
+      const chip = document.getElementById('roleChip');
+      if (!role) {
+        chip.classList.add('hidden');
+        return;
+      }
+      chip.textContent = 'role: ' + role;
+      chip.classList.remove('hidden');
+    }
+
+    function setDebug(obj) {
+      const el = document.getElementById('debugBox');
+      try {
+        el.textContent = JSON.stringify(obj, null, 2);
+      } catch (e) {
+        el.textContent = String(obj);
+      }
+    }
+
+    function setFormStatus(text, ok) {
+      const el = document.getElementById('formStatus');
+      el.textContent = text || '';
+      el.className = 'status ' + (ok ? 'ok' : 'error');
+    }
+
+    function setFilterStatus(text, ok) {
+      const el = document.getElementById('filterStatus');
+      el.textContent = text || '';
+      if (!text) {
+        el.className = 'status';
+        return;
+      }
+      el.className = 'status ' + (ok ? 'ok' : 'error');
+    }
+
+    // ---------------- ИНИЦИАЛИЗАЦИЯ ----------------
+    (function init() {
+      token = localStorage.getItem('wmsToken');
+      usernameGlobal = localStorage.getItem('wmsUser') || null;
+      userRole = localStorage.getItem('wmsRole') || null;
+
+      if (!token) {
+        setUserInfo('Не авторизован');
+        setFilterStatus('Нет токена. Зайдите через Меню.', false);
+      } else {
+        setUserInfo('Пользователь: ' + (usernameGlobal || ''));
+        setRoleChip(userRole);
+        loadLocations();
+      }
+
+      document.getElementById('btnMenu').addEventListener('click', () => {
+        window.location.href = '/menu.html';
+      });
+
+      document.getElementById('btnLogout').addEventListener('click', () => {
+        localStorage.removeItem('wmsToken');
+        localStorage.removeItem('wmsUser');
+        localStorage.removeItem('wmsRole');
+        window.location.href = '/menu.html';
+      });
+
+      document.getElementById('btnReload').addEventListener('click', () => {
+        loadLocations();
+      });
+
+      document.getElementById('btnNew').addEventListener('click', () => {
+        resetForm();
+      });
+
+      document.getElementById('btnSave').addEventListener('click', () => {
+        saveLocation();
+      });
+    })();
+
+    // ---------------- ЗАГРУЗКА СПИСКА МХ ----------------
+    async function loadLocations() {
+      if (!token) return;
+      setFilterStatus('Загружаем список МХ...', true);
+
+      try {
+        const res = await fetch('/locations', {
+          method: 'GET',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+        setDebug(data);
+
+        if (!res.ok) {
+          setFilterStatus('Ошибка загрузки МХ: ' + (data.error || res.status), false);
+          locations = [];
+          renderLocations();
+          return;
+        }
+
+        locations = data.locations || data.rows || [];
+        setFilterStatus('Готово: загружено ' + locations.length + ' МХ.', true);
+        renderLocations();
+      } catch (err) {
+        console.error(err);
+        setFilterStatus('Ошибка запроса: ' + err.message, false);
+        setDebug(err);
+      }
+    }
+
+    // ---------------- ОТОБРАЖЕНИЕ ТАБЛИЦЫ ----------------
+    function renderLocations() {
+      const tbody = document.getElementById('locationsTableBody');
+      tbody.innerHTML = '';
+
+      const search = (document.getElementById('filterSearch').value || '').trim().toLowerCase();
+      const activeFilter = document.getElementById('filterActive').value;
+
+      let filtered = locations.slice();
+
+      if (search) {
+        filtered = filtered.filter((loc) => {
+          const code = String(loc.code || '').toLowerCase();
+          const desc = String(loc.description || '').toLowerCase();
+          const zone = String(loc.zone || '').toLowerCase();
+          return code.includes(search) || desc.includes(search) || zone.includes(search);
+        });
+      }
+
+      if (activeFilter === 'true') {
+        filtered = filtered.filter((loc) => loc.is_active === true);
+      } else if (activeFilter === 'false') {
+        filtered = filtered.filter((loc) => loc.is_active === false);
+      }
+
+      document.getElementById('listSummary').textContent =
+        'Строк: ' + filtered.length + ', всего в базе: ' + locations.length;
+
+      if (!filtered.length) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6;
+        td.textContent = 'Нет данных.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+
+      filtered.forEach((loc) => {
+        const tr = document.createElement('tr');
+
+        const tdId = document.createElement('td');
+        tdId.textContent = loc.id;
+        tr.appendChild(tdId);
+
+        const tdCode = document.createElement('td');
+        tdCode.textContent = loc.code || '';
+        tr.appendChild(tdCode);
+
+        const tdZone = document.createElement('td');
+        tdZone.textContent = loc.zone || '';
+        tr.appendChild(tdZone);
+
+        const tdDesc = document.createElement('td');
+        tdDesc.textContent = loc.description || '';
+        tr.appendChild(tdDesc);
+
+        const tdActive = document.createElement('td');
+        const badge = document.createElement('span');
+        badge.className = 'badge ' + (loc.is_active ? 'badge-ok' : 'badge-off');
+        badge.textContent = loc.is_active ? 'on' : 'off';
+        tdActive.appendChild(badge);
+        tr.appendChild(tdActive);
+
+        const tdActions = document.createElement('td');
+        tdActions.className = 'actions-cell';
+
+        const btnEdit = document.createElement('button');
+        btnEdit.textContent = 'Редакт.';
+        btnEdit.className = 'btn-secondary';
+        btnEdit.addEventListener('click', () => {
+          fillForm(loc);
+        });
+        tdActions.appendChild(btnEdit);
+
+        const btnToggle = document.createElement('button');
+        btnToggle.textContent = loc.is_active ? 'Выключить' : 'Включить';
+        btnToggle.className = 'btn-secondary';
+        btnToggle.addEventListener('click', () => {
+          quickToggleActive(loc);
+        });
+        tdActions.appendChild(btnToggle);
+
+        tr.appendChild(tdActions);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ---------------- ФОРМА: НОВАЯ / РЕДАКТИРОВАНИЕ ----------------
+    function resetForm() {
+      editingId = null;
+      document.getElementById('formTitle').textContent = 'Новая ячейка (МХ)';
+      document.getElementById('locCode').value = '';
+      document.getElementById('locZone').value = '';
+      document.getElementById('locDescription').value = '';
+      document.getElementById('locIsActive').value = 'true';
+      setFormStatus('', true);
+    }
+
+    function fillForm(loc) {
+      editingId = loc.id;
+      document.getElementById('formTitle').textContent = 'Редактирование МХ ID ' + loc.id;
+      document.getElementById('locCode').value = loc.code || '';
+      document.getElementById('locZone').value = loc.zone || '';
+      document.getElementById('locDescription').value = loc.description || '';
+      document.getElementById('locIsActive').value = String(loc.is_active === false ? 'false' : 'true');
+      setFormStatus('', true);
+    }
+
+    async function saveLocation() {
+      if (!token) {
+        setFormStatus('Нет токена авторизации.', false);
+        return;
+      }
+
+      const code = (document.getElementById('locCode').value || '').trim();
+      const zone = (document.getElementById('locZone').value || '').trim();
+      const description = (document.getElementById('locDescription').value || '').trim();
+      const isActive = document.getElementById('locIsActive').value === 'true';
+
+      if (!code) {
+        setFormStatus('Поле "Код МХ" обязательно.', false);
+        return;
+      }
+
+      const payload = {
+        code,
+        zone: zone || null,
+        description: description || null,
+        is_active: isActive,
+      };
+
+      try {
+        setFormStatus('Сохраняем...', true);
+
+        let url = '/locations';
+        let method = 'POST';
+
+        if (editingId) {
+          url = '/locations/' + encodeURIComponent(editingId);
+          method = 'PATCH';
+        }
+
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        setDebug(data);
+
+        if (!res.ok) {
+          setFormStatus('Ошибка сохранения: ' + (data.error || res.status), false);
+          return;
+        }
+
+        setFormStatus('Успешно сохранено.', true);
+        await loadLocations();
+        resetForm();
+      } catch (err) {
+        console.error(err);
+        setFormStatus('Ошибка запроса: ' + err.message, false);
+        setDebug(err);
+      }
+    }
+
+    // Быстрое включение/выключение МХ
+    async function quickToggleActive(loc) {
+      if (!token) return;
+      try {
+        const res = await fetch('/locations/' + encodeURIComponent(loc.id), {
+          method: 'PATCH',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ is_active: !loc.is_active }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        setDebug(data);
+
+        if (!res.ok) {
+          setFilterStatus('Ошибка смены статуса МХ: ' + (data.error || res.status), false);
+          return;
+        }
+
+        await loadLocations();
+      } catch (err) {
+        console.error(err);
+        setFilterStatus('Ошибка запроса: ' + err.message, false);
+        setDebug(err);
+      }
+    }
+
+    // Перерисовываем таблицу при изменении фильтров
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('filterSearch').addEventListener('input', renderLocations);
+      document.getElementById('filterActive').addEventListener('change', renderLocations);
+    });
+  </script>
+</body>
+</html>

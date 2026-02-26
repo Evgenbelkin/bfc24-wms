@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Сборка</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0; padding: 0;
+      background: #f3f4f6; color: #111827;
+    }
+
+    .topbar {
+      background: #111827; color: white;
+      padding: 8px 10px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .topbar-title { font-weight: 600; font-size: 16px; }
+    .topbar-sub { font-size: 11px; opacity: 0.8; }
+
+    .btn-top {
+      padding: 4px 10px;
+      background: transparent;
+      color: white;
+      border: 1px solid #6b7280;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .page { padding: 12px; }
+
+    .card {
+      background: white;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .wave {
+      border: 1px solid #fdba74;
+      background: #fff7ed;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .wave-title { font-weight: 700; margin-bottom: 6px; }
+    .wave-sub { font-size: 12px; color: #374151; margin-bottom: 10px; }
+    .wave-row { display:flex; gap:8px; flex-wrap: wrap; align-items:center; }
+    .btn-wave {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-take  { background:#2563eb; color:#fff; }
+    .btn-close { background:#dc2626; color:#fff; }
+    .btn-reset { background:#6b7280; color:#fff; }
+    .btn-wave:disabled { background:#9ca3af; cursor: default; }
+
+    .task-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 8px; margin-bottom: 8px;
+    }
+    .task-main { display: flex; gap: 12px; align-items: flex-start; }
+
+    .task-photo-wrap {
+      width: 96px; height: 96px;
+      border-radius: 8px; overflow: hidden;
+      background: #e5e7eb;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .task-photo { max-width: 100%; max-height: 100%; object-fit: cover; }
+    .task-photo-placeholder {
+      font-size: 11px; color: #6b7280; text-align: center; padding: 4px;
+    }
+
+    .task-info-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .task-info-sub { font-size: 12px; color: #4b5563; margin-bottom: 4px; }
+
+    .task-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .badge {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      color: #374151;
+    }
+    .badge-green { background: #dcfce7; color: #166534; }
+    .badge-blue  { background: #dbeafe; color: #1d4ed8; }
+    .badge-purple{ background: #ede9fe; color: #6d28d9; }
+
+    .location-label { font-size: 13px; font-weight: 600; color: #111827; }
+    .location-code {
+      display: inline-block;
+      margin-top: 2px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .scan-block { margin-top: 12px; }
+    .scan-label { font-size: 13px; margin-bottom: 4px; }
+    .scan-input {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+    }
+    .scan-input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+    }
+
+    .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+    .btn {
+      flex: 1 1 0;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-primary { background: #16a34a; color: white; }
+    .btn-primary:disabled { background: #9ca3af; cursor: default; }
+
+    .btn-secondary { background: #f97316; color: #111827; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #d1d5db;
+      color: #111827;
+      flex: 0 0 auto;
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    .status { font-size: 12px; margin-top: 6px; }
+    .status-ok { color: #16a34a; }
+    .status-err { color: #dc2626; }
+    .status-info { color: #4b5563; }
+
+    .debug {
+      font-size: 11px;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 6px;
+      border-radius: 8px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">BFC24 WMS — Сборка</div>
+      <div class="topbar-sub" id="userInfo">Пользователь не определён</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn-top" id="btnEnableSound">🔊 Звук</button>
+      <button class="btn-top" id="btnEnableNotif">🔔 Уведомления</button>
+      <button class="btn-top" onclick="window.location.href='/menu.html'">Меню</button>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <!-- ПАНЕЛЬ ВОЛНЫ -->
+    <div class="wave" id="waveBox">
+      <div class="wave-title" id="waveTitle">Волна: —</div>
+      <div class="wave-sub" id="waveSub">Загрузить статус…</div>
+      <div class="wave-row">
+        <button class="btn-wave btn-take"   id="btnTakeWave">Взять волну</button>
+        <button class="btn-wave"           id="btnPrintWave" disabled>Распечатать волну</button>
+        <button class="btn-wave btn-reset" id="btnResetWave" disabled>Сбросить волну</button>
+        <button class="btn-wave btn-close" id="btnCloseWave" disabled>Закрыть волну</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="task-header">
+        <div>
+          <div class="task-info-sub" id="clientInfo">Клиент: —</div>
+          <div class="task-info-sub" id="shipmentInfo">Волна: —</div>
+          <div class="task-info-sub" id="pickerInfo">Сборщик: —</div>
+          <div class="task-badges">
+            <span class="badge badge-blue" id="warehouseBadge">Склад: —</span>
+            <span class="badge badge-purple" id="stepBadge">Шаг: —</span>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div class="location-label">Место хранения</div>
+          <div class="location-code" id="locationCode">—</div>
+        </div>
+      </div>
+
+      <div class="task-main">
+        <div class="task-photo-wrap">
+          <img id="itemPhoto" class="task-photo" src="" alt="" style="display:none;">
+          <div id="itemPhotoPlaceholder" class="task-photo-placeholder">Нет фото</div>
+        </div>
+
+        <div style="flex:1 1 0;">
+          <div class="task-info-title" id="itemName">Товар не загружен</div>
+          <div class="task-info-sub">
+            Штрихкод: <span id="itemBarcode">—</span>
+          </div>
+          <div class="task-badges">
+            <span class="badge badge-green">
+              К сборке: <span id="itemQty">—</span> шт
+              (собрано: <span id="pickedQty">0</span>)
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="scan-block">
+        <div class="scan-label" id="scanLabel">Сканируй:</div>
+        <input id="scanInput" class="scan-input" type="text" autocomplete="off" />
+        <div class="btn-row">
+          <button id="btnAction" class="btn btn-primary" disabled>✅ Подтвердить</button>
+          <button id="btnSkip"   class="btn btn-secondary" disabled>⏭ Пропустить</button>
+          <button id="btnNext"   class="btn btn-outline">🔄 Обновить</button>
+        </div>
+        <div id="taskStatus" class="status status-info">Задание не загружено</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="font-weight:600;font-size:13px;">Отладка</div>
+        <button class="btn-outline" onclick="clearDebug()">Очистить</button>
+      </div>
+      <pre id="debugBox" class="debug">{}</pre>
+    </div>
+
+  </div>
+
+<script>
+let token = null;
+let username = null;
+let role = null;
+let currentTask = null;
+
+// текущая волна и режим закрытия
+let currentWave = null;      // активная волна (ответ /picking/wave/status)
+let waveClosingMode = false; // режим "закрываю волну, сканирую МХ упаковки"
+
+let soundEnabled = false;
+let audioCtx = null;
+
+// --- Notifications (MVP) ---
+let notifEnabled = false;
+async function enableNotifications() {
+  if (!("Notification" in window)) {
+    alert("Уведомления не поддерживаются");
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  notifEnabled = (perm === "granted");
+  if (notifEnabled) new Notification("BFC24 WMS", { body: "Уведомления включены" });
+  else alert("Разрешение не выдано");
+}
+
+function ensureAudio() {
+  if (audioCtx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  audioCtx = new AC();
+}
+function playBeep(type) {
+  try {
+    if (!soundEnabled) return;
+    ensureAudio();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    let freq = 880;
+    if (type === 'new') freq = 1040;
+    if (type === 'ok')  freq = 880;
+    if (type === 'err') freq = 440;
+
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.15);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.15);
+  } catch (e) {}
+}
+
+// --- Debug ---
+function clearDebug() { document.getElementById('debugBox').textContent = '{}'; }
+function appendDebug(label, obj) {
+  const box = document.getElementById('debugBox');
+  const prev = box.textContent.trim();
+  const header = `\n\n--- ${label} ---\n`;
+  box.textContent = prev + header + JSON.stringify(obj, null, 2);
+}
+
+// --- Status ---
+function setTaskStatus(text, type = 'info') {
+  const el = document.getElementById('taskStatus');
+  el.textContent = text;
+  el.className = 'status ' + (type === 'ok' ? 'status-ok' : type === 'err' ? 'status-err' : 'status-info');
+}
+
+// --- JWT decode ---
+function decodeJwtPayload(t) {
+  try {
+    const parts = String(t || '').split('.');
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g,'+').replace(/_/g,'/');
+    const json = decodeURIComponent(atob(b64).split('').map(
+      c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)
+    ).join(''));
+    return JSON.parse(json);
+  } catch { return null; }
+}
+
+// --- fetch ---
+async function apiFetch(url, options = {}) {
+  if (!token) throw new Error('no_token');
+
+  const opts = Object.assign({}, options);
+  if (!opts.method) opts.method = 'GET';
+
+  const headers = Object.assign({}, options.headers || {}, {
+    'Authorization': 'Bearer ' + token
+  });
+
+  const m = opts.method.toUpperCase();
+  if (m !== 'GET' && m !== 'HEAD') headers['Content-Type'] = 'application/json';
+  opts.headers = headers;
+
+  const res = await fetch(url, opts);
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+
+  appendDebug(url, { status: res.status, ok: res.ok, data });
+
+  if (res.status === 401) {
+    localStorage.removeItem('wmsToken');
+    window.location.href = '/menu.html';
+    throw new Error('auth_required');
+  }
+
+  if (!res.ok) {
+    const errMsg = (data && (data.error || data.message || data.detail || data.details)) || ('HTTP ' + res.status);
+    throw new Error(errMsg);
+  }
+
+  return data;
+}
+
+function scanStepLabel(step) {
+  if (step === 'await_location') return 'Сканируй МХ из задания';
+  if (step === 'await_item')     return 'Сканируй штрихкод товара';
+  if (step === 'wave_complete')  return 'Сканируй МХ упаковки для волны';
+  if (step === 'done')           return 'Готово';
+  return 'Сканируй';
+}
+
+function setStepUI(task) {
+  const stepBadge = document.getElementById('stepBadge');
+
+  if (waveClosingMode) {
+    stepBadge.textContent = 'Шаг: закрытие волны';
+    const scanLabel = document.getElementById('scanLabel');
+    scanLabel.textContent = 'Сканируй МХ зоны упаковки для волны ' +
+      (currentWave?.shipment_code || '') + ':';
+    const btn = document.getElementById('btnAction');
+    btn.textContent = '✅ Подтвердить МХ упаковки';
+    return;
+  }
+
+  const step = task?.scan_step || 'await_location';
+  stepBadge.textContent = 'Шаг: ' + step;
+
+  const scanLabel = document.getElementById('scanLabel');
+  scanLabel.textContent = scanStepLabel(step) + ' (или введи вручную):';
+
+  const btn = document.getElementById('btnAction');
+  if (!task) { btn.textContent = '✅ Подтвердить'; return; }
+  if (step === 'await_location') btn.textContent = '✅ Подтвердить МХ';
+  else if (step === 'await_item') btn.textContent = '✅ Подтвердить товар';
+  else btn.textContent = '✅ Ок';
+}
+
+// --- Wave UI ---
+async function refreshWaveStatus({ silent = false } = {}) {
+  const title    = document.getElementById('waveTitle');
+  const sub      = document.getElementById('waveSub');
+  const btnTake  = document.getElementById('btnTakeWave');
+  const btnClose = document.getElementById('btnCloseWave');
+  const btnPrint = document.getElementById('btnPrintWave');
+  const btnReset = document.getElementById('btnResetWave');
+
+  try {
+    const ws = await apiFetch('/picking/wave/status', { method: 'GET' });
+
+    const hasWave = !!(ws && ws.has_wave);
+
+    if (!hasWave) {
+      currentWave = null;
+
+      title.textContent = 'Активная волна: —';
+      sub.textContent   = 'Нет активной волны. Нажми "Взять волну".';
+
+      btnTake.disabled  = false;   // << ГАРАНТИРОВАННО ВКЛЮЧАЕМ
+      btnClose.disabled = true;
+      btnPrint.disabled = true;
+      btnReset.disabled = true;
+      return;
+    }
+
+    // вычисляем возможность закрытия по статусу волны
+    const canClose = (ws.can_close !== undefined)
+      ? !!ws.can_close
+      : (ws.wave_status === 'ready');
+
+    currentWave = { ...ws, can_close: canClose };
+
+    title.textContent = 'Активная волна: ' + (ws.shipment_code || '—');
+    sub.textContent   = `Собрано: ${ws.done}/${ws.total}. Осталось: ${ws.remaining}.`;
+
+    // пока есть активная/готовая волна — новую не даём взять
+    btnTake.disabled  = true;
+    btnPrint.disabled = !ws.shipment_code;
+    btnClose.disabled = !canClose;
+    btnReset.disabled = false;
+
+    if (canClose) {
+      sub.textContent += ' Волна собрана. Припаркуй короб в зону упаковки и нажми "Закрыть волну".';
+    }
+  } catch (e) {
+    if (!silent) {
+      sub.textContent = 'Ошибка статуса волны: ' + e.message;
+    }
+    currentWave = null;
+    btnTake.disabled  = false;  // при ошибке тоже разрешаем попытаться взять
+    btnClose.disabled = true;
+    btnPrint.disabled = true;
+    btnReset.disabled = true;
+  }
+}
+
+async function takeWave() {
+  const btnTake = document.getElementById('btnTakeWave');
+  btnTake.disabled = true;
+  try {
+    await apiFetch('/picking/wave/take', { method:'POST', body: JSON.stringify({}) });
+    playBeep('new');
+    waveClosingMode = false;
+    await refreshWaveStatus();
+    await loadNextTask({ keepFocus:false });
+  } catch (e) {
+    btnTake.disabled = false;
+    setTaskStatus('Не удалось взять волну: ' + e.message, 'err');
+    playBeep('err');
+  }
+}
+
+function enterWaveCloseMode() {
+  if (!currentWave) return;
+
+  waveClosingMode = true;
+  renderTask(null);
+
+  const sub = document.getElementById('waveSub');
+  sub.textContent =
+    'Волна собрана. Поставь ящик в зону упаковки и СКАНИРУЙ МХ, на котором он стоит. ' +
+    'Допустимы только МХ, начинающиеся с префикса PAK-.';
+
+  const input = document.getElementById('scanInput');
+  input.value = '';
+  input.focus();
+
+  const btnAction = document.getElementById('btnAction');
+  btnAction.disabled = false;
+  btnAction.textContent = '✅ Подтвердить МХ упаковки';
+
+  const btnSkip = document.getElementById('btnSkip');
+  btnSkip.disabled = true;
+
+  setStepUI(null);
+  setTaskStatus(
+    'Режим закрытия волны. Сканируй МХ упаковки (префикс PAK-) для волны ' +
+      (currentWave.shipment_code || '') + '.',
+    'info'
+  );
+}
+
+async function closeWave() {
+  enterWaveCloseMode();
+}
+
+// сброс волны (фронтовая кнопка)
+async function resetWave() {
+  if (!confirm('Сбросить активную волну и освободить сборщика?')) return;
+
+  const btnReset = document.getElementById('btnResetWave');
+  btnReset.disabled = true;
+
+  try {
+    await apiFetch('/picking/wave/reset', { method: 'POST', body: JSON.stringify({}) });
+    setTaskStatus('Волна сброшена. Можно взять новую.', 'ok');
+    waveClosingMode = false;
+    currentWave = null;
+    renderTask(null);
+    await refreshWaveStatus();
+  } catch (e) {
+    setTaskStatus('Ошибка сброса волны: ' + e.message, 'err');
+    btnReset.disabled = false;
+  }
+}
+
+/**
+ * Печать стикера волны с внутренним штрихкодом
+ */
+function printWave() {
+  try {
+    if (!currentWave || !currentWave.shipment_code) {
+      alert('Нет активной волны или не указан код поставки');
+      return;
+    }
+
+    const code       = currentWave.shipment_code;
+    const clientName = currentWave.client_name || '';
+    const total      = currentWave.total ?? 0;
+    const pickerName = username || '';
+
+    const barcodeValue = code;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert('Браузер заблокировал всплывающее окно. Разреши pop-up для WMS.');
+      return;
+    }
+
+    w.document.write(`
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Волна ${code}</title>
+  <style>
+    @page {
+      size: 58mm 40mm;
+      margin: 0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 2mm 2mm 1mm 2mm;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .wave-card {
+      width: 54mm;
+      height: 36mm;
+      border: 1px solid #000;
+      padding: 1mm 2mm;
+    }
+    .title {
+      font-size: 9pt;
+      font-weight: 600;
+      margin-bottom: 1mm;
+    }
+    .code {
+      font-size: 11pt;
+      font-weight: 800;
+      margin-bottom: 1mm;
+    }
+    .row {
+      font-size: 7pt;
+      line-height: 1.2;
+    }
+    .label {
+      font-weight: 600;
+    }
+    .barcode-wrap {
+      margin-top: 2mm;
+      text-align: center;
+    }
+    #waveBarcode {
+      width: 100%;
+      height: 16mm;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+</head>
+<body>
+  <div class="wave-card">
+    <div class="title">Волна (короб сборки)</div>
+    <div class="code">${code}</div>
+
+    <div class="row"><span class="label">Клиент:</span> ${clientName}</div>
+    <div class="row"><span class="label">Позиции в волне:</span> ${total}</div>
+    <div class="row"><span class="label">Сборщик:</span> ${pickerName}</div>
+
+    <div class="barcode-wrap">
+      <svg id="waveBarcode"></svg>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', function () {
+      try {
+        JsBarcode("#waveBarcode", ${JSON.stringify(barcodeValue)}, {
+          format: "CODE128",
+          lineColor: "#000000",
+          width: 2.4,
+          height: 60,
+          displayValue: true,
+          fontSize: 8,
+          margin: 0
+        });
+      } catch (e) {
+        console.error('JsBarcode error', e);
+      }
+      window.print();
+    });
+  <\/script>
+</body>
+</html>
+    `);
+
+    w.document.close();
+  } catch (e) {
+    console.error('printWave error', e);
+    alert('Ошибка печати волны: ' + e.message);
+  }
+}
+
+
+// --- Render task ---
+function renderTask(task) {
+  currentTask = task || null;
+
+  const clientInfoEl = document.getElementById('clientInfo');
+  const shipmentInfoEl = document.getElementById('shipmentInfo');
+  const warehouseBadgeEl = document.getElementById('warehouseBadge');
+  const locationCodeEl = document.getElementById('locationCode');
+  const itemNameEl = document.getElementById('itemName');
+  const itemBarcodeEl = document.getElementById('itemBarcode');
+  const itemQtyEl = document.getElementById('itemQty');
+  const pickedQtyEl = document.getElementById('pickedQty');
+
+  const photoEl = document.getElementById('itemPhoto');
+  const photoPhEl = document.getElementById('itemPhotoPlaceholder');
+
+  const btnAction = document.getElementById('btnAction');
+  const btnSkip = document.getElementById('btnSkip');
+
+  if (!task) {
+    clientInfoEl.textContent = 'Клиент: —';
+    shipmentInfoEl.textContent = 'Волна: —';
+    warehouseBadgeEl.textContent = 'Склад: —';
+    locationCodeEl.textContent = '—';
+
+    itemNameEl.textContent = 'Задание не загружено';
+    itemBarcodeEl.textContent = '—';
+    itemQtyEl.textContent = '—';
+    pickedQtyEl.textContent = '0';
+
+    photoEl.style.display = 'none';
+    photoEl.src = '';
+    photoPhEl.style.display = 'block';
+
+    if (!waveClosingMode) {
+      btnAction.disabled = true;
+      btnSkip.disabled = true;
+      setStepUI(null);
+      setTaskStatus('Нет активного задания. Возьми волну и нажми "Обновить".', 'info');
+    } else {
+      btnAction.disabled = false;
+      btnSkip.disabled = true;
+      setStepUI(null);
+    }
+    return;
+  }
+
+  clientInfoEl.textContent = 'Клиент: ' + (task.client_name || '—');
+  shipmentInfoEl.textContent = 'Волна: ' + (task.shipment_code || '—');
+  warehouseBadgeEl.textContent = 'Склад: ' + (task.warehouse_name || '—');
+
+  locationCodeEl.textContent = (task.location_code && task.location_code !== '—') ? task.location_code : '—';
+  itemNameEl.textContent = task.item_name || 'Без названия';
+  itemBarcodeEl.textContent = task.barcode || '—';
+  itemQtyEl.textContent = (task.qty != null ? task.qty : '—');
+  pickedQtyEl.textContent = String(task.picked_qty || 0);
+
+  if (task.preview_url) {
+    photoEl.src = task.preview_url;
+    photoEl.style.display = 'block';
+    photoPhEl.style.display = 'none';
+  } else {
+    photoEl.style.display = 'none';
+    photoEl.src = '';
+    photoPhEl.style.display = 'block';
+  }
+
+  btnAction.disabled = false;
+  btnSkip.disabled = false;
+
+  setStepUI(task);
+
+  const step = task.scan_step || 'await_location';
+  if (step === 'await_location') setTaskStatus('Сканируй МХ из задания', 'info');
+  else if (step === 'await_item') setTaskStatus('Сканируй товар. После успешного скана будет списание и done.', 'info');
+  else setTaskStatus('Задача завершена', 'ok');
+}
+
+// --- Load next ---
+async function loadNextTask({ keepFocus = false, silent = false } = {}) {
+  if (waveClosingMode) return;
+
+  const input = document.getElementById('scanInput');
+  if (!keepFocus) {
+    input.value = '';
+    input.focus();
+  }
+  if (!silent) setTaskStatus('Загружаю задание...', 'info');
+
+  try {
+    const task = await apiFetch('/picking/next', { method: 'GET' });
+    if (!task || Object.keys(task).length === 0) { renderTask(null); return; }
+    renderTask(task);
+  } catch (err) {
+    setTaskStatus('Ошибка загрузки задания: ' + err.message, 'err');
+    playBeep('err');
+    renderTask(null);
+  }
+}
+
+// --- Main action ---
+async function actionByStep() {
+  const btnAction = document.getElementById('btnAction');
+  const btnSkip = document.getElementById('btnSkip');
+  const input = document.getElementById('scanInput');
+
+  const scanned = input.value.trim();
+  if (!scanned) {
+    setTaskStatus('Сначала отсканируй', 'err');
+    playBeep('err');
+    input.focus();
+    return;
+  }
+
+  btnAction.disabled = true;
+  btnSkip.disabled = true;
+
+  if (waveClosingMode) {
+    // жёсткая проверка префикса PAK-
+    if (!scanned.toUpperCase().startsWith('PAK-')) {
+      setTaskStatus('МХ упаковки должен начинаться с префикса PAK-. Сканировал: ' + scanned, 'err');
+      playBeep('err');
+      btnAction.disabled = false;
+      return;
+    }
+
+    try {
+      setTaskStatus('Фиксирую МХ для волны...', 'info');
+      const r = await apiFetch('/picking/wave/complete', {
+        method: 'POST',
+        body: JSON.stringify({ location_code: scanned })
+      });
+
+      playBeep('ok');
+
+      waveClosingMode = false;
+      currentWave = null;
+
+      input.value = '';
+      await refreshWaveStatus();
+      renderTask(null);
+
+      setTaskStatus(
+        'Волна ' + (r.shipment_code || '') +
+        ' размещена на МХ ' + (r.buffer_location_code || scanned) +
+        '. Можно брать следующую волну.',
+        'ok'
+      );
+    } catch (err) {
+      setTaskStatus('Не удалось закрыть волну: ' + err.message, 'err');
+      playBeep('err');
+      btnAction.disabled = false;
+    }
+    return;
+  }
+
+  if (!currentTask) {
+    setTaskStatus('Нет активного задания', 'err');
+    btnAction.disabled = false;
+    btnSkip.disabled = false;
+    return;
+  }
+
+  const step = currentTask.scan_step || 'await_location';
+
+  try {
+    if (step === 'await_location') {
+      setTaskStatus('Проверяю МХ...', 'info');
+      await apiFetch('/picking/scan/location', {
+        method: 'POST',
+        body: JSON.stringify({ picking_task_id: currentTask.id, scanned_location_code: scanned })
+      });
+
+      setTaskStatus('МХ подтверждено. Теперь сканируй товар.', 'ok');
+      playBeep('ok');
+
+      input.value = '';
+      input.focus();
+      await loadNextTask({ keepFocus: false });
+      await refreshWaveStatus({silent:true});
+      return;
+    }
+
+    if (step === 'await_item') {
+      setTaskStatus('Проверяю товар...', 'info');
+      await apiFetch('/picking/scan/item', {
+        method: 'POST',
+        body: JSON.stringify({ picking_task_id: currentTask.id, scanned_barcode: scanned })
+      });
+
+      playBeep('ok');
+
+      input.value = '';
+      input.focus();
+      await loadNextTask({ keepFocus: false });
+      await refreshWaveStatus({silent:true});
+      return;
+    }
+
+    setTaskStatus('Неизвестный шаг: ' + step, 'err');
+    playBeep('err');
+    btnAction.disabled = false;
+    btnSkip.disabled = false;
+
+  } catch (err) {
+    setTaskStatus('Ошибка: ' + err.message, 'err');
+    playBeep('err');
+    btnAction.disabled = false;
+    btnSkip.disabled = false;
+  }
+}
+
+// --- Skip ---
+async function skipTask() {
+  if (!currentTask || waveClosingMode) return;
+
+  const btnAction = document.getElementById('btnAction');
+  const btnSkip = document.getElementById('btnSkip');
+
+  btnAction.disabled = true;
+  btnSkip.disabled = true;
+  setTaskStatus('Передаю на инвентаризацию...', 'info');
+
+  try {
+    await apiFetch('/picking/skip', {
+      method: 'POST',
+      body: JSON.stringify({ picking_task_id: currentTask.id, reason: 'picker_not_found', comment: 'Пропуск на ТСД' })
+    });
+
+    setTaskStatus('Пропущено. Создана/найдена задача инвентаризации.', 'ok');
+    playBeep('ok');
+
+    await loadNextTask({ keepFocus: false });
+    await refreshWaveStatus({silent:true});
+  } catch (err) {
+    setTaskStatus('Ошибка пропуска: ' + err.message, 'err');
+    playBeep('err');
+    btnAction.disabled = false;
+    btnSkip.disabled = false;
+  }
+}
+
+// --- init ---
+(function init() {
+  const t = localStorage.getItem('wmsToken');
+  if (!t) { window.location.href = '/menu.html'; return; }
+
+  token = t;
+
+  const payload = decodeJwtPayload(token) || {};
+  username = payload.username || payload.login || String(payload.id || 'unknown');
+  role = payload.role || '-';
+
+  document.getElementById('userInfo').textContent = 'Пользователь: ' + username + ' (' + role + ')';
+  document.getElementById('pickerInfo').textContent = 'Сборщик: ' + username;
+
+  document.getElementById('btnEnableSound').onclick = () => {
+    soundEnabled = true;
+    ensureAudio();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+    playBeep('ok');
+  };
+  document.getElementById('btnEnableNotif').onclick = enableNotifications;
+
+  document.getElementById('btnTakeWave').onclick   = takeWave;
+  document.getElementById('btnCloseWave').onclick  = closeWave;
+  document.getElementById('btnPrintWave').onclick  = printWave;
+  document.getElementById('btnResetWave').onclick  = resetWave;
+
+  document.getElementById('btnAction').onclick = actionByStep;
+  document.getElementById('btnSkip').onclick   = skipTask;
+  document.getElementById('btnNext').onclick   = async () => {
+    await refreshWaveStatus({silent:true});
+    await loadNextTask({ keepFocus: false });
+  };
+
+  const scanInput = document.getElementById('scanInput');
+  scanInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); actionByStep(); }
+  });
+
+  refreshWaveStatus();
+  loadNextTask({ keepFocus: false });
+})();
+</script>
+
+</body>
+</html>

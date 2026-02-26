@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Приёмка (simple)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 12px;
+      background: #f5f5f5;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 18px;
+      margin-top: 16px;
+      margin-bottom: 8px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-top: 8px;
+      font-size: 14px;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      font-size: 16px;
+      box-sizing: border-box;
+      margin-top: 4px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px;
+      font-size: 16px;
+      width: 100%;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #2d7cff;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+    }
+    .btn-primary:disabled {
+      background: #9bbcff;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 8px;
+      font-size: 14px;
+    }
+    .status.ok {
+      color: #0a8a00;
+    }
+    .status.error {
+      color: #c00000;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 12px;
+      background: #111;
+      color: #eee;
+      padding: 8px;
+      border-radius: 6px;
+      max-height: 200px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>BFC24 WMS — Приёмка (simple)</h1>
+
+  <!-- Блок логина -->
+  <div class="card">
+    <h2>1. Логин</h2>
+    <label>
+      Логин:
+      <input type="text" id="username" value="admin" />
+    </label>
+    <label>
+      Пароль:
+      <input type="password" id="password" value="29101988go" />
+    </label>
+    <button id="btnLogin" class="btn-primary">Войти</button>
+    <div id="loginStatus" class="status"></div>
+  </div>
+
+  <!-- Блок приёмки -->
+  <div class="card">
+    <h2>2. Приёмка товара</h2>
+    <label>
+      client_id:
+      <input type="number" id="clientId" value="1" />
+    </label>
+    <label>
+      Штрихкод товара (barcode):
+      <input type="text" id="barcode" />
+    </label>
+    <label>
+      Ячейка (location_code):
+      <input type="text" id="locationCode" />
+    </label>
+    <label>
+      Количество (qty):
+      <input type="number" id="qty" value="1" />
+    </label>
+    <button id="btnReceive" class="btn-primary" disabled>Принять</button>
+    <div id="receiveStatus" class="status"></div>
+  </div>
+
+  <!-- Блок "сырых" ответов -->
+  <div class="card">
+    <h2>Ответ сервера</h2>
+    <pre id="responseBox">{}</pre>
+  </div>
+
+  <script>
+    let token = null;
+
+    function setLoginStatus(text, ok) {
+      const el = document.getElementById('loginStatus');
+      el.textContent = text || '';
+      el.className = 'status ' + (ok ? 'ok' : 'error');
+    }
+
+    function setReceiveStatus(text, ok) {
+      const el = document.getElementById('receiveStatus');
+      el.textContent = text || '';
+      el.className = 'status ' + (ok ? 'ok' : 'error');
+    }
+
+    function setResponseBox(obj) {
+      const el = document.getElementById('responseBox');
+      try {
+        el.textContent = JSON.stringify(obj, null, 2);
+      } catch (e) {
+        el.textContent = String(obj);
+      }
+    }
+
+    // Попробуем восстановить токен из localStorage
+    (function init() {
+      const saved = localStorage.getItem('wmsToken');
+      if (saved) {
+        token = saved;
+        setLoginStatus('Токен загружен из localStorage.', true);
+        document.getElementById('btnReceive').disabled = false;
+      }
+    })();
+
+    // ЛОГИН
+    document.getElementById('btnLogin').addEventListener('click', async () => {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      setLoginStatus('Логин...', false);
+      setReceiveStatus('', false);
+      setResponseBox({});
+
+      try {
+        const res = await fetch('/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+        setResponseBox(data);
+
+        if (!res.ok) {
+          setLoginStatus('Ошибка логина: ' + (data.error || res.status), false);
+          return;
+        }
+
+        if (data.token) {
+          token = data.token;
+          localStorage.setItem('wmsToken', token);
+          setLoginStatus('Успех: вошли как ' + (data.user?.username || username), true);
+          document.getElementById('btnReceive').disabled = false;
+        } else {
+          setLoginStatus('Логин: нет токена в ответе', false);
+        }
+      } catch (err) {
+        console.error(err);
+        setLoginStatus('Ошибка запроса: ' + err.message, false);
+      }
+    });
+
+    // ПРИЁМКА
+    document.getElementById('btnReceive').addEventListener('click', async () => {
+      if (!token) {
+        setReceiveStatus('Нет токена. Сначала войдите.', false);
+        return;
+      }
+
+      const clientId = Number(document.getElementById('clientId').value);
+      const barcode = document.getElementById('barcode').value.trim();
+      const locationCode = document.getElementById('locationCode').value.trim();
+      const qty = Number(document.getElementById('qty').value);
+
+      setReceiveStatus('Отправка...', false);
+      setResponseBox({});
+
+      const payload = {
+        client_id: clientId,
+        barcode: barcode,
+        location_code: locationCode,
+        qty: qty
+      };
+
+      try {
+        const res = await fetch('/receiving/accept', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        setResponseBox(data);
+
+        if (!res.ok) {
+          setReceiveStatus('Ошибка приёмки: ' + (data.error || res.status), false);
+          return;
+        }
+
+        setReceiveStatus(
+          'Успех: принято +' +
+            (data.qty_delta || qty) +
+            ' шт, теперь в ячейке ' +
+            (data.stock_after?.qty ?? '?'),
+          true
+        );
+
+        // После успешной приёмки очищаем только barcode и qty (ячейку можно оставить)
+        document.getElementById('barcode').value = '';
+        document.getElementById('qty').value = '1';
+        document.getElementById('barcode').focus();
+      } catch (err) {
+        console.error(err);
+        setReceiveStatus('Ошибка запроса: ' + err.message, false);
+      }
+    });
+
+    // Чтобы на ТСД можно было просто отсканировать и нажать Enter:
+    document.getElementById('barcode').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('locationCode').focus();
+      }
+    });
+    document.getElementById('locationCode').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('qty').focus();
+      }
+    });
+    document.getElementById('qty').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('btnReceive').click();
+      }
+    });
+  </script>
+</body>
+</html>

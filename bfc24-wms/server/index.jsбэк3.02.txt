@@ -1,0 +1,6219 @@
+// --- ВЕРХ ФАЙЛА ОСТАВЬ В ТАКОМ ВИДЕ ---
+
+require('dotenv').config();
+console.log('=== BFC24 WMS: index.js LOADED ===', __filename);
+
+const express = require('express');
+const path = require('path');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+// ⛔ УБРАНО:
+// const { Pool } = require('pg');
+// ⛔ УБРАНО создание pool = new Pool()
+
+// ✅ ПРАВИЛЬНО: теперь подключаем pool из db.js
+const { pool } = require('./db');
+
+const { authRequired, requireRole } = require('./authMiddleware');
+
+console.log('[index.js] __dirname =', __dirname);
+console.log('[index.js] resolved wbService =', require.resolve('./wbService'));
+
+const { fetchOrders, WB_ORDERS_URL } = require('./wbService');
+const { fetchWbItems, extractCardBarcodes } = require('./wbItemsService');
+
+// ⬇️ ДОБАВЛЯЕМ: WB API для карточек/складов/остатков
+const {
+  fetchWbWarehouses,
+  fetchWbFbsStocks,
+  fetchWbFboStocks,
+} = require('./serviceswbApi');
+
+const app = express();
+
+// -------------------------------------------------------
+// ГЛОБАЛЬНЫЙ ЛОГГЕР — должен идти первым
+// -------------------------------------------------------
+app.use((req, res, next) => {
+  console.log('INCOMING:', req.method, req.url);
+  next();
+});
+
+// ==============================
+// DEBUG: список зарегистрированных роутов
+// GET /debug/routes
+// ==============================
+app.get('/debug/routes', (req, res) => {
+  const list = [];
+
+  const router = req.app && req.app._router;
+  if (router && router.stack) {
+    router.stack.forEach((layer) => {
+      if (layer.route && layer.route.path) {
+        const methods = Object.keys(layer.route.methods)
+          .filter((m) => layer.route.methods[m])
+          .map((m) => m.toUpperCase());
+
+        list.push({
+          path: layer.route.path,
+          methods,
+        });
+      }
+    });
+  }
+
+  res.json({ routes: list });
+});
+
+
+// Статика
+const publicDir = path.join(__dirname, 'public');
+console.log('Serving static from:', publicDir);
+app.use(express.static(publicDir));
+
+// Хелсчек
+app.get('/ping-root', (req, res) => {
+  res.json({ status: 'ok', from: 'root' });
+});
+
+app.get('/debug/wb-service', (req, res) => {
+  res.json({ WB_ORDERS_URL });
+});
+
+// Явный роут меню
+app.get('/menu.html', (req, res) => {
+  res.sendFile(path.join(publicDir, 'menu.html'));
+});
+
+// Корень → меню
+app.get('/', (req, res) => {
+  res.redirect('/menu.html');
+});
+
+// Основные middleware
+app.use(express.json());
+app.use(cors());
+
+/**
+ * 🔥 Импорт остатков Wildberries (FBS + задел под FBO) для одного MP-аккаунта
+ * вызывается из модуля mpClients (/mp-accounts.html)
+ * POST /mp/wb/import-stocks?account_id=...
+ */
+app.post('/mp/wb/import-stocks', authRequired, requireRole('owner'), async (req, res) => {
+  const accountId = Number(req.query.account_id);
+  if (!accountId) {
+    return res.status(400).json({ error: 'account_id required' });
+  }
+
+  try {
+    // 1. читаем аккаунт из mp_accounts
+    const { rows: [acc] } = await pool.query(
+      `
+      SELECT id, label, marketplace, supplier_id, api_token
+      FROM mp_accounts
+      WHERE id = $1 AND marketplace = 'wb' AND is_active = true
+      `,
+      [accountId]
+    );
+
+    if (!acc) {
+      return res.status(404).json({ error: 'account_not_found' });
+    }
+    if (!acc.api_token) {
+      return res.status(400).json({ error: 'api_token_not_set' });
+    }
+
+    const apiToken = acc.api_token;
+
+    // 2. тянем склады продавца (FBS)
+    const warehouses = await fetchWbWarehouses(apiToken);
+
+    await pool.query('BEGIN');
+
+    // 3. чистим предыдущие остатки по этому аккаунту
+    await pool.query('DELETE FROM mp_wb_stocks_fbs WHERE account_id = $1', [accountId]);
+    await pool.query('DELETE FROM mp_wb_stocks_fbo WHERE account_id = $1', [accountId]);
+
+    // 4. обновляем справочник складов
+    for (const w of warehouses) {
+      const wbWarehouseId = w.id ?? w.warehouseId;
+      const wbName = w.name ?? w.nameRu ?? `WB склад ${wbWarehouseId}`;
+
+      await pool.query(
+        `
+        INSERT INTO mp_wb_warehouses (account_id, wb_warehouse_id, name, warehouse_type, is_active, updated_at)
+        VALUES ($1,$2,$3,$4,true,NOW())
+        ON CONFLICT (account_id, wb_warehouse_id)
+        DO UPDATE SET
+          name = EXCLUDED.name,
+          warehouse_type = EXCLUDED.warehouse_type,
+          is_active = true,
+          updated_at = NOW()
+        `,
+        [
+          accountId,
+          wbWarehouseId,
+          wbName,
+          'FBS', // эти склады считаем FBS
+        ]
+      );
+    }
+
+    // 5. тянем остатки по каждому складу FBS
+    let fbsCount = 0;
+
+    for (const w of warehouses) {
+      const wbWarehouseId = w.id ?? w.warehouseId;
+      if (!wbWarehouseId) continue;
+
+      const stocks = await fetchWbFbsStocks(apiToken, wbWarehouseId);
+
+      for (const s of stocks) {
+        const nmId = s.nmId ?? s.nm_id;
+        const chrtId = s.chrtId ?? s.chrt_id;
+        const barcode = s.barcode;
+        const qty = s.quantity ?? s.qty ?? 0;
+
+        if (!barcode || !chrtId || !nmId) continue;
+
+        await pool.query(
+          `
+          INSERT INTO mp_wb_stocks_fbs (account_id, wb_warehouse_id, nm_id, chrt_id, barcode, qty, updated_at)
+          VALUES ($1,$2,$3,$4,$5,$6,NOW())
+          ON CONFLICT (account_id, wb_warehouse_id, chrt_id, barcode)
+          DO UPDATE SET
+            qty = EXCLUDED.qty,
+            updated_at = NOW()
+          `,
+          [accountId, wbWarehouseId, nmId, chrtId, barcode, qty]
+        );
+
+        fbsCount++;
+      }
+    }
+
+    // 6. FBO — пока не заполняем (fetchWbFboStocks сейчас заглушка)
+    let fboCount = 0;
+
+    await pool.query('COMMIT');
+
+    res.json({
+      status: 'ok',
+      account_id: accountId,
+      fbs_rows: fbsCount,
+      fbo_rows: fboCount,
+    });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('mp/wb/import-stocks error:', err);
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+
+/**
+ * 🔹 Список MP-аккаунтов (модуль mpClients → /mp-accounts.html)
+ * GET /mp/accounts?marketplace=wb
+ */
+app.get('/mp/accounts', authRequired, requireRole('owner'), async (req, res) => {
+  const marketplace = req.query.marketplace || 'wb';
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        id,
+        label,
+        marketplace,
+        account_code,
+        supplier_id,
+        is_active,
+        created_at,
+        updated_at
+      FROM mp_accounts
+      WHERE marketplace = $1
+      ORDER BY id
+      `,
+      [marketplace]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error('GET /mp/accounts error:', err);
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+
+/**
+ * 🔹 Создание MP-аккаунта
+ * POST /mp/accounts
+ * body: { label, marketplace, account_code, supplier_id, api_token, is_active }
+ */
+app.post('/mp/accounts', authRequired, requireRole('owner'), async (req, res) => {
+  const {
+    label,
+    marketplace = 'wb',
+    account_code,
+    supplier_id,
+    api_token,
+    is_active = true,
+  } = req.body;
+
+  if (!label) {
+    return res.status(400).json({ error: 'label required' });
+  }
+
+  try {
+    const { rows: [acc] } = await pool.query(
+      `
+      INSERT INTO mp_accounts
+        (label, marketplace, account_code, supplier_id, api_token, is_active, created_at, updated_at)
+      VALUES
+        ($1,$2,$3,$4,$5,$6,NOW(),NOW())
+      RETURNING
+        id,
+        label,
+        marketplace,
+        account_code,
+        supplier_id,
+        is_active,
+        created_at,
+        updated_at
+      `,
+      [label, marketplace, account_code, supplier_id, api_token, is_active]
+    );
+
+    res.status(201).json(acc);
+  } catch (err) {
+    console.error('POST /mp/accounts error:', err);
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+
+/**
+ * 🔹 Обновление MP-аккаунта
+ * PATCH /mp/accounts/:id
+ * body: любые из { label, account_code, supplier_id, api_token, is_active }
+ */
+app.patch('/mp/accounts/:id', authRequired, requireRole('owner'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'invalid_id' });
+
+  const {
+    label,
+    account_code,
+    supplier_id,
+    api_token,
+    is_active,
+  } = req.body;
+
+  try {
+    const { rows: [acc] } = await pool.query(
+      `
+      UPDATE mp_accounts
+      SET
+        label        = COALESCE($1, label),
+        account_code = COALESCE($2, account_code),
+        supplier_id  = COALESCE($3, supplier_id),
+        api_token    = COALESCE($4, api_token),
+        is_active    = COALESCE($5, is_active),
+        updated_at   = NOW()
+      WHERE id = $6
+      RETURNING
+        id,
+        label,
+        marketplace,
+        account_code,
+        supplier_id,
+        is_active,
+        created_at,
+        updated_at
+      `,
+      [label, account_code, supplier_id, api_token, is_active, id]
+    );
+
+    if (!acc) {
+      return res.status(404).json({ error: 'account_not_found' });
+    }
+
+    res.json(acc);
+  } catch (err) {
+    console.error('PATCH /mp/accounts/:id error:', err);
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+
+// -------------------------------------------------------
+// Остальной код ниже (роуты, БД и т.д.)
+// -------------------------------------------------------
+
+
+
+// ---------------- ВАЛИДАЦИЯ MOVEMENT_TYPE ----------------
+// Разрешённые типы движений
+const validMovementTypes = [
+  'incoming',   // приход
+  'move',       // перемещение
+  'writeoff',   // списание
+  'inventory',  // инвентаризация
+  'picking',    // списание при подборе
+  'adjust',     // ручная корректировка остатка
+];
+
+// Нормализация типа движения без строгой валидации.
+// ВАЖНО: эта функция БОЛЬШЕ НИЧЕГО НЕ БРОСАЕТ.
+function validateMovementType(rawMovementType) {
+  // Приводим к строке, обрезаем пробелы, в нижний регистр
+  const mt = String(rawMovementType || '').trim().toLowerCase();
+  return mt;
+}
+
+
+
+
+
+// ---------------- REF_TYPE / REF_ID ----------------
+
+// Допустимые типы ссылок на «первичный документ» движения
+// manual         — ручная операция (по умолчанию)
+// wb_dispatch    — отгрузка WB
+// wb_acceptance  — приёмка WB
+// inventory_task — задание на инвентаризацию
+const validRefTypes = ['manual', 'wb_dispatch', 'wb_acceptance', 'inventory_task'];
+
+/**
+ * Нормализуем ref_type:
+ *  - если не передан или мусор — вернём 'manual'
+ *  - приводим к нижнему регистру и проверяем по списку
+ */
+function normalizeRefType(rawRefType) {
+  if (!rawRefType) return 'manual';
+
+  const val = String(rawRefType).trim().toLowerCase();
+  if (validRefTypes.includes(val)) {
+    return val;
+  }
+  // Если прилетела фигня — считаем, что это ручная операция
+  return 'manual';
+}
+
+/**
+ * Нормализуем ref_id:
+ *  - если не число или <= 0 — считаем, что ссылки нет -> null
+ *  - иначе возвращаем целое число
+ */
+function normalizeRefId(rawRefId) {
+  if (rawRefId === undefined || rawRefId === null || rawRefId === '') {
+    return null;
+  }
+  const n = Number(rawRefId);
+  if (!Number.isInteger(n) || n <= 0) {
+    return null;
+  }
+  return n;
+}
+
+// ---------------- ПОДКЛЮЧЕНИЕ К БД ----------------
+// ⛔ здесь больше НЕТ new Pool(...)
+// пул берём из ./db (см. верх файла)
+
+// Простой лог запросов
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} - ${ms}ms`);
+  });
+  next();
+});
+
+
+// Простой лог запросов
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} - ${ms}ms`);
+  });
+  next();
+});
+
+// ---------------- БАЗОВЫЕ ЭНДПОИНТЫ ----------------
+
+app.get('/test-db', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW() AS now');
+    res.json({ status: 'ok', time: result.rows[0].now });
+  } catch (err) {
+    console.error('DB error:', err);
+    res.status(500).json({ error: 'DB connection error' });
+  }
+});
+
+
+// ---------------- AUTH: /login, /me ----------------
+
+app.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'username и password обязательны' });
+    }
+
+    const q = `
+      SELECT id, username, password_hash, role, is_active
+      FROM auth.users
+      WHERE username = $1
+      LIMIT 1
+    `;
+    const r = await pool.query(q, [username]);
+
+    if (r.rowCount === 0) {
+      return res.status(401).json({ error: 'Неверный логин или пароль' });
+    }
+
+    const user = r.rows[0];
+
+    if (!user.is_active) {
+      return res.status(403).json({ error: 'Пользователь отключен' });
+    }
+
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) {
+      return res.status(401).json({ error: 'Неверный логин или пароль' });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ error: 'JWT_SECRET не задан' });
+    }
+
+    const payload = { id: user.id, username: user.username, role: user.role };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES || '12h',
+    });
+
+    return res.json({
+      status: 'ok',
+      token,
+      user: payload,
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({ error: 'Login error' });
+  }
+});
+
+app.get('/me', authRequired, (req, res) => {
+  res.json({ status: 'ok', user: req.user });
+});
+
+// ---------------- USERS (AUTH.USERS) ----------------
+
+app.get('/users', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, username, role, is_active
+       FROM auth.users
+       ORDER BY id`
+    );
+    res.json({ status: 'ok', users: r.rows });
+  } catch (err) {
+    console.error('Get users error:', err);
+    res.status(500).json({ error: 'Get users error' });
+  }
+});
+
+app.post('/users', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const { username, password, role, is_active } = req.body || {};
+
+    if (!username || !password || !role) {
+      return res.status(400).json({ error: 'Нужны username, password и role' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Пароль должен быть минимум 6 символов' });
+    }
+
+    const isActive = is_active === undefined ? true : !!is_active;
+
+    const exist = await pool.query(
+      'SELECT id FROM auth.users WHERE username = $1',
+      [username]
+    );
+    if (exist.rowCount > 0) {
+      return res.status(409).json({ error: 'Такой username уже есть' });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const ins = await pool.query(
+      `INSERT INTO auth.users (username, password_hash, role, is_active)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, username, role, is_active`,
+      [username, hash, role, isActive]
+    );
+
+    res.status(201).json({
+      status: 'ok',
+      user: ins.rows[0],
+    });
+  } catch (err) {
+    console.error('Create user error:', err);
+    res.status(500).json({ error: 'Create user error' });
+  }
+});
+
+app.get('/admin-only', authRequired, requireRole('owner', 'admin'), (req, res) => {
+  res.json({ status: 'ok', message: 'Доступ есть', user: req.user });
+});
+
+
+// ---------- СПРАВОЧНИК ТОВАРОВ (masterdata.items) ----------
+// GET /items
+// query:
+//   client_id (необязательный; если есть — фильтр по клиенту)
+//   barcode   (опционально — строка поиска по штрихкоду ИЛИ части названия)
+app.get('/items', authRequired, async (req, res) => {
+  try {
+    const clientIdRaw = req.query.client_id;
+    const search = (req.query.barcode || '').trim();
+
+    const params = [];
+    const whereParts = [];
+
+    // Фильтр по client_id, ЕСЛИ он передан
+    if (clientIdRaw !== undefined && clientIdRaw !== '') {
+      const clientId = Number(clientIdRaw);
+      if (!clientId || clientId <= 0) {
+        return res.status(400).json({
+          error: 'bad_request',
+          detail: 'client_id должен быть > 0, если указан',
+        });
+      }
+      params.push(clientId);
+      whereParts.push(`i.client_id = $${params.length}`);
+    }
+
+    // Поиск по barcode / части названия
+    if (search) {
+      params.push(`%${search}%`);
+      whereParts.push(
+        `(i.barcode ILIKE $${params.length} OR i.item_name ILIKE $${params.length})`
+      );
+    }
+
+    const whereSql = whereParts.length
+      ? 'WHERE ' + whereParts.join(' AND ')
+      : '';
+
+    const q = `
+      SELECT
+        i.id,
+        i.client_id,
+        c.client_name,
+        i.barcode,
+        i.item_name,
+        i.vendor_code,
+        i.wb_vendor_code,
+        i.brand,
+        i.unit,
+        i.volume_liters,
+        i.needs_packaging,
+        i.cost_price,
+        i.processing_fee,
+        i.is_active
+      FROM masterdata.items i
+      LEFT JOIN masterdata.clients c
+        ON c.id = i.client_id
+      ${whereSql}
+      ORDER BY i.id
+    `;
+
+    const r = await pool.query(q, params);
+    return res.json({ items: r.rows });
+  } catch (err) {
+    console.error('GET /items error', err);
+    return res.status(500).json({
+      error: 'items_error',
+      detail: err.message,
+    });
+  }
+});
+
+
+// POST /items — создать товар
+app.post('/items', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const {
+      barcode,
+      client_id,
+      item_name,
+      vendor_code,
+      wb_vendor_code,
+      brand,
+      unit,
+      volume_liters,
+      length_cm,
+      width_cm,
+      height_cm,
+      weight_grams,
+      cost_price,
+      processing_fee,
+      need_packaging, // API-поле
+      is_active,
+    } = req.body || {};
+
+    if (!barcode || !client_id || !item_name) {
+      return res.status(400).json({
+        error: 'Обязательные поля: barcode, client_id, item_name',
+      });
+    }
+
+    // Валидация литража
+    const litersErr = validateLitersRule(unit, volume_liters);
+    if (litersErr) {
+      return res.status(400).json({ error: litersErr });
+    }
+
+    const clientIdNum = Number(client_id);
+    if (!clientIdNum) {
+      return res.status(400).json({ error: 'client_id должен быть числом' });
+    }
+
+    const clientCheck = await pool.query(
+      `SELECT id FROM masterdata.clients WHERE id = $1 LIMIT 1`,
+      [clientIdNum]
+    );
+    if (clientCheck.rowCount === 0) {
+      return res.status(400).json({ error: 'client_id не существует' });
+    }
+
+    // Проверка уникальности штрихкода
+    const existsBarcode = await pool.query(
+      `SELECT id FROM masterdata.items WHERE barcode = $1 LIMIT 1`,
+      [barcode]
+    );
+    if (existsBarcode.rowCount > 0) {
+      return res.status(409).json({ error: 'Такой barcode уже есть' });
+    }
+
+    const isActiveVal = is_active === undefined ? true : !!is_active;
+    const needPackagingVal = need_packaging === undefined ? false : !!need_packaging;
+
+    const q = `
+      INSERT INTO masterdata.items
+      (
+        barcode,
+        client_id,
+        item_name,
+        vendor_code,
+        wb_vendor_code,
+        brand,
+        unit,
+        volume_liters,
+        length_cm,
+        width_cm,
+        height_cm,
+        weight_grams,
+        cost_price,
+        processing_fee,
+        needs_packaging,
+        is_active,
+        created_at
+      )
+      VALUES
+      (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12,
+        $13, $14, $15, $16, NOW()
+      )
+      RETURNING
+        id,
+        barcode,
+        client_id,
+        item_name,
+        vendor_code,
+        wb_vendor_code,
+        brand,
+        unit,
+        volume_liters,
+        length_cm,
+        width_cm,
+        height_cm,
+        weight_grams,
+        cost_price,
+        processing_fee,
+        needs_packaging AS need_packaging,
+        created_at,
+        is_active
+    `;
+
+    const r = await pool.query(q, [
+      barcode,
+      clientIdNum,
+      item_name,
+      vendor_code || null,
+      wb_vendor_code || null,
+      brand || null,
+      unit || null,
+      volume_liters === undefined ? null : volume_liters,
+      length_cm === undefined ? null : length_cm,
+      width_cm === undefined ? null : width_cm,
+      height_cm === undefined ? null : height_cm,
+      weight_grams === undefined ? null : weight_grams,
+      cost_price === undefined ? null : cost_price,
+      processing_fee === undefined ? null : processing_fee,
+      needPackagingVal,
+      isActiveVal,
+    ]);
+
+    return res.status(201).json({ status: 'ok', item: r.rows[0] });
+  } catch (err) {
+    console.error('Create item error:', err);
+    return res.status(500).json({ error: 'Create item error', detail: err.message });
+  }
+});
+
+// PATCH /items/:id — обновить товар
+app.patch('/items/:id', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) {
+      return res.status(400).json({ error: 'Некорректный id' });
+    }
+
+    const {
+      barcode,
+      client_id,
+      item_name,
+      vendor_code,
+      wb_vendor_code,
+      brand,
+      unit,
+      volume_liters,
+      length_cm,
+      width_cm,
+      height_cm,
+      weight_grams,
+      cost_price,
+      processing_fee,
+      need_packaging, // API-поле
+      is_active,
+    } = req.body || {};
+
+    // Валидация литража (unit/volume_liters могут обновляться частично)
+    if (unit !== undefined || volume_liters !== undefined) {
+      let unitForCheck = unit;
+      let volForCheck = volume_liters;
+
+      if (unitForCheck === undefined || volForCheck === undefined) {
+        const cur = await pool.query(
+          `SELECT unit, volume_liters FROM masterdata.items WHERE id = $1 LIMIT 1`,
+          [id]
+        );
+        if (cur.rowCount === 0) {
+          return res.status(404).json({ error: 'Товар не найден' });
+        }
+        if (unitForCheck === undefined) unitForCheck = cur.rows[0].unit;
+        if (volForCheck === undefined) volForCheck = cur.rows[0].volume_liters;
+      }
+
+      const litersErr = validateLitersRule(unitForCheck, volForCheck);
+      if (litersErr) {
+        return res.status(400).json({ error: litersErr });
+      }
+    }
+
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (barcode !== undefined) {
+      fields.push(`barcode = $${idx++}`);
+      values.push(barcode);
+    }
+
+    if (client_id !== undefined) {
+      const clientIdNum = Number(client_id);
+      if (!clientIdNum) {
+        return res.status(400).json({ error: 'client_id должен быть числом' });
+      }
+      const clientCheck = await pool.query(
+        `SELECT id FROM masterdata.clients WHERE id = $1 LIMIT 1`,
+        [clientIdNum]
+      );
+      if (clientCheck.rowCount === 0) {
+        return res.status(400).json({ error: 'client_id не существует' });
+      }
+      fields.push(`client_id = $${idx++}`);
+      values.push(clientIdNum);
+    }
+
+    if (item_name !== undefined) {
+      fields.push(`item_name = $${idx++}`);
+      values.push(item_name);
+    }
+    if (vendor_code !== undefined) {
+      fields.push(`vendor_code = $${idx++}`);
+      values.push(vendor_code || null);
+    }
+    if (wb_vendor_code !== undefined) {
+      fields.push(`wb_vendor_code = $${idx++}`);
+      values.push(wb_vendor_code || null);
+    }
+    if (brand !== undefined) {
+      fields.push(`brand = $${idx++}`);
+      values.push(brand || null);
+    }
+    if (unit !== undefined) {
+      fields.push(`unit = $${idx++}`);
+      values.push(unit || null);
+    }
+    if (volume_liters !== undefined) {
+      fields.push(`volume_liters = $${idx++}`);
+      values.push(volume_liters === null ? null : volume_liters);
+    }
+    if (length_cm !== undefined) {
+      fields.push(`length_cm = $${idx++}`);
+      values.push(length_cm === null ? null : length_cm);
+    }
+    if (width_cm !== undefined) {
+      fields.push(`width_cm = $${idx++}`);
+      values.push(width_cm === null ? null : width_cm);
+    }
+    if (height_cm !== undefined) {
+      fields.push(`height_cm = $${idx++}`);
+      values.push(height_cm === null ? null : height_cm);
+    }
+    if (weight_grams !== undefined) {
+      fields.push(`weight_grams = $${idx++}`);
+      values.push(weight_grams === null ? null : weight_grams);
+    }
+    if (cost_price !== undefined) {
+      fields.push(`cost_price = $${idx++}`);
+      values.push(cost_price === null ? null : cost_price);
+    }
+    if (processing_fee !== undefined) {
+      fields.push(`processing_fee = $${idx++}`);
+      values.push(processing_fee === null ? null : processing_fee);
+    }
+    if (need_packaging !== undefined) {
+      fields.push(`needs_packaging = $${idx++}`);
+      values.push(!!need_packaging);
+    }
+    if (is_active !== undefined) {
+      fields.push(`is_active = $${idx++}`);
+      values.push(!!is_active);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'Нет полей для обновления' });
+    }
+
+    // Проверка дубликата штрихкода при изменении barcode
+    if (barcode !== undefined) {
+      const existsBarcode = await pool.query(
+        `SELECT id FROM masterdata.items WHERE barcode = $1 AND id <> $2 LIMIT 1`,
+        [barcode, id]
+      );
+      if (existsBarcode.rowCount > 0) {
+        return res.status(409).json({ error: 'Такой barcode уже занят другим товаром' });
+      }
+    }
+
+    values.push(id);
+
+    const q = `
+      UPDATE masterdata.items
+      SET ${fields.join(', ')}
+      WHERE id = $${idx}
+      RETURNING
+        id,
+        barcode,
+        client_id,
+        item_name,
+        vendor_code,
+        wb_vendor_code,
+        brand,
+        unit,
+        volume_liters,
+        length_cm,
+        width_cm,
+        height_cm,
+        weight_grams,
+        cost_price,
+        processing_fee,
+        needs_packaging AS need_packaging,
+        created_at,
+        is_active
+    `;
+
+    const r = await pool.query(q, values);
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Товар не найден' });
+    }
+
+    return res.json({ status: 'ok', item: r.rows[0] });
+  } catch (err) {
+    console.error('Update item error:', err);
+    return res.status(500).json({ error: 'Update item error', detail: err.message });
+  }
+});
+
+// DELETE /items/:id — «мягкое» удаление (деактивация)
+app.delete('/items/:id', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) {
+      return res.status(400).json({ error: 'Некорректный id' });
+    }
+
+    const q = `
+      UPDATE masterdata.items
+      SET is_active = false
+      WHERE id = $1
+      RETURNING
+        id,
+        barcode,
+        client_id,
+        item_name,
+        vendor_code,
+        wb_vendor_code,
+        brand,
+        unit,
+        volume_liters,
+        length_cm,
+        width_cm,
+        height_cm,
+        weight_grams,
+        cost_price,
+        processing_fee,
+        needs_packaging AS need_packaging,
+        created_at,
+        is_active
+    `;
+
+    const r = await pool.query(q, [id]);
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Товар не найден' });
+    }
+
+    return res.json({ status: 'ok', item: r.rows[0] });
+  } catch (err) {
+    console.error('Delete item error:', err);
+    return res.status(500).json({ error: 'Delete item error', detail: err.message });
+  }
+});
+
+
+
+
+// ---------------- ITEMS (MASTERDATA.ITEMS) ----------------
+// Таблица masterdata.items (актуально):
+// id, barcode, client_id, item_name, vendor_code, wb_vendor_code, brand, unit,
+// volume_liters, length_cm, width_cm, height_cm, weight_grams,
+// cost_price, processing_fee, needs_packaging, created_at, is_active
+//
+// ВАЖНО: наружу (API) отдаём поле need_packaging (единственное каноническое имя),
+// а в БД пишем/читаем needs_packaging.
+//
+// ДОБАВЛЕНО: базовая валидация "литражных" товаров:
+// если unit = 'л'/'L'/'liter'/'litre' (регистр не важен) — volume_liters обязателен (>0).
+
+function isLiterUnit(unit) {
+  if (!unit) return false;
+  const u = String(unit).trim().toLowerCase();
+  return ['л', 'l', 'liter', 'litre'].includes(u);
+}
+
+function parsePositiveNumberOrNull(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return NaN;
+  return n;
+}
+
+function validateLitersRule(unit, volume_liters) {
+  if (!isLiterUnit(unit)) return null;
+
+  const vol = parsePositiveNumberOrNull(volume_liters);
+  if (vol === null) {
+    return 'Для литражного товара (unit=л/L) поле volume_liters обязательно';
+  }
+  if (Number.isNaN(vol)) {
+    return 'volume_liters должен быть числом';
+  }
+  if (vol <= 0) {
+    return 'volume_liters должен быть больше 0 для литражного товара';
+  }
+  return null;
+}
+// ---------- СПРАВОЧНИК КЛИЕНТОВ (masterdata.clients) ----------
+
+// Полный список с фильтрами
+app.get('/clients', authRequired, async (req, res) => {
+  try {
+    const { search, is_active } = req.query;
+
+    const params = [];
+    const whereParts = [];
+
+    if (is_active === 'true') {
+      params.push(true);
+      whereParts.push(`c.is_active = $${params.length}`);
+    } else if (is_active === 'false') {
+      params.push(false);
+      whereParts.push(`c.is_active = $${params.length}`);
+    }
+
+    if (search && search.trim() !== '') {
+      params.push(`%${search.trim()}%`);
+      whereParts.push(
+        `(c.client_name ILIKE $${params.length} OR c.client_code ILIKE $${params.length})`
+      );
+    }
+
+    const whereSql = whereParts.length ? 'WHERE ' + whereParts.join(' AND ') : '';
+
+    const sql = `
+      SELECT
+        c.id,
+        c.client_name,
+        c.client_code,
+        c.telegram_chat_id,
+        c.is_active,
+        c.created_at
+      FROM masterdata.clients c
+      ${whereSql}
+      ORDER BY c.id;
+    `;
+
+    const result = await pool.query(sql, params);
+    return res.json({ clients: result.rows });
+  } catch (err) {
+    console.error('Get clients error', err);
+    return res.status(500).json({
+      error: 'Get clients error',
+      detail: err.message,
+    });
+  }
+});
+
+// Короткий список для селектов в UI
+app.get('/clients-short', authRequired, async (req, res) => {
+  try {
+    const q = `
+      SELECT id, client_name
+      FROM masterdata.clients
+      WHERE is_active = true
+      ORDER BY id
+    `;
+    const r = await pool.query(q);
+    return res.json({ clients: r.rows });
+  } catch (err) {
+    console.error('clients-short error', err);
+    return res.status(500).json({
+      error: 'clients-short error',
+      detail: err.message,
+    });
+  }
+});
+
+// Создать клиента
+app.post('/clients', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const {
+      client_name,
+      client_code,
+      telegram_chat_id,
+      is_active,
+    } = req.body || {};
+
+    if (!client_name || !client_code) {
+      return res.status(400).json({
+        error: 'Обязательные поля: client_name, client_code',
+      });
+    }
+
+    // Код клиента должен быть уникальным
+    const existsCode = await pool.query(
+      `SELECT id FROM masterdata.clients WHERE client_code = $1 LIMIT 1`,
+      [client_code]
+    );
+    if (existsCode.rowCount > 0) {
+      return res.status(409).json({ error: 'Такой client_code уже существует' });
+    }
+
+    const isActiveVal = (is_active === undefined ? true : !!is_active);
+
+    const q = `
+      INSERT INTO masterdata.clients
+      (
+        client_name,
+        client_code,
+        telegram_chat_id,
+        is_active,
+        created_at
+      )
+      VALUES ($1, $2, $3, $4, NOW())
+      RETURNING
+        id,
+        client_name,
+        client_code,
+        telegram_chat_id,
+        is_active,
+        created_at
+    `;
+
+    const r = await pool.query(q, [
+      client_name,
+      client_code,
+      telegram_chat_id || null,
+      isActiveVal,
+    ]);
+
+    return res.status(201).json({ status: 'ok', client: r.rows[0] });
+  } catch (err) {
+    console.error('Create client error:', err);
+    return res.status(500).json({ error: 'Create client error', detail: err.message });
+  }
+});
+
+// Обновить клиента
+app.patch('/clients/:id', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) {
+      return res.status(400).json({ error: 'Некорректный id' });
+    }
+
+    const {
+      client_name,
+      client_code,
+      telegram_chat_id,
+      is_active,
+    } = req.body || {};
+
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (client_name !== undefined) {
+      fields.push(`client_name = $${idx++}`);
+      values.push(client_name);
+    }
+
+    if (client_code !== undefined) {
+      // проверим уникальность кода
+      const existsCode = await pool.query(
+        `SELECT id FROM masterdata.clients WHERE client_code = $1 AND id <> $2 LIMIT 1`,
+        [client_code, id]
+      );
+      if (existsCode.rowCount > 0) {
+        return res.status(409).json({ error: 'Такой client_code уже занят другим клиентом' });
+      }
+      fields.push(`client_code = $${idx++}`);
+      values.push(client_code);
+    }
+
+    if (telegram_chat_id !== undefined) {
+      fields.push(`telegram_chat_id = $${idx++}`);
+      values.push(telegram_chat_id || null);
+    }
+
+    if (is_active !== undefined) {
+      fields.push(`is_active = $${idx++}`);
+      values.push(!!is_active);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'Нет полей для обновления' });
+    }
+
+    values.push(id);
+
+    const q = `
+      UPDATE masterdata.clients
+      SET ${fields.join(', ')}
+      WHERE id = $${idx}
+      RETURNING
+        id,
+        client_name,
+        client_code,
+        telegram_chat_id,
+        is_active,
+        created_at
+    `;
+
+    const r = await pool.query(q, values);
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Клиент не найден' });
+    }
+
+    return res.json({ status: 'ok', client: r.rows[0] });
+  } catch (err) {
+    console.error('Update client error:', err);
+    return res.status(500).json({ error: 'Update client error', detail: err.message });
+  }
+});
+
+// "Удаление" клиента = просто выключаем
+app.delete('/clients/:id', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) {
+      return res.status(400).json({ error: 'Некорректный id' });
+    }
+
+    const q = `
+      UPDATE masterdata.clients
+      SET is_active = false
+      WHERE id = $1
+      RETURNING
+        id,
+        client_name,
+        client_code,
+        telegram_chat_id,
+        is_active,
+        created_at
+    `;
+
+    const r = await pool.query(q, [id]);
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Клиент не найден' });
+    }
+
+    return res.json({ status: 'ok', client: r.rows[0] });
+  } catch (err) {
+    console.error('Delete client error:', err);
+    return res.status(500).json({ error: 'Delete client error', detail: err.message });
+  }
+});
+
+
+// ==============================
+// СПРАВОЧНИК МХ С АГРЕГАТАМИ ПО СКЛАДУ
+// GET /locations/overview
+// Параметры (опц.): search, is_active=true|false
+// ==============================
+app.get(
+  '/locations/overview',
+  authRequired,
+  requireRole('owner', 'admin', 'supervisor'),
+  async (req, res) => {
+    try {
+      const { search, is_active } = req.query;
+
+      const values = [];
+      const whereParts = [];
+
+      if (search) {
+        values.push(`%${search}%`);
+        whereParts.push(`l.code ILIKE $${values.length}`);
+      }
+
+      if (is_active === 'true') {
+        whereParts.push('l.is_active = TRUE');
+      } else if (is_active === 'false') {
+        whereParts.push('l.is_active = FALSE');
+      }
+
+      const whereSql = whereParts.length
+        ? `WHERE ${whereParts.join(' AND ')}`
+        : '';
+
+      const sql = `
+        SELECT
+          l.id,
+          l.code AS location_code,
+          l.description,
+          l.is_active,
+          l.created_at,
+          COALESCE(COUNT(DISTINCT s.sku_id), 0) AS total_sku,
+          COALESCE(SUM(s.qty), 0)               AS total_qty
+        FROM masterdata.locations l
+        LEFT JOIN wms.stock s
+          ON s.location_id = l.id
+        ${whereSql}
+        GROUP BY
+          l.id, l.code, l.description, l.is_active, l.created_at
+        ORDER BY l.code;
+      `;
+
+      const { rows } = await pool.query(sql, values);
+      return res.json({ rows });
+    } catch (err) {
+      console.error('GET /locations/overview error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+
+// ==============================
+// БАЗОВЫЙ СПИСОК МХ
+// GET /locations
+// Параметры (опц.): id, code|location_code, is_active=true|false
+// ==============================
+app.get(
+  '/locations',
+  authRequired,
+  requireRole('owner'),
+  async (req, res) => {
+    try {
+      const { id, code, location_code, is_active } = req.query || {};
+
+      const conditions = [];
+      const values = [];
+      let idx = 1;
+
+      if (id) {
+        conditions.push(`id = $${idx++}`);
+        values.push(Number(id));
+      }
+
+      const codeFilter = location_code || code;
+      if (codeFilter) {
+        conditions.push(`code ILIKE $${idx++}`);
+        values.push(`%${String(codeFilter).trim()}%`);
+      }
+
+      if (is_active === 'true') {
+        conditions.push('is_active = TRUE');
+      } else if (is_active === 'false') {
+        conditions.push('is_active = FALSE');
+      }
+
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const q = `
+        SELECT
+          id,
+          code AS location_code,
+          description,
+          is_active,
+          created_at
+        FROM masterdata.locations
+        ${where}
+        ORDER BY code
+        LIMIT 500
+      `;
+
+      const r = await pool.query(q, values);
+
+      return res.json({
+        status: 'ok',
+        locations: r.rows,
+      });
+    } catch (err) {
+      console.error('Get locations error:', err);
+      return res.status(500).json({
+        error: 'Get locations error',
+        detail: err.message,
+        code: err.code,
+      });
+    }
+  }
+);
+
+
+// ==============================
+// СОЗДАНИЕ НОВОЙ МХ
+// POST /locations
+// body: { location_code (или code), description?, is_active? }
+// ==============================
+app.post(
+  '/locations',
+  authRequired,
+  requireRole('owner'),
+  async (req, res) => {
+    try {
+      const {
+        location_code,
+        code,           // старое имя для совместимости
+        description,
+        is_active,
+      } = req.body || {};
+
+      const codeStr = String(location_code || code || '').trim();
+      if (!codeStr) {
+        return res.status(400).json({
+          error: 'Поле "location_code" (код МХ) обязательно',
+        });
+      }
+
+      const descVal =
+        description != null && String(description).trim() !== ''
+          ? String(description).trim()
+          : null;
+
+      let isActiveVal = true;
+      if (typeof is_active === 'boolean') {
+        isActiveVal = is_active;
+      } else if (typeof is_active === 'string') {
+        isActiveVal = is_active === 'true';
+      }
+
+      // Проверяем дубликат
+      const exist = await pool.query(
+        `
+        SELECT id
+        FROM masterdata.locations
+        WHERE code = $1
+        LIMIT 1
+        `,
+        [codeStr]
+      );
+
+      if (exist.rowCount > 0) {
+        return res.status(409).json({
+          error: 'Место хранения с таким кодом уже существует',
+        });
+      }
+
+      const ins = await pool.query(
+        `
+        INSERT INTO masterdata.locations
+          (code, description, is_active, created_at)
+        VALUES
+          ($1,   $2,          $3,        NOW())
+        RETURNING
+          id,
+          code AS location_code,
+          description,
+          is_active,
+          created_at
+        `,
+        [codeStr, descVal, isActiveVal]
+      );
+
+      return res.status(201).json({
+        status: 'ok',
+        location: ins.rows[0],
+      });
+    } catch (err) {
+      console.error('Create location error:', err);
+      return res.status(500).json({
+        error: 'Create location error',
+        detail: err.message,
+        code: err.code,
+      });
+    }
+  }
+);
+
+
+// ==============================
+// ОБНОВЛЕНИЕ МХ
+// PATCH /locations/:id
+// body: { location_code?, description?, is_active? }
+// ==============================
+app.patch(
+  '/locations/:id',
+  authRequired,
+  requireRole('owner'),
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: 'Некорректный id локации' });
+      }
+
+      const {
+        location_code,
+        code,           // для совместимости
+        description,
+        is_active,
+      } = req.body || {};
+
+      const sets = [];
+      const values = [];
+      let idx = 1;
+
+      if (location_code !== undefined || code !== undefined) {
+        const codeStr = String(location_code || code || '').trim();
+        if (!codeStr) {
+          return res.status(400).json({ error: 'location_code не может быть пустым' });
+        }
+        sets.push(`code = $${idx++}`);
+        values.push(codeStr);
+      }
+
+      if (description !== undefined) {
+        const descStr =
+          description != null && String(description).trim() !== ''
+            ? String(description).trim()
+            : null;
+        sets.push(`description = $${idx++}`);
+        values.push(descStr);
+      }
+
+      if (is_active !== undefined) {
+        let isActVal;
+        if (typeof is_active === 'boolean') {
+          isActVal = is_active;
+        } else if (typeof is_active === 'string') {
+          isActVal = is_active === 'true';
+        } else {
+          isActVal = !!is_active;
+        }
+        sets.push(`is_active = $${idx++}`);
+        values.push(isActVal);
+      }
+
+      if (sets.length === 0) {
+        return res.status(400).json({ error: 'Нет полей для обновления' });
+      }
+
+      values.push(id);
+      const q = `
+        UPDATE masterdata.locations
+        SET ${sets.join(', ')}
+        WHERE id = $${idx}
+        RETURNING
+          id,
+          code AS location_code,
+          description,
+          is_active,
+          created_at
+      `;
+
+      const r = await pool.query(q, values);
+
+      if (r.rowCount === 0) {
+        return res.status(404).json({ error: 'Локация не найдена' });
+      }
+
+      return res.json({
+        status: 'ok',
+        location: r.rows[0],
+      });
+    } catch (err) {
+      console.error('Update location error:', err);
+      return res.status(500).json({
+        error: 'Update location error',
+        detail: err.message,
+        code: err.code,
+      });
+    }
+  }
+);
+
+
+// ==============================
+// ПРОСМОТР ОСТАТКОВ ПО КОНКРЕТНОЙ МХ
+// GET /stock/by-location?location_code=XXX
+// ==============================
+app.get(
+  '/stock/by-location',
+  authRequired,
+  requireRole('owner', 'admin', 'supervisor'),
+  async (req, res) => {
+    try {
+      const { location_code } = req.query;
+
+      if (!location_code) {
+        return res.status(400).json({ error: 'location_code обязателен' });
+      }
+
+      // 1. Находим локацию по коду
+      const qLoc = `
+        SELECT id, code
+        FROM masterdata.locations
+        WHERE code = $1
+        LIMIT 1
+      `;
+      const rLoc = await pool.query(qLoc, [location_code.trim()]);
+
+      if (rLoc.rowCount === 0) {
+        return res.status(404).json({ error: 'Локация не найдена' });
+      }
+
+      const locationId = rLoc.rows[0].id;
+
+      // 2. Остатки по этой локации
+      const qStock = `
+        SELECT
+          s.sku_id,
+          s.qty,
+          s.client_id,
+          i.barcode,
+          i.item_name,
+          i.vendor_code,
+          i.unit,
+          i.volume_liters,
+          i.needs_packaging
+        FROM wms.stock s
+        LEFT JOIN masterdata.items i
+          ON s.sku_id = i.id
+        WHERE s.location_id = $1
+        ORDER BY i.item_name;
+      `;
+      const rStock = await pool.query(qStock, [locationId]);
+
+      return res.json({
+        location: {
+          id: rLoc.rows[0].id,
+          code: rLoc.rows[0].code,
+        },
+        rows: rStock.rows,
+      });
+    } catch (err) {
+      console.error('GET /stock/by-location error:', err);
+      return res.status(500).json({
+        error: 'Internal server error',
+        detail: err.message,
+      });
+    }
+  }
+);
+
+
+// ======================= SKU REGISTRY (WMS.SKU) =======================
+// Таблица сейчас: id, client_id, barcode, is_active, created_at
+// Здесь держим связку client_id + barcode -> sku_id,
+// чтобы sku_id не вводить руками в клиентах/скриптах.
+
+
+// ==============================
+//  STRICT HELPERS: ITEMS, SKU, LOCATION
+// ==============================
+
+// 1) Строгая проверка товара: он обязан быть в masterdata.items и быть активным.
+//    Здесь НИЧЕГО не создаём в справочнике, только смотрим.
+//    После проверки вызываем resolveSkuIdOrCreate, который создаёт ТОЛЬКО SKU (если нужно).
+async function resolveSkuIdStrict(dbClient, { client_id, barcode }) {
+  const clientIdNum = Number(client_id);
+  const barcodeStr = String(barcode || '').trim();
+
+  if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+    throw new Error('resolveSkuIdStrict: invalid client_id');
+  }
+  if (!barcodeStr) {
+    throw new Error('resolveSkuIdStrict: empty barcode');
+  }
+
+  // Ищем товар в справочнике
+  const itemRes = await dbClient.query(
+    `
+    SELECT id, is_active
+    FROM masterdata.items
+    WHERE client_id = $1
+      AND barcode   = $2
+    LIMIT 1
+    `,
+    [clientIdNum, barcodeStr]
+  );
+
+  if (itemRes.rowCount === 0) {
+    const err = new Error('ITEM_NOT_FOUND');
+    err.code = 'ITEM_NOT_FOUND';
+    throw err;
+  }
+
+  const itemRow = itemRes.rows[0];
+  if (!itemRow.is_active) {
+    const err = new Error('ITEM_INACTIVE');
+    err.code = 'ITEM_INACTIVE';
+    throw err;
+  }
+
+  // Гарантируем наличие SKU (НЕ создавая товар в masterdata.items)
+  const skuId = await resolveSkuIdOrCreate(dbClient, {
+    client_id: clientIdNum,
+    barcode: barcodeStr,
+  });
+
+  return { skuId, item: itemRow };
+}
+
+// 2) SKU HELPER: БЕЗ СОЗДАНИЯ ТОВАРОВ В СПРАВОЧНИКЕ
+//
+// Гарантируем наличие sku_id в wms.sku, но masterdata.items не трогаем.
+// Товар должен быть заведён заранее.
+async function resolveSkuIdOrCreate(dbClient, { client_id, barcode }) {
+  const clientIdNum = Number(client_id);
+  const barcodeStr = String(barcode || '').trim();
+
+  if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+    throw new Error('resolveSkuIdOrCreate: invalid client_id');
+  }
+  if (!barcodeStr) {
+    throw new Error('resolveSkuIdOrCreate: empty barcode');
+  }
+
+  // 1. Ищем SKU
+  const skuRes = await dbClient.query(
+    `
+    SELECT id
+    FROM wms.sku
+    WHERE client_id = $1
+      AND barcode   = $2
+    LIMIT 1
+    `,
+    [clientIdNum, barcodeStr]
+  );
+
+  if (skuRes.rowCount > 0) {
+    return skuRes.rows[0].id;
+  }
+
+  // 2. Создаём ТОЛЬКО SKU, не трогая справочник товаров
+  const insSku = await dbClient.query(
+    `
+    INSERT INTO wms.sku (client_id, barcode, is_active, created_at)
+    VALUES ($1, $2, true, NOW())
+    RETURNING id
+    `,
+    [clientIdNum, barcodeStr]
+  );
+
+  return insSku.rows[0].id;
+}
+
+// 3) Строгая проверка МХ: существует и активен.
+async function resolveLocationIdStrict(dbClient, location_code) {
+  const locCode = String(location_code || '').trim();
+
+  console.log('[resolveLocationIdStrict] check location', locCode);
+
+  const locRes = await dbClient.query(
+    `
+    SELECT id, is_active
+    FROM masterdata.locations
+    WHERE code = $1
+    LIMIT 1
+    `,
+    [locCode]
+  );
+
+  console.log('[resolveLocationIdStrict] rowCount =', locRes.rowCount);
+
+  if (locRes.rowCount === 0) {
+    const err = new Error('LOCATION_NOT_FOUND');
+    err.code = 'LOCATION_NOT_FOUND';
+    throw err;
+  }
+
+  const row = locRes.rows[0];
+  if (!row.is_active) {
+    const err = new Error('LOCATION_INACTIVE');
+    err.code = 'LOCATION_INACTIVE';
+    throw err;
+  }
+
+  return { locationId: row.id };
+}
+
+
+// ---------------- SKU REGISTRY API (WMS.SKU) ----------------
+
+// GET /sku — поиск SKU + базовые данные товара по штрихкоду
+// Фильтры (необязательные): client_id, barcode, sku_id, is_active
+app.get('/sku', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const { client_id, barcode, sku_id, is_active } = req.query || {};
+
+    const conditions = [];
+    const values = [];
+    let idx = 1;
+
+    if (sku_id) {
+      conditions.push(`s.id = $${idx++}`);
+      values.push(Number(sku_id));
+    }
+    if (client_id) {
+      conditions.push(`s.client_id = $${idx++}`);
+      values.push(Number(client_id));
+    }
+    if (barcode) {
+      conditions.push(`s.barcode = $${idx++}`);
+      values.push(String(barcode));
+    }
+    if (is_active !== undefined) {
+      conditions.push(`s.is_active = $${idx++}`);
+      values.push(is_active === 'true');
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const q = `
+      SELECT
+        s.id         AS sku_id,
+        s.client_id,
+        s.barcode,
+        s.is_active,
+        s.created_at,
+
+        -- данные товара (если есть в masterdata.items)
+        i.id         AS item_id,
+        i.item_name,
+        i.vendor_code,
+        i.wb_vendor_code,
+        i.unit,
+        i.volume_liters,
+        i.needs_packaging AS need_packaging
+      FROM wms.sku s
+      LEFT JOIN masterdata.items i
+        ON i.client_id = s.client_id
+       AND i.barcode   = s.barcode
+      ${where}
+      ORDER BY s.client_id, s.barcode, s.id
+      LIMIT 500
+    `;
+
+    const r = await pool.query(q, values);
+    res.json({ status: 'ok', sku: r.rows });
+  } catch (err) {
+    console.error('Get SKU error:', err);
+    res.status(500).json({ error: 'Get SKU error', detail: err.message });
+  }
+});
+
+// POST /sku — ручное создание/фиксация SKU
+app.post('/sku', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const { client_id, barcode, is_active } = req.body || {};
+
+    if (!client_id || !barcode) {
+      return res.status(400).json({
+        error: 'Обязательные поля: client_id, barcode',
+      });
+    }
+
+    const clientIdNum = Number(client_id);
+    if (!clientIdNum) {
+      return res.status(400).json({ error: 'client_id обязателен и должен быть числом' });
+    }
+
+    const barcodeStr = String(barcode || '').trim();
+    if (!barcodeStr) {
+      return res.status(400).json({ error: 'barcode обязателен' });
+    }
+
+    // Проверяем, что такой клиент существует
+    const clientCheck = await pool.query(
+      `SELECT id FROM masterdata.clients WHERE id = $1 LIMIT 1`,
+      [clientIdNum]
+    );
+    if (clientCheck.rowCount === 0) {
+      return res.status(400).json({ error: 'client_id не существует' });
+    }
+
+    const isActiveVal = is_active === undefined ? true : !!is_active;
+
+    // Если такая пара client_id + barcode уже есть — вернём конфликт
+    const exist = await pool.query(
+      `SELECT id FROM wms.sku WHERE client_id = $1 AND barcode = $2 LIMIT 1`,
+      [clientIdNum, barcodeStr]
+    );
+    if (exist.rowCount > 0) {
+      return res.status(409).json({ error: 'Для этого client_id и barcode SKU уже существует' });
+    }
+
+    const ins = await pool.query(
+      `
+      INSERT INTO wms.sku (client_id, barcode, is_active, created_at)
+      VALUES ($1, $2, $3, NOW())
+      RETURNING id AS sku_id, client_id, barcode, is_active, created_at
+      `,
+      [clientIdNum, barcodeStr, isActiveVal]
+    );
+
+    res.status(201).json({ status: 'ok', sku: ins.rows[0] });
+  } catch (err) {
+    console.error('Create SKU error:', err);
+    res.status(500).json({ error: 'Create SKU error', detail: err.message });
+  }
+});
+
+
+// ---------------- STOCK VIEW (BY LOCATION / BY BARCODE) ----------------
+// Просмотр содержимого МХ по коду ячейки
+// GET /stock/by-location?location_code=A-01-05
+app.get(
+  '/stock/by-location',
+  authRequired,
+  requireRole('owner', 'admin', 'supervisor'),
+  async (req, res) => {
+    try {
+      const { location_code } = req.query;
+
+      if (!location_code) {
+        return res.status(400).json({ error: 'Параметр location_code обязателен' });
+      }
+
+      const sql = `
+        SELECT
+          s.sku_id,
+          s.qty,
+          l.code AS location_code,
+
+          -- ШК: сначала из items, потом из sku, в крайнем случае из stock
+          COALESCE(i.barcode, sk.barcode, s.barcode) AS barcode,
+
+          -- Наименование товара: items.item_name -> sku.name
+          COALESCE(i.item_name, sk.name) AS item_name,
+
+          -- Клиент
+          COALESCE(sk.client_id, s.client_id) AS client_id,
+          c.client_name
+
+        FROM wms.stock s
+        JOIN masterdata.locations l
+          ON l.id = s.location_id
+
+        -- SKU-справочник
+        LEFT JOIN masterdata.sku sk
+          ON sk.id = s.sku_id
+
+        -- Товар (если есть отдельная карточка)
+        LEFT JOIN masterdata.items i
+          ON i.id = s.sku_id   -- сейчас id item == sku_id
+
+        -- Клиент: берём client_id из sku, если есть, иначе из stock
+        LEFT JOIN masterdata.clients c
+          ON c.id = COALESCE(sk.client_id, s.client_id)
+
+        WHERE l.code = $1
+          AND s.qty <> 0
+
+        ORDER BY
+          COALESCE(i.item_name, sk.name) NULLS LAST,
+          COALESCE(i.barcode, sk.barcode, s.barcode) NULLS LAST,
+          s.sku_id;
+      `;
+
+      const { rows } = await pool.query(sql, [location_code.trim()]);
+      return res.json({ rows });
+    } catch (err) {
+      console.error('GET /stock/by-location error:', err);
+      return res.status(500).json({
+        error: 'Internal server error',
+        detail: err.message,
+        code: err.code,
+      });
+    }
+  }
+);
+
+
+
+
+
+
+
+
+// ---------------- STOCK BY BARCODE ----------------
+// client_id НЕ обязателен. Если не передан — ищем по всем клиентам.
+
+app.get(
+  '/stock/by-barcode',
+  authRequired,
+  requireRole('owner'),
+  async (req, res) => {
+    try {
+      const { client_id, barcode } = req.query || {};
+
+      if (!barcode) {
+        return res.status(400).json({
+          error: 'barcode обязателен',
+        });
+      }
+
+      const barcodeStr = String(barcode).trim();
+      const clientIdNum = client_id ? Number(client_id) : null;
+
+      const values = [];
+      let idx = 1;
+
+      // --- фильтры ---
+      // всегда фильтруем по barcode и ненулевому остатку
+      let where = `WHERE st.barcode = $${idx++} AND st.qty <> 0`;
+      values.push(barcodeStr);
+
+      // если client_id передан — добавляем
+      if (clientIdNum) {
+        where += ` AND st.client_id = $${idx++}`;
+        values.push(clientIdNum);
+      }
+
+      const q = `
+        SELECT
+          -- локация и остаток
+          l.code              AS location,
+          st.qty              AS qty,
+
+          -- идентификаторы
+          st.sku_id,
+          st.location_id,
+          st.client_id,
+          st.barcode,
+
+          -- данные товара (по возможности)
+          i.item_name,
+          i.vendor_code,
+          i.wb_vendor_code,
+          i.unit,
+          i.volume_liters,
+          i.needs_packaging   AS need_packaging,
+
+          -- статусы
+          i.is_active         AS item_active,
+          sku.is_active       AS sku_active,
+          l.is_active         AS location_active
+
+        FROM wms.stock st
+        LEFT JOIN masterdata.sku sku
+          ON sku.id = st.sku_id
+        LEFT JOIN masterdata.items i
+          ON i.client_id = st.client_id
+         AND i.barcode   = st.barcode
+        LEFT JOIN masterdata.locations l
+          ON l.id = st.location_id
+        ${where}
+        ORDER BY st.client_id, l.code
+      `;
+
+      const r = await pool.query(q, values);
+
+      console.log(
+        '[stock/by-barcode] rows:',
+        r.rowCount,
+        'client_id=',
+        clientIdNum,
+        'barcode=',
+        barcodeStr
+      );
+
+      return res.json({
+        status: 'ok',
+        stock: r.rows,   // фронт уже ждёт поле stock
+      });
+    } catch (err) {
+      console.error('Stock by barcode error:', err);
+      return res.status(500).json({
+        error: 'Stock by barcode error',
+        detail: err.message,
+      });
+    }
+  }
+);
+
+
+// ---------------- STOCK OVERVIEW (WMS.STOCK + справочник) ----------------
+async function stockOverviewHandler(req, res) {
+  try {
+    const {
+      client_id,
+      barcode,
+      location_code,
+      hide_zero,
+      only_active_items,
+      only_active_mx,
+    } = req.query || {};
+
+    const conditions = [];
+    const values = [];
+    let idx = 1;
+
+    // По умолчанию скрываем нули
+    if (hide_zero === 'true' || hide_zero === undefined) {
+      conditions.push('st.qty <> 0');
+    }
+
+    if (client_id) {
+      conditions.push(`st.client_id = $${idx++}`);
+      values.push(Number(client_id));
+    }
+
+    if (barcode) {
+      conditions.push(`st.barcode = $${idx++}`);
+      values.push(String(barcode).trim());
+    }
+
+    if (location_code) {
+      conditions.push(`l.code = $${idx++}`);
+      values.push(String(location_code).trim());
+    }
+
+    if (only_active_items === 'true') {
+      conditions.push('i.is_active = true');
+    }
+
+    if (only_active_mx === 'true') {
+      conditions.push('l.is_active = true');
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const q = `
+      SELECT
+        st.client_id,
+        c.client_name,
+        st.barcode,
+        st.sku_id,
+        st.location_id,
+        l.code                AS location_code,
+        st.qty,
+
+        i.item_name,
+        i.unit,
+        i.volume_liters,
+        i.needs_packaging     AS need_packaging,
+
+        i.is_active           AS item_active,
+        l.is_active           AS location_active
+      FROM wms.stock st
+      LEFT JOIN masterdata.locations l
+        ON l.id = st.location_id
+      LEFT JOIN masterdata.clients c
+        ON c.id = st.client_id
+      LEFT JOIN masterdata.items i
+        ON i.client_id = st.client_id
+       AND i.barcode   = st.barcode
+      ${where}
+      ORDER BY st.client_id, l.code, st.barcode, st.location_id
+    `;
+
+    const r = await pool.query(q, values);
+
+    res.json({
+      status: 'ok',
+      stock: r.rows,
+    });
+  } catch (err) {
+    console.error('Stock overview error:', err);
+    res.status(500).json({
+      error: 'Stock overview error',
+      detail: err.message,
+    });
+  }
+}
+
+// Алиасы: оба пути работают, права — owner/admin
+app.get(
+  '/stock',
+  authRequired,
+  requireRole(['owner', 'admin']),
+  stockOverviewHandler
+);
+app.get(
+  '/stock/overview',
+  authRequired,
+  requireRole(['owner', 'admin']),
+  stockOverviewHandler
+);
+
+
+
+
+
+// ---------------- SKU: остатки по штрихкоду ----------------
+// GET /sku/stock?client_id=...&barcode=...
+app.get('/sku/stock', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const { client_id, barcode } = req.query || {};
+
+    const clientIdNum = Number(client_id);
+    const barcodeStr = String(barcode || '').trim();
+
+    if (!clientIdNum || !barcodeStr) {
+      return res.status(400).json({
+        error: 'client_id и barcode обязательны',
+      });
+    }
+
+    // Берём остатки из wms.stock + код ячейки
+    const q = `
+      SELECT
+        s.client_id,
+        s.barcode,
+        s.sku_id,
+        s.location_id,
+        l.code AS location_code,
+        s.qty
+      FROM wms.stock s
+      JOIN masterdata.locations l ON l.id = s.location_id
+      WHERE s.client_id = $1
+        AND s.barcode   = $2
+        AND s.qty <> 0
+      ORDER BY l.code, s.sku_id
+    `;
+
+    const r = await pool.query(q, [clientIdNum, barcodeStr]);
+
+    res.json({
+      status: 'ok',
+      stock: r.rows,
+    });
+  } catch (err) {
+    console.error('SKU stock error:', err);
+    res.status(500).json({
+      error: 'SKU stock error',
+      detail: err.message,
+    });
+  }
+});
+
+// ---------------- WB: ПРОСМОТР ЗАГРУЖЕННЫХ ТОВАРОВ (mp_wb_items) ----------------
+app.get(
+  '/mp/wb/items',
+  authRequired,
+  requireRole(['owner', 'admin']),
+  async (req, res) => {
+    try {
+      const { client_mp_account_id, limit, offset } = req.query || {};
+
+      const clientId = Number(client_mp_account_id || 0);
+      if (!clientId) {
+        return res.status(400).json({
+          error: 'client_mp_account_id_required',
+        });
+      }
+
+      const pageLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+      const pageOffset = Math.max(Number(offset) || 0, 0);
+
+      const sql = `
+        SELECT
+          id,
+          client_mp_account_id,
+          nm_id,
+          imt_id,
+          vendor_code,
+          brand,
+          title,
+          pics,
+          created_at,
+          updated_at,
+          COUNT(*) OVER() AS total
+        FROM mp_wb_items
+        WHERE client_mp_account_id = $1
+        ORDER BY nm_id
+        LIMIT $2 OFFSET $3
+      `;
+
+      const r = await pool.query(sql, [clientId, pageLimit, pageOffset]);
+      const rows = r.rows || [];
+      const total = rows.length > 0 ? Number(rows[0].total) : 0;
+
+      return res.json({
+        status: 'ok',
+        total,
+        limit: pageLimit,
+        offset: pageOffset,
+        items: rows.map((row) => ({
+          id: row.id,
+          client_mp_account_id: row.client_mp_account_id,
+          nm_id: row.nm_id,
+          imt_id: row.imt_id,
+          vendor_code: row.vendor_code,
+          brand: row.brand,
+          title: row.title,
+          pics: row.pics,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        })),
+      });
+    } catch (err) {
+      console.error('WB ITEMS LIST ERROR', err);
+      return res.status(500).json({
+        error: 'internal_error',
+        detail: err.message || String(err),
+      });
+    }
+  }
+);
+ 	
+
+// ---------------- WB: ТЕСТОВАЯ ЗАГРУЗКА ЗАКАЗОВ (PROD) ----------------
+app.post(
+  '/mp/wb/test-fetch-orders',
+  authRequired,
+  requireRole('owner', 'admin'),
+  async (req, res) => {
+    try {
+      console.log('*** /mp/wb/test-fetch-orders PROD ***', new Date().toISOString());
+
+      const {
+        client_mp_account_id,
+        date_from,
+        date_to,
+        limit
+      } = req.body || {};
+
+      const clientId = Number(client_mp_account_id);
+      if (!clientId) {
+        return res.status(400).json({ error: 'client_mp_account_id is required' });
+      }
+
+      const wbToken = process.env.WB_API_TOKEN;
+      if (!wbToken) {
+        return res.status(500).json({ error: 'WB_API_TOKEN is not set in .env' });
+      }
+
+      // Забираем сырые данные у WB
+      const raw = await fetchOrders(wbToken, {
+        dateFrom: date_from,
+        dateTo:   date_to,
+        limit:    limit || 100,
+      });
+
+      let orders = [];
+
+      // 1) WB вернул сразу массив — используем его
+      if (Array.isArray(raw)) {
+        orders = raw;
+      }
+      // 2) WB вернул объект вида { orders: [...] } — это наш кейс
+      else if (raw && Array.isArray(raw.orders)) {
+        orders = raw.orders;
+      }
+      // 3) Любая другая форма — логируем и шлём понятную ошибку
+      else {
+        console.error('[WB FETCH] unexpected payload shape:', raw);
+        return res.status(500).json({
+          error: 'unexpected_wb_payload',
+          rawType: typeof raw,
+          hasOrdersField: !!raw && Object.prototype.hasOwnProperty.call(raw, 'orders'),
+        });
+      }
+
+      console.log(`[WB FETCH] normalized orders length = ${orders.length}`);
+
+      const insertSql = `
+        INSERT INTO mp_wb_orders (
+          client_mp_account_id,
+          wb_order_id,
+          nm_id,
+          chrt_id,
+          article,
+          barcode,
+          warehouse_id,
+          warehouse_name,
+          region_name,
+          price,
+          converted_price,
+          currency_code,
+          status,
+          created_at,
+          raw
+        )
+        VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
+        )
+        ON CONFLICT (client_mp_account_id, wb_order_id) DO UPDATE SET
+          nm_id           = EXCLUDED.nm_id,
+          chrt_id         = EXCLUDED.chrt_id,
+          article         = EXCLUDED.article,
+          barcode         = EXCLUDED.barcode,
+          warehouse_id    = EXCLUDED.warehouse_id,
+          warehouse_name  = EXCLUDED.warehouse_name,
+          region_name     = EXCLUDED.region_name,
+          price           = EXCLUDED.price,
+          converted_price = EXCLUDED.converted_price,
+          currency_code   = EXCLUDED.currency_code,
+          status          = EXCLUDED.status,
+          created_at      = EXCLUDED.created_at,
+          raw             = EXCLUDED.raw
+      `;
+
+      let stored = 0;
+
+      for (const o of orders) {
+        let wbOrderId = null;
+
+// WB v3 отдаёт numeric id — его и используем как ключ
+if (typeof o.id === 'number') {
+  wbOrderId = o.id;
+} else if (typeof o.odid === 'number') {
+  wbOrderId = o.odid;
+} else if (typeof o.orderId === 'number') {
+  wbOrderId = o.orderId;
+}
+
+// orderUid (строка) не трогаем — он уже лежит внутри raw JSON
+
+        const nmId           = o.nmId ?? null;
+        const chrtId         = o.chrtId ?? null;
+        const article        = o.article ?? null;
+        const barcode        = Array.isArray(o.skus) ? o.skus[0] : (o.barcode ?? null);
+        const warehouseId    = o.warehouseId ?? null;
+        const warehouseName  = o.offices ? o.offices.join(', ') : (o.warehouseName ?? null);
+        const regionName     = o.regionName ?? null;
+        const price          = o.price ?? null;
+        const convertedPrice = o.convertedPrice ?? null;
+        const currencyCode   = o.currencyCode ?? null;
+        const status         = o.deliveryType ?? o.status ?? null;
+        const createdAt      = o.createdAt ?? null;
+
+        await pool.query(insertSql, [
+          clientId,
+          wbOrderId,
+          nmId,
+          chrtId,
+          article,
+          barcode,
+          warehouseId,
+          warehouseName,
+          regionName,
+          price,
+          convertedPrice,
+          currencyCode,
+          status,
+          createdAt,
+          JSON.stringify(o),
+        ]);
+
+        stored += 1;
+      }
+
+      return res.json({
+        status: 'ok',
+        fetched: orders.length,
+        stored,
+        client_mp_account_id: clientId,
+      });
+    } catch (err) {
+      console.error('Ошибка тестового запроса WB (PROD):', err);
+      return res
+        .status(500)
+        .json({ error: 'Ошибка тестового запроса WB', details: err.message });
+    }
+  }
+);
+
+// ---------------- WB: GET ITEMS FROM DB ----------------
+app.get(
+  '/mp/wb/items',
+  authRequired,
+  requireRole(['owner', 'admin']),
+  async (req, res) => {
+    try {
+      const clientMpAccountId = Number(req.query.client_mp_account_id);
+      const limit = Number(req.query.limit) || 50;
+      const offset = Number(req.query.offset) || 0;
+
+      if (!clientMpAccountId) {
+        return res.status(400).json({ error: 'client_mp_account_id_required' });
+      }
+
+      console.log(
+        '[WB_ITEMS LIST] client_mp_account_id =',
+        clientMpAccountId,
+        'limit =',
+        limit,
+        'offset =',
+        offset
+      );
+
+      // 1. Узнаём общее количество
+      const countSql = `
+        SELECT COUNT(*) AS cnt
+        FROM mp_wb_items
+        WHERE client_mp_account_id = $1
+      `;
+      const countResult = await pool.query(countSql, [clientMpAccountId]);
+      const total = Number(countResult.rows[0]?.cnt || 0);
+
+      // 2. Вытаскиваем страницу данных
+      const rowsSql = `
+        SELECT
+          id,
+          client_mp_account_id,
+          nm_id,
+          imt_id,
+          vendor_code,
+          brand,
+          title,
+          chrt_id,
+          barcode,
+          pics_json,
+          created_at,
+          updated_at
+        FROM mp_wb_items
+        WHERE client_mp_account_id = $1
+        ORDER BY id
+        LIMIT $2 OFFSET $3
+      `;
+      const rowsResult = await pool.query(rowsSql, [
+        clientMpAccountId,
+        limit,
+        offset,
+      ]);
+
+      // 3. Приводим pics_json к массиву
+      const items = rowsResult.rows.map((row) => {
+        let pics = [];
+        if (row.pics_json) {
+          try {
+            pics = JSON.parse(row.pics_json);
+          } catch (e) {
+            console.error(
+              '[WB_ITEMS LIST] JSON parse error for pics_json, id =',
+              row.id,
+              e.message
+            );
+          }
+        }
+
+        return {
+          id: String(row.id),
+          client_mp_account_id: row.client_mp_account_id,
+          nm_id: String(row.nm_id),
+          imt_id: row.imt_id ? String(row.imt_id) : null,
+          vendor_code: row.vendor_code || null,
+          brand: row.brand || null,
+          title: row.title || null,
+          chrt_id: row.chrt_id ? Number(row.chrt_id) : null,
+          barcode: row.barcode || null,
+          pics,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        };
+      });
+
+      return res.json({
+        status: 'ok',
+        total,
+        limit,
+        offset,
+        items,
+      });
+    } catch (err) {
+      console.error('/mp/wb/items error:', err);
+      return res.status(500).json({
+        error: 'internal_error',
+        details: err.message || String(err),
+      });
+    }
+  }
+);
+
+
+
+
+// ---------------- WB: ITEMS WITH STOCK (товары + остатки по баркоду) ----------------
+app.get(
+  '/mp/wb/items-with-stock',
+  authRequired,
+  requireRole(['owner', 'admin']),
+  async (req, res) => {
+    const clientMpAccountId = Number(req.query.client_mp_account_id || '0');
+    const limit  = Number(req.query.limit  || '50');
+    const offset = Number(req.query.offset || '0');
+
+    if (!clientMpAccountId) {
+      return res.status(400).json({ error: 'client_mp_account_id_required' });
+    }
+
+    try {
+      console.log('INCOMING: GET /mp/wb/items-with-stock', req.query);
+
+      // 1. total — сколько вообще карточек у этого кабинета
+      const totalResult = await pool.query(
+        'SELECT COUNT(*)::int AS total FROM mp_wb_items WHERE client_mp_account_id = $1',
+        [clientMpAccountId]
+      );
+      const total = totalResult.rows[0]?.total || 0;
+
+      // 2. основные данные по товарам + баркоды + остатки
+      const sql = `
+        WITH items AS (
+          SELECT
+            i.id,
+            i.client_mp_account_id,
+            i.nm_id,
+            i.imt_id,
+            i.vendor_code,
+            i.brand,
+            i.title
+          FROM mp_wb_items i
+          WHERE i.client_mp_account_id = $1
+          ORDER BY i.nm_id
+          LIMIT $2 OFFSET $3
+        ),
+        barcodes AS (
+          SELECT
+            b.client_mp_account_id,
+            b.nm_id,
+            MIN(b.chrt_id)::text   AS chrt_id,
+            MIN(b.barcode)::text   AS barcode
+          FROM mp_wb_items_barcodes b
+          WHERE b.client_mp_account_id = $1
+          GROUP BY b.client_mp_account_id, b.nm_id
+        ),
+        stock_agg AS (
+          SELECT
+            s.client_id,
+            sku.barcode,
+            SUM(s.qty) AS qty,
+            string_agg(DISTINCT loc.code, ', ' ORDER BY loc.code) AS locations
+          FROM wms.stock s
+          JOIN wms.sku sku
+            ON sku.id = s.sku_id
+          JOIN wms.locations loc
+            ON loc.id = s.location_id
+          GROUP BY s.client_id, sku.barcode
+        )
+        SELECT
+          it.id,
+          it.client_mp_account_id,
+          it.nm_id,
+          it.imt_id,
+          COALESCE(bc.chrt_id, '')   AS chrt_id,
+          COALESCE(bc.barcode, '')   AS barcode,
+          it.vendor_code,
+          it.brand,
+          it.title,
+          COALESCE(sa.qty, 0)        AS qty,
+          COALESCE(sa.locations, '') AS locations
+        FROM items it
+        LEFT JOIN barcodes bc
+          ON bc.client_mp_account_id = it.client_mp_account_id
+         AND bc.nm_id = it.nm_id
+        LEFT JOIN mp_client_accounts mca
+          ON mca.id = it.client_mp_account_id
+        LEFT JOIN stock_agg sa
+          ON sa.client_id = mca.client_id
+         AND sa.barcode = bc.barcode
+        ORDER BY it.nm_id;
+      `;
+
+      const { rows } = await pool.query(sql, [
+        clientMpAccountId,
+        limit,
+        offset
+      ]);
+
+      return res.json({
+        status: 'ok',
+        total,
+        limit,
+        offset,
+        items: rows
+      });
+    } catch (err) {
+      console.error('WB ITEMS WITH STOCK ERROR', err);
+      return res.status(500).json({
+        status: 'error',
+        message: 'internal_error',
+        details: err.message || String(err)
+      });
+    }
+  }
+);
+
+// ---------------- WB: IMPORT ITEMS (товары клиента) ----------------
+
+app.post(
+  '/mp/wb/import-items',
+  authRequired,
+  requireRole(['owner', 'admin']),
+  async (req, res) => {
+    // 0. Берём ID MP-аккаунта из query/body
+    const accountId = Number(req.query.account_id || req.body.account_id);
+
+    if (!accountId) {
+      return res.status(400).json({ error: 'account_id_required' });
+    }
+
+    try {
+      console.log('*** WB IMPORT ITEMS ***', new Date().toISOString());
+      console.log('[WB IMPORT] account_id =', accountId);
+
+      // 1. Достаём токен конкретного MP-аккаунта из mp_accounts
+      const { rows: accRows } = await pool.query(
+        `
+          SELECT id, api_token
+          FROM mp_accounts
+          WHERE id = $1
+        `,
+        [accountId]
+      );
+
+      if (!accRows.length) {
+        console.error('[WB_IMPORT] mp_account not found, id =', accountId);
+        return res.status(404).json({ error: 'mp_account_not_found' });
+      }
+
+      const wbToken = accRows[0].api_token;
+      if (!wbToken) {
+        console.error('[WB_IMPORT] api_token is NULL for mp_account id =', accountId);
+        return res.status(400).json({ error: 'api_token_missing' });
+      }
+
+      // 2. Лимит карточек на одну "страницу" (дальше пагинация внутри fetchWbItems)
+      const rawLimit = Number(req.query.limit || req.body.limit) || 100;
+      console.log('[WB_IMPORT] incoming limit =', rawLimit);
+
+      // 3. Тянем карточки с пагинацией (fetchWbItems уже сам крутит cursor/offset)
+      const cards = await fetchWbItems(wbToken, {
+        limit: rawLimit,
+        maxPages: 50,
+      });
+
+      console.log('[WB IMPORT] fetched total cards:', cards.length);
+
+      // client_mp_account_id в таблицах = ID mp_accounts
+      const clientId = accountId;
+
+      // ---------- 4. Подготовка данных для mp_wb_items ----------
+      const itemValues = [];
+      const itemParams = [];
+      let idx = 1;
+
+      // ---------- 5. Подготовка данных для mp_wb_items_barcodes ----------
+      const bcValues = [];
+      const bcParams = [];
+      let bcIdx = 1;
+      let skippedNoBarcode = 0;
+
+      for (const c of cards) {
+        // mp_wb_items
+        itemValues.push(
+          `($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`
+        );
+        itemParams.push(
+          clientId,              // client_mp_account_id
+          c.nmID,                // nm_id
+          c.imtID || null,       // imt_id
+          c.vendorCode || null,  // vendor_code
+          c.brand || null,       // brand
+          c.title || null        // title
+        );
+
+        // barcodes
+        const barcodes = extractCardBarcodes(c);
+        if (!barcodes.length) {
+          skippedNoBarcode += 1;
+          continue;
+        }
+
+        for (const b of barcodes) {
+          bcValues.push(
+            `($${bcIdx++}, $${bcIdx++}, $${bcIdx++}, $${bcIdx++})`
+          );
+          bcParams.push(
+            clientId,     // client_mp_account_id
+            b.nm_id,      // nm_id
+            b.chrt_id,    // chrt_id
+            b.barcode     // barcode
+          );
+        }
+      }
+
+      let savedItems = 0;
+      let savedBarcodes = 0;
+
+      // 6. Сохраняем mp_wb_items
+      if (itemValues.length > 0) {
+        const sqlItems = `
+          INSERT INTO mp_wb_items
+            (client_mp_account_id, nm_id, imt_id, vendor_code, brand, title)
+          VALUES
+            ${itemValues.join(',')}
+          ON CONFLICT (client_mp_account_id, nm_id)
+          DO UPDATE SET
+            imt_id      = EXCLUDED.imt_id,
+            vendor_code = EXCLUDED.vendor_code,
+            brand       = EXCLUDED.brand,
+            title       = EXCLUDED.title,
+            updated_at  = NOW()
+        `;
+        const r1 = await pool.query(sqlItems, itemParams);
+        savedItems = r1.rowCount || 0;
+        console.log('[WB IMPORT] saved items rows:', savedItems);
+      } else {
+        console.log('[WB IMPORT] no items to save');
+      }
+
+      // 7. Сохраняем mp_wb_items_barcodes
+      if (bcValues.length > 0) {
+        const sqlBc = `
+          INSERT INTO mp_wb_items_barcodes
+            (client_mp_account_id, nm_id, chrt_id, barcode)
+          VALUES
+            ${bcValues.join(',')}
+          ON CONFLICT (client_mp_account_id, nm_id, chrt_id, barcode)
+          DO NOTHING
+        `;
+        const r2 = await pool.query(sqlBc, bcParams);
+        savedBarcodes = r2.rowCount || 0;
+        console.log('[WB IMPORT] saved barcodes rows:', savedBarcodes);
+      } else {
+        console.log('[WB IMPORT] no barcodes to save');
+      }
+
+      console.log(
+        '[WB IMPORT] prepared items:', cards.length,
+        'saved items:', savedItems,
+        'saved barcodes:', savedBarcodes,
+        'skipped (no barcode):', skippedNoBarcode
+      );
+
+      return res.json({
+        status: 'ok',
+        fetched_cards: cards.length,
+        saved_items: savedItems,
+        saved_barcodes: savedBarcodes,
+        skipped_no_barcode: skippedNoBarcode,
+      });
+    } catch (err) {
+      console.error('WB IMPORT ITEMS ERROR', err);
+      return res.status(500).json({
+        error: 'internal_error',
+        details: err.message || String(err),
+      });
+    }
+  }
+);
+
+
+
+
+// --------- ПРОСМОТР ЗАКАЗОВ WB ИЗ БД ---------
+console.log('[ROUTES] registering GET /mp/wb/orders');
+
+app.get(
+  '/mp/wb/orders',
+  authRequired,
+  requireRole('owner', 'admin'),
+  async (req, res) => {
+    try {
+      const {
+        client_mp_account_id,
+        date_from,
+        date_to,
+        status,
+        limit
+      } = req.query || {};
+
+      const params = [];
+      const whereParts = [];
+
+      if (client_mp_account_id) {
+        params.push(Number(client_mp_account_id));
+        whereParts.push(`o.client_mp_account_id = $${params.length}`);
+      }
+
+      if (date_from) {
+        params.push(date_from);
+        whereParts.push(`o.created_at >= $${params.length}`);
+      }
+
+      if (date_to) {
+        params.push(date_to);
+        whereParts.push(`o.created_at < ($${params.length}::date + INTERVAL '1 day')`);
+      }
+
+      if (status && status.trim() !== '') {
+        params.push(status.trim());
+        whereParts.push(`o.status ILIKE $${params.length}`);
+      }
+
+      const whereSql = whereParts.length
+        ? 'WHERE ' + whereParts.join(' AND ')
+        : '';
+
+      const lim = Math.min(Number(limit) || 100, 500);
+
+      const sql = `
+        SELECT
+          o.id,
+          o.client_mp_account_id,
+          o.wb_order_id,
+          o.nm_id,
+          o.chrt_id,
+          o.article,
+          o.barcode,
+          o.warehouse_name,
+          o.region_name,
+          o.price,
+          o.converted_price,
+          o.currency_code,
+          o.status,
+          o.created_at
+        FROM mp_wb_orders o
+        ${whereSql}
+        ORDER BY o.created_at DESC
+        LIMIT ${lim}
+      `;
+
+      const result = await pool.query(sql, params);
+
+      return res.json({
+        status: 'ok',
+        rows: result.rows,
+        count: result.rowCount,
+      });
+    } catch (err) {
+      console.error('GET /mp/wb/orders error:', err);
+      return res.status(500).json({
+        error: 'mp_wb_orders_error',
+        detail: err.message,
+      });
+    }
+  }
+);
+
+
+// ---------------- MP CLIENT ACCOUNTS (связка клиентов склада и MP-кабинетов) ----------------
+
+app.get(
+  '/mp/client-accounts',
+  authRequired,
+  requireRole(['owner', 'admin']),
+  async (req, res) => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT 
+          mca.id,
+          mca.client_id,
+          c.name       AS client_name,
+          mca.marketplace,
+          mca.account_name,
+          mca.wb_supplier_id,
+          mca.is_active,
+          mca.created_at,
+          mca.updated_at
+        FROM mp_client_accounts mca
+        LEFT JOIN clients c ON c.id = mca.client_id
+        ORDER BY mca.id
+      `);
+
+      res.json({ status: 'ok', items: rows });
+    } catch (err) {
+      console.error('GET /mp/client-accounts error', err);
+      res.status(500).json({ status: 'error', message: 'internal_error', details: err.message });
+    }
+  }
+);
+
+app.post(
+  '/mp/client-accounts',
+  authRequired,
+  requireRole(['owner', 'admin']),
+  async (req, res) => {
+    try {
+      const {
+        id,              // необязателен: если есть -> обновляем, если нет -> создаём
+        client_id,
+        marketplace,
+        account_name,
+        wb_supplier_id,
+        is_active
+      } = req.body || {};
+
+      if (!client_id || !marketplace) {
+        return res.status(400).json({ status: 'error', message: 'client_id_and_marketplace_required' });
+      }
+
+      const active = (is_active === undefined || is_active === null) ? true : !!is_active;
+
+      if (id) {
+        // UPDATE
+        const { rows } = await pool.query(`
+          UPDATE mp_client_accounts
+          SET
+            client_id      = $1,
+            marketplace    = $2,
+            account_name   = $3,
+            wb_supplier_id = $4,
+            is_active      = $5,
+            updated_at     = NOW()
+          WHERE id = $6
+          RETURNING *
+        `, [
+          client_id,
+          marketplace,
+          account_name || null,
+          wb_supplier_id || null,
+          active,
+          id
+        ]);
+
+        return res.json({ status: 'ok', item: rows[0] });
+      } else {
+        // INSERT
+        const { rows } = await pool.query(`
+          INSERT INTO mp_client_accounts
+            (client_id, marketplace, account_name, wb_supplier_id, is_active)
+          VALUES ($1, $2, $3, $4, $5)
+          RETURNING *
+        `, [
+          client_id,
+          marketplace,
+          account_name || null,
+          wb_supplier_id || null,
+          active
+        ]);
+
+        return res.json({ status: 'ok', item: rows[0] });
+      }
+    } catch (err) {
+      console.error('POST /mp/client-accounts error', err);
+      res.status(500).json({ status: 'error', message: 'internal_error', details: err.message });
+    }
+  }
+);
+
+
+
+// ---------------- STOCK MOVE (Перемещение между ячейками) ----------------
+
+app.post('/stock/move', authRequired, requireRole('owner'), async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const {
+      client_id,
+      barcode,
+      from_location_code,
+      to_location_code,
+      qty,
+      movement_type,
+      comment,
+      ref_type,
+      ref_id,
+      sku_id,
+    } = req.body || {};
+
+    // 1) обязательные поля
+    if (!client_id || !barcode || !from_location_code || !to_location_code || qty === undefined || !movement_type) {
+      return res.status(400).json({
+        error: 'Не хватает обязательных полей',
+        missing_fields: [
+          !client_id ? 'client_id' : null,
+          !barcode ? 'barcode' : null,
+          !from_location_code ? 'from_location_code' : null,
+          !to_location_code ? 'to_location_code' : null,
+          qty === undefined ? 'qty' : null,
+          !movement_type ? 'movement_type' : null,
+        ].filter(Boolean),
+      });
+    }
+
+    const clientIdNum = Number(client_id);
+    if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+      return res.status(400).json({ error: 'client_id должен быть положительным целым числом' });
+    }
+
+    const qtyNum = Number(qty);
+    if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
+      return res.status(400).json({ error: 'qty должен быть положительным целым числом' });
+    }
+
+    const barcodeStr = String(barcode).trim();
+    const fromCode = String(from_location_code).trim();
+    const toCode = String(to_location_code).trim();
+
+    // Нормализуем и валидируем тип движения
+    let movementTypeNorm;
+    try {
+      movementTypeNorm = validateMovementType(movement_type);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+
+    // Для этого эндпоинта по смыслу должен быть move
+    if (movementTypeNorm !== 'move') {
+      return res.status(400).json({
+        error: 'Для /stock/move movement_type должен быть "move"',
+        received: movement_type,
+        normalized: movementTypeNorm,
+      });
+    }
+
+    const refTypeNorm = normalizeRefType(ref_type);
+    const refIdNorm = normalizeRefId(ref_id);
+
+    await client.query('BEGIN');
+
+    // 2) sku_id
+    let skuIdFinal;
+    if (sku_id !== undefined && sku_id !== null) {
+      skuIdFinal = Number(sku_id);
+      if (!Number.isInteger(skuIdFinal) || skuIdFinal <= 0) {
+        throw new Error('sku_id должен быть положительным целым числом');
+      }
+    } else {
+      // Привязка barcode -> sku_id через наш helper
+      skuIdFinal = await resolveSkuIdOrCreate(client, { client_id: clientIdNum, barcode: barcodeStr });
+    }
+
+    // 3) Получаем/создаём location_id для FROM/TO
+    const getOrCreateLocationId = async (code) => {
+      const r1 = await client.query(
+        `SELECT id FROM masterdata.locations WHERE code = $1 LIMIT 1`,
+        [code]
+      );
+      if (r1.rowCount > 0) return r1.rows[0].id;
+
+      const r2 = await client.query(
+        `
+        INSERT INTO masterdata.locations (code, is_active, created_at)
+        VALUES ($1, true, NOW())
+        RETURNING id
+        `,
+        [code]
+      );
+      return r2.rows[0].id;
+    };
+
+    const fromLocationId = await getOrCreateLocationId(fromCode);
+    const toLocationId = await getOrCreateLocationId(toCode);
+
+    // 4) Блокировка инвентаризацией по FROM/TO (по client_id + barcode + location_code)
+    const invBlock = await client.query(
+      `
+      SELECT id, location_code, status
+      FROM wms.inventory_tasks
+      WHERE client_id     = $1
+        AND barcode       = $2
+        AND location_code = ANY($3::text[])
+        AND status IN ('open','in_progress')
+      LIMIT 1
+      `,
+      [clientIdNum, barcodeStr, [fromCode, toCode]]
+    );
+
+    if (invBlock.rowCount > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Нельзя выполнить перемещение: ячейка заблокирована открытой инвентаризацией',
+        inventory_task: invBlock.rows[0],
+      });
+    }
+
+    // 5) Читаем FROM из wms.stock по (sku_id + location_id)
+    const fromStock = await client.query(
+      `
+      SELECT qty
+      FROM wms.stock
+      WHERE sku_id      = $1
+        AND location_id = $2
+      FOR UPDATE
+      `,
+      [skuIdFinal, fromLocationId]
+    );
+
+    if (fromStock.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'Нет записи в stock для исходной ячейки (FROM) по этому sku',
+        sku_id: skuIdFinal,
+        from_location_code: fromCode,
+      });
+    }
+
+    const fromCur = Number(fromStock.rows[0].qty) || 0;
+    if (fromCur < qtyNum) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'Недостаточно остатка в исходной ячейке',
+        current_qty: fromCur,
+        required_qty: qtyNum,
+      });
+    }
+
+    const fromNew = fromCur - qtyNum;
+
+    // Обновляем FROM
+    await client.query(
+      `
+      UPDATE wms.stock
+         SET qty = $1
+       WHERE sku_id      = $2
+         AND location_id = $3
+      `,
+      [fromNew, skuIdFinal, fromLocationId]
+    );
+
+    // 6) TO: читаем / создаём
+    const toStock = await client.query(
+      `
+      SELECT qty
+      FROM wms.stock
+      WHERE sku_id      = $1
+        AND location_id = $2
+      FOR UPDATE
+      `,
+      [skuIdFinal, toLocationId]
+    );
+
+    let toNew;
+    if (toStock.rowCount === 0) {
+      toNew = qtyNum;
+      await client.query(
+        `
+        INSERT INTO wms.stock (sku_id, location_id, qty, created_at)
+        VALUES ($1, $2, $3, NOW())
+        `,
+        [skuIdFinal, toLocationId, toNew]
+      );
+    } else {
+      const toCur = Number(toStock.rows[0].qty) || 0;
+      toNew = toCur + qtyNum;
+      await client.query(
+        `
+        UPDATE wms.stock
+           SET qty = $1
+         WHERE sku_id      = $2
+           AND location_id = $3
+        `,
+        [toNew, skuIdFinal, toLocationId]
+      );
+    }
+
+    // 7) Логируем движение в movements
+    await client.query(
+      `
+      INSERT INTO wms.movements (
+        created_at,
+        user_id,
+        client_id,
+        sku_id,
+        barcode,
+        qty,
+        from_location,
+        to_location,
+        movement_type,
+        ref_type,
+        ref_id,
+        comment
+      )
+      VALUES (
+        NOW(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11
+      )
+      `,
+      [
+        req.user.id,       // $1
+        clientIdNum,       // $2
+        skuIdFinal,        // $3
+        barcodeStr,        // $4
+        qtyNum,            // $5
+        fromCode,          // $6
+        toCode,            // $7
+        movementTypeNorm,  // $8 (move)
+        refTypeNorm,       // $9
+        refIdNorm,         // $10
+        comment || null,   // $11
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      status: 'ok',
+      sku_id: skuIdFinal,
+      from_location_code: fromCode,
+      to_location_code: toCode,
+      qty_moved: qtyNum,
+      from_new_qty: fromNew,
+      to_new_qty: toNew,
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('Error in /stock/move:', err);
+    return res.status(500).json({
+      error: 'Internal server error in /stock/move',
+      detail: err.message,
+    });
+  } finally {
+    client.release();
+  }
+});
+
+
+// ---------------- STOCK ADJUSTMENT + MOVEMENT LOG ----------------
+
+app.post('/stock/adjust', authRequired, requireRole('owner'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const {
+      sku_id,
+      client_id,
+      barcode,
+      location_code,
+      qty,        // может быть не передан
+      qty_diff,   // delta
+      qty_new,    // целевое (пока не поддерживаем)
+      movement_type,
+      comment,
+      ref_type,
+      ref_id,
+    } = req.body || {};
+
+    // 1) Для /stock/adjust принимаем только movement_type === 'adjust'
+    if (String(movement_type || '').trim().toLowerCase() !== 'adjust') {
+      return res.status(400).json({
+        error: 'movement_type для /stock/adjust должен быть "adjust"',
+        received: movement_type,
+      });
+    }
+
+    // 2) Нормализуем количество (qty / qty_diff / qty_new)
+    let effectiveQty = qty;
+    if (effectiveQty === undefined || effectiveQty === null) {
+      if (qty_diff !== undefined && qty_diff !== null) {
+        effectiveQty = qty_diff;
+      } else if (qty_new !== undefined && qty_new !== null) {
+        return res.status(400).json({
+          error: 'qty_new пока не поддерживается. Используй qty или qty_diff.',
+        });
+      }
+    }
+
+    // 3) обязательные поля
+    if (!client_id || !barcode || !location_code || effectiveQty === undefined) {
+      return res.status(400).json({
+        error: 'Не хватает обязательных полей',
+        missing_fields: [
+          !client_id ? 'client_id' : null,
+          !barcode ? 'barcode' : null,
+          !location_code ? 'location_code' : null,
+          effectiveQty === undefined ? 'qty/qty_diff' : null,
+        ].filter(Boolean),
+        received_body: req.body,
+      });
+    }
+
+    const clientIdNum = Number(client_id);
+    if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+      return res.status(400).json({ error: 'client_id должен быть положительным целым числом' });
+    }
+
+    const barcodeStr = String(barcode).trim();
+    const locCode = String(location_code).trim();
+
+    const refTypeNorm = normalizeRefType(ref_type);
+    const refIdNorm = normalizeRefId(ref_id);
+
+    const qtyDelta = Number(effectiveQty);
+    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) {
+      return res.status(400).json({ error: 'qty (или qty_diff) должен быть ненулевым целым числом' });
+    }
+
+    const qtyForLog = Math.abs(qtyDelta);
+
+    await client.query('BEGIN');
+
+    // 4) Определяем sku_id (через client_id + barcode)
+    let skuIdFinal;
+    if (sku_id !== undefined && sku_id !== null) {
+      skuIdFinal = Number(sku_id);
+      if (!Number.isInteger(skuIdFinal) || skuIdFinal <= 0) {
+        throw new Error('sku_id должен быть положительным целым числом');
+      }
+    } else {
+      skuIdFinal = await resolveSkuIdOrCreate(client, {
+        client_id: clientIdNum,
+        barcode: barcodeStr,
+      });
+    }
+
+    // 5) Блокировка по инвентаризации (по client_id + barcode + location_code)
+    const invBlock = await client.query(
+      `
+      SELECT id, status
+      FROM wms.inventory_tasks
+      WHERE client_id     = $1
+        AND barcode       = $2
+        AND location_code = $3
+        AND status IN ('open','in_progress')
+      LIMIT 1
+      `,
+      [clientIdNum, barcodeStr, locCode],
+    );
+
+    if (invBlock.rowCount > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Ячейка заблокирована заданием на инвентаризацию',
+        task_id: invBlock.rows[0].id,
+        task_status: invBlock.rows[0].status,
+      });
+    }
+
+    // 6) Находим/создаём location_id (masterdata.locations)
+    const locRes = await client.query(
+      `SELECT id FROM masterdata.locations WHERE code = $1 LIMIT 1`,
+      [locCode],
+    );
+
+    let locationId;
+    if (locRes.rowCount > 0) {
+      locationId = locRes.rows[0].id;
+    } else {
+      const insLoc = await client.query(
+        `
+        INSERT INTO masterdata.locations (code, is_active, created_at)
+        VALUES ($1, true, NOW())
+        RETURNING id
+        `,
+        [locCode],
+      );
+      locationId = insLoc.rows[0].id;
+    }
+
+    // 7) РАБОТАЕМ С wms.stock ТОЛЬКО ПО sku_id + location_id (без id, без updated_at)
+    const stockRes = await client.query(
+      `
+      SELECT qty
+      FROM wms.stock
+      WHERE sku_id      = $1
+        AND location_id = $2
+      FOR UPDATE
+      `,
+      [skuIdFinal, locationId],
+    );
+
+    let newQty;
+    if (stockRes.rowCount === 0) {
+      // записи нет — можем только увеличить остаток
+      if (qtyDelta < 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Нельзя списать: записи в stock по этой ячейке/sku нет',
+        });
+      }
+
+      newQty = qtyDelta;
+      await client.query(
+        `
+        INSERT INTO wms.stock (sku_id, location_id, qty, created_at)
+        VALUES ($1, $2, $3, NOW())
+        `,
+        [skuIdFinal, locationId, newQty],
+      );
+    } else {
+      const curQty = Number(stockRes.rows[0].qty) || 0;
+      newQty = curQty + qtyDelta;
+
+      if (newQty < 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Нельзя сделать остаток меньше 0',
+          current_qty: curQty,
+          qty_delta: qtyDelta,
+        });
+      }
+
+      await client.query(
+        `
+        UPDATE wms.stock
+           SET qty = $1
+         WHERE sku_id      = $2
+           AND location_id = $3
+        `,
+        [newQty, skuIdFinal, locationId],
+      );
+    }
+
+    // 8) Логируем движение (movements)
+    await client.query(
+      `
+      INSERT INTO wms.movements (
+        created_at,
+        user_id,
+        client_id,
+        sku_id,
+        barcode,
+        qty,
+        from_location,
+        to_location,
+        movement_type,
+        ref_type,
+        ref_id,
+        comment
+      )
+      VALUES (
+        NOW(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        NULL,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10
+      )
+      `,
+      [
+        req.user.id,          // $1
+        clientIdNum,          // $2
+        skuIdFinal,           // $3
+        barcodeStr,           // $4
+        qtyForLog,            // $5
+        locCode,              // $6 (to_location)
+        'adjust',             // $7 movement_type (жёстко)
+        refTypeNorm,          // $8
+        refIdNorm,            // $9
+        comment || null,      // $10
+      ],
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      status: 'ok',
+      client_id: clientIdNum,
+      barcode: barcodeStr,
+      location_code: locCode,
+      location_id: locationId,
+      sku_id: skuIdFinal,
+      qty_delta: qtyDelta,
+      new_qty: newQty,
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('Error in /stock/adjust:', err);
+    return res.status(500).json({
+      error: 'Internal server error in /stock/adjust',
+      detail: err.message,
+    });
+  } finally {
+    client.release();
+  }
+});
+
+https://chatgpt.com/c/697005cb-3d98-8332-a00e-8e6c90a5335d
+
+
+// ==============================
+//  RECEIVING ACCEPT (ПРИЁМКА)
+//  СТРОГИЙ РЕЖИМ: ТОЛЬКО ИЗ СПРАВОЧНИКА
+// ==============================
+//
+// POST /receiving/accept
+// body: { client_id, barcode, location_code, qty }
+//
+// Логика:
+//  1) Валидируем вход
+//  2) Находим товар в masterdata.items по (client_id, barcode) и проверяем is_active = true
+//  3) Находим ячейку в masterdata.locations по code и is_active = true
+//  4) Гарантируем наличие sku_id в wms.sku (создаём, если ещё нет) — НО товар уже существует
+//  5) Читаем wms.stock по (location_id, sku_id) FOR UPDATE
+//  6) qty_new = qty_old + qty
+//  7) INSERT/UPDATE wms.stock
+//  8) Пишем движение в wms.movements (movement_type = 'incoming')
+//  9) COMMIT, возвращаем stock_before/stock_after
+app.post('/receiving/accept', authRequired, requireRole('owner'), async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { client_id, barcode, location_code, qty } = req.body || {};
+
+    // 1. Валидация client_id
+    const clientIdNum = Number(client_id);
+    if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+      return res.status(400).json({
+        error: 'INVALID_CLIENT_ID',
+        message: 'client_id должен быть положительным целым числом',
+      });
+    }
+
+    // Валидация barcode
+    const barcodeStr = String(barcode || '').trim();
+    if (!barcodeStr) {
+      return res.status(400).json({
+        error: 'INVALID_BARCODE',
+        message: 'barcode обязателен и не может быть пустым',
+      });
+    }
+
+    // Валидация location_code
+    const locCode = String(location_code || '').trim();
+    if (!locCode) {
+      return res.status(400).json({
+        error: 'INVALID_LOCATION_CODE',
+        message: 'location_code обязателен и не может быть пустым',
+      });
+    }
+
+    // Валидация qty
+    const qtyNum = Number(qty);
+    if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
+      return res.status(400).json({
+        error: 'INVALID_QTY',
+        message: 'qty должен быть целым числом > 0',
+      });
+    }
+
+    await client.query('BEGIN');
+
+    // 2. Строгая проверка товара в СПРАВОЧНИКЕ masterdata.items
+    const itemRes = await client.query(
+      `
+      SELECT id, is_active, item_name
+      FROM masterdata.items
+      WHERE client_id = $1
+        AND barcode   = $2
+      LIMIT 1
+      `,
+      [clientIdNum, barcodeStr]
+    );
+
+    if (itemRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'ITEM_NOT_FOUND',
+        message: `Товар со штрихкодом ${barcodeStr} для клиента ${clientIdNum} не найден в справочнике.`,
+      });
+    }
+
+    const itemRow = itemRes.rows[0];
+    if (!itemRow.is_active) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'ITEM_INACTIVE',
+        message: `Товар со штрихкодом ${barcodeStr} выключен (is_active = false).`,
+      });
+    }
+
+    // 3. Строгая проверка МХ: ячейка должна существовать и быть активной
+    const locRes = await client.query(
+      `
+      SELECT id, is_active
+      FROM masterdata.locations
+      WHERE code = $1
+      LIMIT 1
+      `,
+      [locCode]
+    );
+
+    if (locRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'LOCATION_NOT_FOUND',
+        message: `Не найдена ячейка с кодом ${locCode}.`,
+      });
+    }
+
+    const locRow = locRes.rows[0];
+    if (!locRow.is_active) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'LOCATION_INACTIVE',
+        message: `Ячейка ${locCode} неактивна (is_active = false).`,
+      });
+    }
+
+    const locationId = locRow.id;
+
+    // 4. Гарантируем наличие SKU в wms.sku, НО ТОЛЬКО ПОСЛЕ ТОГО,
+    //    как убедились, что товар существует в masterdata.items.
+    const skuRes = await client.query(
+      `
+      SELECT id
+      FROM wms.sku
+      WHERE client_id = $1
+        AND barcode   = $2
+      LIMIT 1
+      `,
+      [clientIdNum, barcodeStr]
+    );
+
+    let skuId;
+    if (skuRes.rowCount > 0) {
+      skuId = skuRes.rows[0].id;
+    } else {
+      const insSku = await client.query(
+        `
+        INSERT INTO wms.sku (client_id, barcode, is_active)
+        VALUES ($1, $2, true)
+        RETURNING id
+        `,
+        [clientIdNum, barcodeStr]
+      );
+      skuId = insSku.rows[0].id;
+    }
+
+    // 5. Читаем текущий остаток по (location_id, sku_id) FOR UPDATE
+    const stockRes = await client.query(
+      `
+      SELECT qty
+      FROM wms.stock
+      WHERE location_id = $1
+        AND sku_id      = $2
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [locationId, skuId]
+    );
+
+    let currentQty = 0;
+    if (stockRes.rowCount > 0) {
+      currentQty = Number(stockRes.rows[0].qty) || 0;
+    }
+
+    const newQty   = currentQty + qtyNum;
+    const qtyDelta = qtyNum; // приёмка — всегда плюс
+
+    // 6. INSERT / UPDATE wms.stock
+    if (stockRes.rowCount === 0) {
+      await client.query(
+        `
+        INSERT INTO wms.stock (location_id, sku_id, qty, client_id, barcode, created_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        `,
+        [locationId, skuId, newQty, clientIdNum, barcodeStr]
+      );
+    } else {
+      await client.query(
+        `
+        UPDATE wms.stock
+           SET qty = $1
+         WHERE location_id = $2
+           AND sku_id      = $3
+        `,
+        [newQty, locationId, skuId]
+      );
+    }
+
+    // 7. Логируем движение
+    await client.query(
+      `
+      INSERT INTO wms.movements
+        (created_at, user_id, client_id, sku_id, barcode, qty,
+         from_location, to_location, movement_type, ref_type, ref_id, comment)
+      VALUES
+        (NOW(), $1, $2, $3, $4, $5,
+         $6, $7, $8, $9, $10, $11)
+      `,
+      [
+        req.user.id,
+        clientIdNum,
+        skuId,
+        barcodeStr,
+        qtyDelta,
+        null,          // from_location — приход "с улицы"
+        locCode,       // to_location
+        'incoming',    // movement_type
+        'receiving',   // ref_type
+        null,          // ref_id (ID поставки добавим позже)
+        null,          // comment
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      status: 'ok',
+      filters: {
+        client_id: clientIdNum,
+        barcode: barcodeStr,
+        location_code: locCode,
+      },
+      stock_before: {
+        client_id: clientIdNum,
+        barcode: barcodeStr,
+        location_code: locCode,
+        qty: currentQty,
+      },
+      stock_after: {
+        client_id: clientIdNum,
+        barcode: barcodeStr,
+        location_code: locCode,
+        qty: newQty,
+      },
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('Receiving accept error (strict):', err);
+    return res.status(500).json({
+      error: 'Receiving accept error',
+      detail: err.message,
+      code: err.code,
+    });
+  } finally {
+    client.release();
+  }
+});
+
+
+
+
+// ---------------- INVENTORY TASKS (WMS.INVENTORY_TASKS) ----------------
+// POST /inventory-tasks
+
+
+// ---------------- INVENTORY TASKS (WMS.INVENTORY_TASKS) ----------------
+
+// POST /inventory-tasks
+// Создать задание на инвентаризацию МХ
+// Body: client_id, barcode, location_code, (optional: sku_id, priority, reason, comment)
+app.post('/inventory-tasks', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const {
+      client_id,
+      barcode,
+      sku_id,
+      location_code,
+      priority,
+      reason,
+      comment,
+    } = req.body || {};
+
+    if (!client_id || !barcode || !location_code) {
+      return res.status(400).json({ error: 'Обязательные поля: client_id, barcode, location_code' });
+    }
+
+    const clientIdNum = Number(client_id);
+    if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+      return res.status(400).json({ error: 'client_id должен быть положительным числом' });
+    }
+
+    const barcodeStr = String(barcode).trim();
+    if (!barcodeStr) {
+      return res.status(400).json({ error: 'barcode не может быть пустым' });
+    }
+
+    const locCode = String(location_code).trim();
+    if (!locCode) {
+      return res.status(400).json({ error: 'location_code не может быть пустым' });
+    }
+
+    // priority: 1..5
+    let pr = 3;
+    if (priority !== undefined && priority !== null && priority !== '') {
+      pr = Number(priority);
+      if (!Number.isInteger(pr) || pr < 1 || pr > 5) {
+        return res.status(400).json({ error: 'priority должен быть целым числом 1..5' });
+      }
+    }
+
+    // sku_id optional
+    let skuIdNum = null;
+    if (sku_id !== undefined && sku_id !== null && sku_id !== '') {
+      skuIdNum = Number(sku_id);
+      if (!Number.isInteger(skuIdNum) || skuIdNum <= 0) {
+        return res.status(400).json({ error: 'sku_id должен быть положительным целым числом' });
+      }
+    }
+
+    // 1) Проверяем, нет ли уже открытой/в работе задачи по этой связке
+    const existing = await pool.query(
+      `
+      SELECT
+        id, client_id, barcode, sku_id, location_code,
+        status, priority, reason, comment,
+        created_at, created_by, updated_at, updated_by, closed_at, closed_by
+      FROM wms.inventory_tasks
+      WHERE client_id     = $1
+        AND barcode       = $2
+        AND location_code = $3
+        AND status IN ('open', 'in_progress')
+      LIMIT 1
+      `,
+      [clientIdNum, barcodeStr, locCode]
+    );
+
+    if (existing.rowCount > 0) {
+      // Уже есть активная задача — новую не создаём
+      return res.json({
+        status: 'already_exists',
+        task: existing.rows[0],
+      });
+    }
+
+    // 2) Активной задачи нет — создаём новую
+    const ins = await pool.query(
+      `
+      INSERT INTO wms.inventory_tasks
+        (client_id, barcode, sku_id, location_code, status, priority, reason, comment,
+         created_at, created_by, updated_at, updated_by)
+      VALUES
+        ($1, $2, $3, $4, 'open', $5, $6, $7,
+         NOW(), $8, NOW(), $8)
+      RETURNING
+        id, client_id, barcode, sku_id, location_code, status, priority, reason, comment,
+        created_at, created_by, updated_at, updated_by, closed_at, closed_by
+      `,
+      [
+        clientIdNum,
+        barcodeStr,
+        skuIdNum,
+        locCode,
+        pr,
+        reason || null,
+        comment || null,
+        req.user.id,
+      ]
+    );
+
+    return res.status(201).json({ status: 'ok', task: ins.rows[0] });
+  } catch (err) {
+    console.error('Create inventory task error:', err);
+    return res.status(500).json({ error: 'Create inventory task error', detail: err.message, code: err.code });
+  }
+});
+
+// Допустимые статусы инвентаризационных задач
+const validInventoryStatuses = ['open', 'in_progress', 'done', 'cancelled'];
+
+function normalizeInventoryStatus(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase();
+  return validInventoryStatuses.includes(s) ? s : null;
+}
+
+// GET /inventory-tasks
+// Фильтры (всё необязательно):
+//   - id
+//   - client_id
+//   - barcode
+//   - location_code
+//   - status
+//   - limit, offset
+app.get('/inventory-tasks', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const {
+      id,
+      client_id,
+      barcode,
+      location_code,
+      status,
+      limit,
+      offset,
+    } = req.query || {};
+
+    const conditions = [];
+    const values = [];
+    let idx = 1;
+
+    if (id !== undefined) {
+      const idNum = Number(id);
+      if (!Number.isInteger(idNum) || idNum <= 0) {
+        return res.status(400).json({ error: 'id должен быть положительным целым числом' });
+      }
+      conditions.push(`t.id = $${idx++}`);
+      values.push(idNum);
+    }
+
+    if (client_id !== undefined) {
+      const clientIdNum = Number(client_id);
+      if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+        return res.status(400).json({ error: 'client_id должен быть положительным целым числом' });
+      }
+      conditions.push(`t.client_id = $${idx++}`);
+      values.push(clientIdNum);
+    }
+
+    if (barcode !== undefined) {
+      const b = String(barcode).trim();
+      if (!b) {
+        return res.status(400).json({ error: 'barcode не может быть пустым' });
+      }
+      conditions.push(`t.barcode = $${idx++}`);
+      values.push(b);
+    }
+
+    if (location_code !== undefined) {
+      const loc = String(location_code).trim();
+      if (!loc) {
+        return res.status(400).json({ error: 'location_code не может быть пустым' });
+      }
+      conditions.push(`t.location_code = $${idx++}`);
+      values.push(loc);
+    }
+
+    if (status !== undefined) {
+      const s = normalizeInventoryStatus(status);
+      if (!s) {
+        return res.status(400).json({
+          error: `Некорректный status. Допустимо: ${validInventoryStatuses.join(', ')}`,
+        });
+      }
+      conditions.push(`t.status = $${idx++}`);
+      values.push(s);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    let lim = 100;
+    if (limit !== undefined) {
+      lim = Number(limit);
+      if (!Number.isInteger(lim) || lim <= 0 || lim > 500) {
+        return res.status(400).json({ error: 'limit должен быть целым числом 1..500' });
+      }
+    }
+
+    let off = 0;
+    if (offset !== undefined) {
+      off = Number(offset);
+      if (!Number.isInteger(off) || off < 0) {
+        return res.status(400).json({ error: 'offset должен быть целым числом >= 0' });
+      }
+    }
+
+    const q = `
+      SELECT
+        t.id,
+        t.client_id,
+        t.barcode,
+        t.sku_id,
+        t.location_code,
+        t.status,
+        t.priority,
+        t.reason,
+        t.comment,
+        t.created_at,
+        t.created_by,
+        t.updated_at,
+        t.updated_by,
+        t.closed_at,
+        t.closed_by
+      FROM wms.inventory_tasks t
+      ${where}
+      ORDER BY
+        CASE t.status
+          WHEN 'open'        THEN 1
+          WHEN 'in_progress' THEN 2
+          WHEN 'done'        THEN 3
+          WHEN 'cancelled'   THEN 4
+          ELSE 99
+        END,
+        t.priority ASC,
+        t.created_at ASC,
+        t.id ASC
+      LIMIT ${lim} OFFSET ${off}
+    `;
+
+    const r = await pool.query(q, values);
+    return res.json({ status: 'ok', tasks: r.rows, limit: lim, offset: off });
+  } catch (err) {
+    console.error('Get inventory tasks error:', err);
+    return res.status(500).json({
+      error: 'Get inventory tasks error',
+      detail: err.message,
+      code: err.code,
+    });
+  }
+});
+
+
+// PATCH /inventory-tasks/:id
+// Можно менять: status, priority, reason, comment.
+// При переходе в 'done' или 'cancelled' заполняем closed_at/closed_by.
+app.patch('/inventory-tasks/:id', authRequired, requireRole('owner'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Некорректный id' });
+    }
+
+    const { status, priority, reason, comment } = req.body || {};
+
+    if (
+      status === undefined &&
+      priority === undefined &&
+      reason === undefined &&
+      comment === undefined
+    ) {
+      return res.status(400).json({ error: 'Нет полей для обновления' });
+    }
+
+    let newStatus = null;
+    if (status !== undefined) {
+      newStatus = normalizeInventoryStatus(status);
+      if (!newStatus) {
+        return res.status(400).json({
+          error: `Некорректный status. Допустимо: ${validInventoryStatuses.join(', ')}`,
+        });
+      }
+    }
+
+    let newPriority = null;
+    if (priority !== undefined) {
+      const pr = Number(priority);
+      if (!Number.isInteger(pr) || pr < 1 || pr > 5) {
+        return res.status(400).json({ error: 'priority должен быть целым числом 1..5' });
+      }
+      newPriority = pr;
+    }
+
+    await client.query('BEGIN');
+
+    // Берём текущую задачу
+    const cur = await client.query(
+      `
+      SELECT
+        id,
+        status
+      FROM wms.inventory_tasks
+      WHERE id = $1
+      FOR UPDATE
+      `,
+      [id]
+    );
+
+    if (cur.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Задача инвентаризации не найдена' });
+    }
+
+    const currentStatus = cur.rows[0].status;
+
+    // При желании можно запретить "реанимацию" уже закрытых задач
+    if ((currentStatus === 'done' || currentStatus === 'cancelled') &&
+        newStatus && (newStatus === 'open' || newStatus === 'in_progress')) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Нельзя снова открыть уже закрытую задачу' });
+    }
+
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (newStatus !== null) {
+      fields.push(`status = $${idx++}`);
+      values.push(newStatus);
+    }
+    if (newPriority !== null) {
+      fields.push(`priority = $${idx++}`);
+      values.push(newPriority);
+    }
+    if (reason !== undefined) {
+      fields.push(`reason = $${idx++}`);
+      values.push(reason || null);
+    }
+    if (comment !== undefined) {
+      fields.push(`comment = $${idx++}`);
+      values.push(comment || null);
+    }
+
+    // updated_at / updated_by — всегда
+    fields.push(`updated_at = NOW()`);
+    fields.push(`updated_by = $${idx++}`);
+    values.push(req.user.id);
+
+    // Если статус становится done/cancelled — проставляем closed_at/closed_by
+    if (newStatus === 'done' || newStatus === 'cancelled') {
+      fields.push(`closed_at = NOW()`);
+      fields.push(`closed_by = $${idx++}`);
+      values.push(req.user.id);
+    }
+
+    values.push(id);
+
+    const q = `
+      UPDATE wms.inventory_tasks
+      SET ${fields.join(', ')}
+      WHERE id = $${idx}
+      RETURNING
+        id, client_id, barcode, sku_id, location_code,
+        status, priority, reason, comment,
+        created_at, created_by, updated_at, updated_by, closed_at, closed_by
+    `;
+
+    const upd = await client.query(q, values);
+
+    await client.query('COMMIT');
+    return res.json({ status: 'ok', task: upd.rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Update inventory task error:', err);
+    return res.status(500).json({
+      error: 'Update inventory task error',
+      detail: err.message,
+      code: err.code,
+    });
+  } finally {
+    client.release();
+  }
+});
+// ==============================
+//  INVENTORY TASKS: COMPLETE
+// ==============================
+//
+// POST /inventory-tasks/complete
+// Body:
+//   - inventory_task_id (обязательный)
+//   - actual_qty        (обязательный, фактический остаток по результатам пересчёта, >=0)
+//   - comment           (опционально)
+//
+// Логика:
+//   1) Берём inventory_task FOR UPDATE
+//   2) Только open/in_progress
+//   3) sku_id: если нет — resolveSkuIdOrCreate
+//   4) location_id: masterdata.locations (создаём если нет)
+//   5) stock: wms.stock по (location_id, sku_id) FOR UPDATE
+//   6) qty = actual_qty (INSERT/UPDATE). Допускаем 0.
+//   7) Если delta != 0 → movement_type='inventory', ref_type='inventory_task'
+//   8) inventory_task -> done (closed_at/closed_by)
+//
+// ВАЖНО: не используем колонку id в wms.stock и не трогаем updated_at,
+// потому что этих колонок в таблице нет.
+app.post('/inventory-tasks/complete', authRequired, requireRole('owner'), async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { inventory_task_id, actual_qty, comment } = req.body || {};
+
+    // 0. Валидация входных параметров
+    const taskId = Number(inventory_task_id);
+    if (!Number.isInteger(taskId) || taskId <= 0) {
+      return res.status(400).json({ error: 'inventory_task_id должен быть положительным целым числом' });
+    }
+
+    const actualQtyNum = Number(actual_qty);
+    if (!Number.isInteger(actualQtyNum) || actualQtyNum < 0) {
+      return res.status(400).json({ error: 'actual_qty должен быть целым числом >= 0' });
+    }
+
+    await client.query('BEGIN');
+
+    // 1) Берём задачу инвентаризации
+    const taskRes = await client.query(
+      `
+      SELECT
+        id, client_id, barcode, sku_id, location_code,
+        status, priority, reason,
+        comment AS task_comment,
+        created_at, created_by, updated_at, updated_by,
+        closed_at, closed_by
+      FROM wms.inventory_tasks
+      WHERE id = $1
+      FOR UPDATE
+      `,
+      [taskId]
+    );
+
+    if (taskRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Задача на инвентаризацию не найдена' });
+    }
+
+    const task = taskRes.rows[0];
+
+    if (task.status !== 'open' && task.status !== 'in_progress') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Закрыть можно только задачу в статусе open / in_progress',
+        current_status: task.status,
+      });
+    }
+
+    const clientIdNum = Number(task.client_id);
+    const barcodeStr  = String(task.barcode).trim();
+    const locCode     = String(task.location_code).trim();
+
+    // 2) sku_id
+    let skuIdFinal;
+    if (task.sku_id !== null && task.sku_id !== undefined) {
+      skuIdFinal = Number(task.sku_id);
+      if (!Number.isInteger(skuIdFinal) || skuIdFinal <= 0) {
+        throw new Error('Некорректный sku_id в задаче на инвентаризацию');
+      }
+    } else {
+      skuIdFinal = await resolveSkuIdOrCreate(client, { client_id: clientIdNum, barcode: barcodeStr });
+    }
+
+    // 3) location_id: masterdata.locations (создаём если нет)
+    const locRes = await client.query(
+      `SELECT id FROM masterdata.locations WHERE code = $1 LIMIT 1`,
+      [locCode]
+    );
+
+    let locationId;
+    if (locRes.rowCount > 0) {
+      locationId = locRes.rows[0].id;
+    } else {
+      const insLoc = await client.query(
+        `
+        INSERT INTO masterdata.locations (code, is_active, created_at)
+        VALUES ($1, true, NOW())
+        RETURNING id
+        `,
+        [locCode]
+      );
+      locationId = insLoc.rows[0].id;
+    }
+
+    // 4) Читаем stock по (location_id, sku_id)
+    //    ВНИМАНИЕ: здесь НЕТ колонки id в wms.stock, поэтому берём только qty
+    const stockRes = await client.query(
+      `
+      SELECT qty
+      FROM wms.stock
+      WHERE location_id = $1
+        AND sku_id      = $2
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [locationId, skuIdFinal]
+    );
+
+    let currentQty = 0;
+
+    if (stockRes.rowCount > 0) {
+      currentQty = Number(stockRes.rows[0].qty) || 0;
+    }
+
+    const delta = actualQtyNum - currentQty;
+
+    // 5) Применяем фактический остаток
+    if (stockRes.rowCount === 0) {
+      // записи нет — создаём только если actual_qty > 0
+      if (actualQtyNum > 0) {
+        await client.query(
+          `
+          INSERT INTO wms.stock (sku_id, location_id, qty, created_at)
+          VALUES ($1, $2, $3, NOW())
+          `,
+          [skuIdFinal, locationId, actualQtyNum]
+        );
+      }
+    } else {
+      // запись есть — обновляем qty (0 тоже допустим)
+      await client.query(
+        `
+        UPDATE wms.stock
+           SET qty = $1
+         WHERE location_id = $2
+           AND sku_id      = $3
+        `,
+        [actualQtyNum, locationId, skuIdFinal]
+      );
+    }
+
+    // 6) Логируем движение, только если delta != 0
+    if (delta !== 0) {
+      const qtyForLog    = Math.abs(delta);
+      const fromLocation = delta < 0 ? locCode : null;
+      const toLocation   = delta > 0 ? locCode : null;
+
+      await client.query(
+        `
+        INSERT INTO wms.movements
+          (created_at, user_id, client_id, sku_id, barcode, qty,
+           from_location, to_location, movement_type, ref_type, ref_id, comment)
+        VALUES
+          (NOW(), $1, $2, $3, $4, $5,
+           $6, $7, $8, $9, $10, $11)
+        `,
+        [
+          req.user.id,
+          clientIdNum,
+          skuIdFinal,
+          barcodeStr,
+          qtyForLog,
+          fromLocation,
+          toLocation,
+          'inventory',
+          'inventory_task',
+          taskId,
+          comment || task.task_comment || null,
+        ]
+      );
+    }
+
+    // 7) Закрываем inventory_task
+    //    Используем статус 'done' (он уже есть в списке допустимых)
+    const updTaskRes = await client.query(
+      `
+      UPDATE wms.inventory_tasks
+      SET
+        status     = 'done',
+        sku_id     = $1,
+        comment    = COALESCE($2, comment),
+        updated_at = NOW(),
+        updated_by = $3,
+        closed_at  = NOW(),
+        closed_by  = $3
+      WHERE id = $4
+      RETURNING
+        id, client_id, barcode, sku_id, location_code,
+        status, priority, reason, comment,
+        created_at, created_by, updated_at, updated_by, closed_at, closed_by
+      `,
+      [skuIdFinal, comment || null, req.user.id, taskId]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      status: 'ok',
+      inventory_task: updTaskRes.rows[0],
+      stock_before: { client_id: clientIdNum, barcode: barcodeStr, location_code: locCode, qty: currentQty },
+      stock_after:  { client_id: clientIdNum, barcode: barcodeStr, location_code: locCode, qty: actualQtyNum },
+      delta,
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('Inventory complete error:', err);
+    return res.status(500).json({
+      error: 'Inventory complete error',
+      detail: err.message,
+      code: err.code,
+    });
+  } finally {
+    client.release();
+  }
+});
+
+
+
+
+app.get('/movements/summary', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const {
+      client_id,
+      barcode,
+      location_code,
+      date_from,
+      date_to,
+    } = req.query;
+
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
+    }
+
+    // Разрешённые (боевые) типы движений
+    const ALLOWED_MOVEMENT_TYPES = ['incoming', 'move', 'adjust', 'writeoff', 'inventory'];
+
+    const where = [
+      'm.client_id = $1',
+      'm.movement_type = ANY($2)',
+    ];
+    const values = [
+      Number(client_id),
+      ALLOWED_MOVEMENT_TYPES,
+    ];
+    let idx = 3;
+
+    if (barcode) {
+      where.push(`m.barcode = $${idx}`);
+      values.push(barcode);
+      idx++;
+    }
+
+    if (location_code) {
+      // Ячейка может быть либо from_location, либо to_location
+      where.push(`(m.from_location = $${idx} OR m.to_location = $${idx})`);
+      values.push(location_code);
+      idx++;
+    }
+
+    if (date_from) {
+      where.push(`m.created_at >= $${idx}`);
+      values.push(date_from);
+      idx++;
+    }
+
+    if (date_to) {
+      // date_to НЕ включительно
+      where.push(`m.created_at < $${idx}`);
+      values.push(date_to);
+      idx++;
+    }
+
+    const sql = `
+      SELECT
+        date_trunc('day', m.created_at) AS day,
+        m.movement_type,
+        SUM(m.qty) AS qty_sum,
+        COUNT(*) AS rows_count
+      FROM wms.movements m
+      WHERE ${where.join(' AND ')}
+      GROUP BY 1, 2
+      ORDER BY 1 DESC, 2;
+    `;
+
+    const { rows } = await pool.query(sql, values);
+
+    res.json({
+      status: 'ok',
+      client_id: Number(client_id),
+      filters: {
+        date_from: date_from || null,
+        date_to: date_to || null,
+        barcode: barcode || null,
+        location_code: location_code || null,
+      },
+      rows,
+    });
+  } catch (err) {
+    console.error('Error in /movements/summary:', err);
+    res.status(500).json({
+      error: 'Internal server error in /movements/summary',
+      details: err.message,
+    });
+  }
+});
+
+
+
+// ---------------- PICKING TASKS (WMS.PICKING_TASKS) ----------------
+
+// Допустимые статусы задач на сборку
+const validPickingStatuses = ['new', 'in_progress', 'done', 'cancelled'];
+
+function normalizePickingStatus(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase();
+  return validPickingStatuses.includes(s) ? s : null;
+}
+
+// POST /picking-tasks
+// Создать задание на сборку
+// Body: client_id, barcode, location_code, qty, (optional: sku_id, priority, order_ref, comment)
+app.post('/picking-tasks', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const {
+      client_id,
+      barcode,
+      sku_id,
+      location_code,
+      qty,
+      priority,
+      order_ref,
+      comment,
+    } = req.body || {};
+
+    if (!client_id || !barcode || !location_code || qty === undefined) {
+      return res.status(400).json({ error: 'Обязательные поля: client_id, barcode, location_code, qty' });
+    }
+
+    const clientIdNum = Number(client_id);
+    if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+      return res.status(400).json({ error: 'client_id должен быть положительным числом' });
+    }
+
+    const barcodeStr = String(barcode).trim();
+    if (!barcodeStr) {
+      return res.status(400).json({ error: 'barcode не может быть пустым' });
+    }
+
+    const locCode = String(location_code).trim();
+    if (!locCode) {
+      return res.status(400).json({ error: 'location_code не может быть пустым' });
+    }
+
+    const qtyNum = Number(qty);
+    if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
+      return res.status(400).json({ error: 'qty должен быть положительным целым числом' });
+    }
+
+    // priority: 1..5
+    let pr = 3;
+    if (priority !== undefined && priority !== null && priority !== '') {
+      pr = Number(priority);
+      if (!Number.isInteger(pr) || pr < 1 || pr > 5) {
+        return res.status(400).json({ error: 'priority должен быть целым числом 1..5' });
+      }
+    }
+
+    // sku_id optional
+    let skuIdNum = null;
+    if (sku_id !== undefined && sku_id !== null && sku_id !== '') {
+      skuIdNum = Number(sku_id);
+      if (!Number.isInteger(skuIdNum) || skuIdNum <= 0) {
+        return res.status(400).json({ error: 'sku_id должен быть положительным целым числом' });
+      }
+    }
+
+    const orderRefStr = order_ref ? String(order_ref).trim() : null;
+
+    // Проверяем, нет ли уже "живой" задачи по этой связке
+    const existing = await pool.query(
+      `
+      SELECT
+        id, client_id, barcode, sku_id, location_code, qty,
+        status, priority, order_ref, comment,
+        created_at, created_by, updated_at, updated_by
+      FROM wms.picking_tasks
+      WHERE client_id     = $1
+        AND barcode       = $2
+        AND location_code = $3
+        AND (order_ref IS NOT DISTINCT FROM $4)
+        AND status IN ('new', 'in_progress')
+      LIMIT 1
+      `,
+      [clientIdNum, barcodeStr, locCode, orderRefStr]
+    );
+
+    if (existing.rowCount > 0) {
+      return res.json({
+        status: 'already_exists',
+        task: existing.rows[0],
+      });
+    }
+
+    const ins = await pool.query(
+      `
+      INSERT INTO wms.picking_tasks
+        (client_id, barcode, sku_id, location_code, qty,
+         status, priority, order_ref, comment,
+         created_at, created_by, updated_at, updated_by)
+      VALUES
+        ($1, $2, $3, $4, $5,
+         'new', $6, $7, $8,
+         NOW(), $9, NOW(), $9)
+      RETURNING
+        id, client_id, barcode, sku_id, location_code, qty,
+        status, priority, order_ref, comment,
+        created_at, created_by, updated_at, updated_by
+      `,
+      [
+        clientIdNum,
+        barcodeStr,
+        skuIdNum,
+        locCode,
+        qtyNum,
+        pr,
+        orderRefStr,
+        comment || null,
+        req.user.id,
+      ]
+    );
+
+    return res.status(201).json({ status: 'ok', task: ins.rows[0] });
+  } catch (err) {
+    console.error('Create picking task error:', err);
+    return res.status(500).json({ error: 'Create picking task error', detail: err.message, code: err.code });
+  }
+});
+// Простое экранирование одинарных кавычек для строковых литералов в SQL
+function escLiteral(v) {
+  return String(v).replace(/'/g, "''");
+}
+
+// ==============================
+// GET /picking-tasks (admin list with filters)
+// ==============================
+app.get('/picking-tasks', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const clientId = Number(req.query.client_id);
+    if (!Number.isInteger(clientId) || clientId <= 0) {
+      return res
+        .status(400)
+        .json({ error: 'client_id is required and must be a positive integer' });
+    }
+
+    const status       = req.query.status        ? String(req.query.status).trim()        : null;
+    const barcode      = req.query.barcode       ? String(req.query.barcode).trim()       : null;
+    const locationCode = req.query.location_code ? String(req.query.location_code).trim() : null;
+    const orderRef     = req.query.order_ref     ? String(req.query.order_ref).trim()     : null;
+
+    const priority = (req.query.priority !== undefined && req.query.priority !== '')
+      ? Number(req.query.priority)
+      : null;
+
+    const dateFrom = req.query.date_from ? String(req.query.date_from).trim() : null; // YYYY-MM-DD
+    const dateTo   = req.query.date_to   ? String(req.query.date_to).trim()   : null; // YYYY-MM-DD
+
+    // limit / offset — только числа, НИЧЕГО не передаём как параметры в PG
+    let limit = Number(req.query.limit || 50);
+    if (!Number.isInteger(limit) || limit <= 0) limit = 50;
+    if (limit > 200) limit = 200;
+
+    let offset = Number(req.query.offset || 0);
+    if (!Number.isInteger(offset) || offset < 0) offset = 0;
+
+    // -----------------------------
+    // Сборка WHERE БЕЗ $1..$N — чистый текст
+    // -----------------------------
+    const whereParts = [`pt.client_id = ${clientId}`];
+
+    if (status) {
+      whereParts.push(`pt.status = '${escLiteral(status)}'`);
+    }
+    if (barcode) {
+      whereParts.push(`pt.barcode = '${escLiteral(barcode)}'`);
+    }
+    if (locationCode) {
+      whereParts.push(`pt.location_code = '${escLiteral(locationCode)}'`);
+    }
+    if (orderRef) {
+      whereParts.push(`pt.order_ref ILIKE '%${escLiteral(orderRef)}%'`);
+    }
+    if (priority !== null && Number.isInteger(priority)) {
+      whereParts.push(`pt.priority = ${priority}`);
+    }
+    if (dateFrom) {
+      whereParts.push(`pt.created_at >= '${escLiteral(dateFrom)}'::date`);
+    }
+    if (dateTo) {
+      whereParts.push(`pt.created_at < '${escLiteral(dateTo)}'::date`);
+    }
+
+    const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+    // -----------------------------
+    // 1) count — БЕЗ параметров
+    // -----------------------------
+    const countSql = `
+      SELECT COUNT(*)::int AS cnt
+      FROM wms.picking_tasks pt
+      ${whereSql}
+    `;
+    const countRes = await pool.query(countSql);
+    const total = countRes.rows[0]?.cnt ?? 0;
+
+    // -----------------------------
+    // 2) rows — тоже БЕЗ параметров
+    // -----------------------------
+    const rowsSql = `
+      SELECT
+        pt.id::text,
+        pt.client_id,
+        pt.barcode,
+        pt.sku_id,
+        pt.location_code,
+        pt.qty,
+        pt.status,
+        pt.priority,
+        pt.order_ref,
+        pt.picker_id,
+        pt.reason,
+        pt.comment,
+        pt.created_at,
+        pt.created_by,
+        pt.updated_at,
+        pt.updated_by,
+        pt.started_at,
+        pt.finished_at
+      FROM wms.picking_tasks pt
+      ${whereSql}
+      ORDER BY
+        pt.priority ASC,
+        pt.created_at ASC,
+        pt.id ASC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+    const rowsRes = await pool.query(rowsSql);
+
+    return res.json({
+      status: 'ok',
+      client_id: clientId,
+      filters: {
+        status,
+        barcode,
+        location_code: locationCode,
+        order_ref: orderRef,
+        priority,
+        date_from: dateFrom,
+        date_to: dateTo,
+      },
+      limit,
+      offset,
+      total,
+      tasks: rowsRes.rows,
+    });
+  } catch (err) {
+    console.error('Error in GET /picking-tasks:', err);
+    return res.status(500).json({ error: 'Internal server error in /picking-tasks' });
+  }
+});
+
+
+// ==============================
+// POST /picking/admin-cancel
+// Админская отмена задачи сборки без движений по складу
+// ==============================
+app.post('/picking/admin-cancel', authRequired, requireRole('owner'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const pickingTaskId = Number(req.body.picking_task_id);
+    if (!Number.isInteger(pickingTaskId) || pickingTaskId <= 0) {
+      return res.status(400).json({ error: 'picking_task_id is required and must be a positive integer' });
+    }
+
+    const reason = req.body.reason ? String(req.body.reason) : 'ADMIN_CANCEL';
+    const comment = req.body.comment ? String(req.body.comment) : null;
+
+    await client.query('BEGIN');
+
+    // 1. Блокируем строку задачи
+    const tRes = await client.query(
+      `
+      SELECT *
+      FROM wms.picking_tasks
+      WHERE id = $1
+      FOR UPDATE
+      `,
+      [pickingTaskId]
+    );
+
+    if (tRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'picking_task not found' });
+    }
+
+    const task = tRes.rows[0];
+
+    // 2. Разрешаем отменять только new / in_progress
+    if (!['new', 'in_progress'].includes(task.status)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `cannot cancel picking_task in status=${task.status}` });
+    }
+
+    // 3. Обновляем статус на cancelled, не трогаем склад и не создаём inventory-task
+    const updRes = await client.query(
+      `
+      UPDATE wms.picking_tasks
+      SET status      = 'cancelled',
+          reason      = $2,
+          comment     = COALESCE($3, comment),
+          finished_at = NOW(),
+          updated_at  = NOW(),
+          updated_by  = $4
+      WHERE id = $1
+      RETURNING
+        id::text, client_id, barcode, sku_id, location_code, qty,
+        status, priority, order_ref, picker_id, reason, comment,
+        created_at, created_by, updated_at, updated_by, started_at, finished_at
+      `,
+      [pickingTaskId, reason, comment, req.user.id]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({ status: 'ok', picking_task: updRes.rows[0] });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('Error in POST /picking/admin-cancel:', err);
+    return res.status(500).json({ error: 'Internal server error in /picking/admin-cancel' });
+  } finally {
+    client.release();
+  }
+});
+
+// ==============================
+//  PICKING: GET NEXT TASK
+// ==============================
+app.post('/picking/next', authRequired, requireRole('owner'), async (req, res) => {
+  const { client_id } = req.body;
+
+  // 1. Валидация client_id
+  const clientIdNum = Number(client_id);
+  if (!clientIdNum || Number.isNaN(clientIdNum)) {
+    return res.status(400).json({
+      error: 'client_id обязателен и должен быть числом',
+    });
+  }
+
+  try {
+    const userId = req.user.id;
+
+    // 2. Проверяем, нет ли уже активной задачи (in_progress) у ЭТОГО сборщика по этому клиенту
+    const activeResult = await pool.query(
+      `
+      SELECT *
+      FROM wms.picking_tasks
+      WHERE client_id = $1
+        AND picker_id = $2
+        AND status    = 'in_progress'
+      ORDER BY priority ASC, created_at ASC
+      LIMIT 1
+      `,
+      [clientIdNum, userId],
+    );
+
+    if (activeResult.rows.length > 0) {
+      return res.status(400).json({
+        error: 'У тебя уже есть активная задача на сборку (status = in_progress)',
+        task: activeResult.rows[0],
+      });
+    }
+
+    // 3. Ищем следующую задачу в статусе 'new',
+    //    которая НЕ заблокирована инвентаризацией
+    const nextResult = await pool.query(
+      `
+      SELECT pt.*
+      FROM wms.picking_tasks AS pt
+      LEFT JOIN wms.inventory_tasks AS it
+        ON it.client_id     = pt.client_id
+       AND it.barcode       = pt.barcode
+       AND it.location_code = pt.location_code
+       AND it.status IN ('open', 'in_progress')
+      WHERE pt.client_id = $1
+        AND pt.status    = 'new'
+        AND it.id IS NULL
+      ORDER BY pt.priority ASC, pt.created_at ASC
+      LIMIT 1
+      `,
+      [clientIdNum],
+    );
+
+    if (nextResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Нет задач на сборку',
+      });
+    }
+
+    const task = nextResult.rows[0];
+
+    // 4. Переводим найденную задачу в in_progress,
+    //    фиксируем picker_id и время старта
+    const updateResult = await pool.query(
+      `
+      UPDATE wms.picking_tasks
+         SET status     = 'in_progress',
+             picker_id  = $2,
+             updated_at = NOW(),
+             updated_by = $2,
+             started_at = COALESCE(started_at, NOW())
+       WHERE id = $1
+       RETURNING *
+      `,
+      [task.id, userId],
+    );
+
+    const pickingTask = updateResult.rows[0];
+
+    // 5. Подтягиваем карточку товара (masterdata.items)
+    const itemResult = await pool.query(
+      `
+      SELECT *
+      FROM masterdata.items
+      WHERE barcode  = $1
+        AND client_id = $2
+      LIMIT 1
+      `,
+      [pickingTask.barcode, pickingTask.client_id],
+    );
+
+    const item = itemResult.rows.length > 0 ? itemResult.rows[0] : null;
+
+    // 6. Подтягиваем остатки по SKU (wms.stock: location_id + sku_id + qty)
+    const skuIdForStock = pickingTask.sku_id
+      ? Number(pickingTask.sku_id)
+      : await resolveSkuIdOrCreate(pool, {
+          client_id: pickingTask.client_id,
+          barcode: pickingTask.barcode,
+        });
+
+    const stockResult = await pool.query(
+      `
+      SELECT
+        s.location_id,
+        l.code AS location_code,
+        s.qty
+      FROM wms.stock s
+      JOIN masterdata.locations l ON l.id = s.location_id
+      WHERE s.sku_id = $1
+      ORDER BY l.code ASC
+      `,
+      [skuIdForStock],
+    );
+
+    let totalQty = 0;
+    const locations = stockResult.rows.map((row) => {
+      const qtyNum = Number(row.qty) || 0;
+      totalQty += qtyNum;
+      return {
+        location_id: row.location_id,
+        location_code: row.location_code,
+        qty: qtyNum,
+      };
+    });
+
+    // 7. Отдаём фронту задачу + товар + актуальные остатки
+    return res.json({
+      status: 'ok',
+      task: pickingTask,
+      item,
+      stock: {
+        total_qty: totalQty,
+        locations,
+      },
+    });
+  } catch (err) {
+    console.error('Error in /picking/next:', err);
+    return res.status(500).json({
+      error: 'Internal server error in /picking/next',
+    });
+  }
+});
+
+// ==============================
+//  PICKING: GET ACTIVE TASK FOR CURRENT PICKER
+// ==============================
+app.get('/picking/active', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Ищем активную задачу данного сборщика
+    const activeResult = await pool.query(
+      `
+      SELECT *
+      FROM wms.picking_tasks
+      WHERE picker_id = $1
+        AND status    = 'in_progress'
+      ORDER BY priority ASC, created_at ASC
+      LIMIT 1
+      `,
+      [userId],
+    );
+
+    if (activeResult.rows.length === 0) {
+      return res.json({
+        status: 'ok',
+        task: null,
+      });
+    }
+
+    const task = activeResult.rows[0];
+
+    // 2. Подтягиваем товар
+    const itemResult = await pool.query(
+      `
+      SELECT *
+      FROM masterdata.items
+      WHERE barcode   = $1
+        AND client_id = $2
+      LIMIT 1
+      `,
+      [task.barcode, task.client_id],
+    );
+    const item = itemResult.rows.length > 0 ? itemResult.rows[0] : null;
+
+    // 3. Остатки по SKU
+    const skuIdForStock = task.sku_id
+      ? Number(task.sku_id)
+      : await resolveSkuIdOrCreate(pool, {
+          client_id: task.client_id,
+          barcode: task.barcode,
+        });
+
+    const stockResult = await pool.query(
+      `
+      SELECT
+        s.location_id,
+        l.code AS location_code,
+        s.qty
+      FROM wms.stock s
+      JOIN masterdata.locations l ON l.id = s.location_id
+      WHERE s.sku_id = $1
+      ORDER BY l.code ASC
+      `,
+      [skuIdForStock]
+    );
+
+    let totalQty = 0;
+    const locations = stockResult.rows.map((row) => {
+      const qtyNum = Number(row.qty) || 0;
+      totalQty += qtyNum;
+      return {
+        location_id: row.location_id,
+        location_code: row.location_code,
+        qty: qtyNum,
+      };
+    });
+
+    return res.json({
+      status: 'ok',
+      task,
+      item,
+      stock: {
+        total_qty: totalQty,
+        locations,
+      },
+    });
+  } catch (err) {
+    console.error('Error in GET /picking/active:', err);
+    return res.status(500).json({
+      error: 'Internal server error in /picking/active',
+      detail: err.message,
+    });
+  }
+});
+
+// ==============================
+//  PICKING: MY TASKS LIST (для текущего сборщика)
+// ==============================
+app.get('/picking/my-tasks', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const pickerId = req.user.id;
+
+    const {
+      client_id,
+      status,
+      date_from,
+      date_to,
+      limit,
+      offset,
+    } = req.query || {};
+
+    const conditions = ['pt.picker_id = $1'];
+    const values = [pickerId];
+    let idx = 2;
+
+    if (client_id !== undefined) {
+      const clientIdNum = Number(client_id);
+      if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+        return res.status(400).json({ error: 'client_id должен быть положительным целым числом' });
+      }
+      conditions.push(`pt.client_id = $${idx}`);
+      values.push(clientIdNum);
+      idx++;
+    }
+
+    if (status !== undefined) {
+      const st = normalizePickingStatus(status);
+      if (!st) {
+        return res.status(400).json({
+          error: `Некорректный status. Допустимо: ${validPickingStatuses.join(', ')}`,
+        });
+      }
+      conditions.push(`pt.status = $${idx}`);
+      values.push(st);
+      idx++;
+    }
+
+    if (date_from !== undefined) {
+      conditions.push(`pt.created_at >= $${idx}`);
+      values.push(date_from);
+      idx++;
+    }
+
+    if (date_to !== undefined) {
+      conditions.push(`pt.created_at < $${idx}`);
+      values.push(date_to);
+      idx++;
+    }
+
+    const whereSql = `WHERE ${conditions.join(' AND ')}`;
+
+    let lim = Number(limit || 50);
+    if (!Number.isInteger(lim) || lim <= 0) lim = 50;
+    if (lim > 200) lim = 200;
+
+    let off = Number(offset || 0);
+    if (!Number.isInteger(off) || off < 0) off = 0;
+
+    // COUNT
+    const countSql = `
+      SELECT COUNT(*)::int AS total
+      FROM wms.picking_tasks pt
+      ${whereSql}
+    `;
+    const countRes = await pool.query(countSql, values);
+    const total = countRes.rows[0]?.total ?? 0;
+
+    // ROWS
+    const rowsSql = `
+      SELECT
+        pt.id::text,
+        pt.client_id,
+        pt.barcode,
+        pt.sku_id,
+        pt.location_code,
+        pt.qty,
+        pt.status,
+        pt.priority,
+        pt.order_ref,
+        pt.picker_id,
+        pt.reason,
+        pt.comment,
+        pt.created_at,
+        pt.created_by,
+        pt.updated_at,
+        pt.updated_by,
+        pt.started_at,
+        pt.finished_at
+      FROM wms.picking_tasks pt
+      ${whereSql}
+      ORDER BY
+        pt.status,
+        pt.priority ASC,
+        pt.created_at ASC,
+        pt.id ASC
+      LIMIT ${lim} OFFSET ${off}
+    `;
+    const rowsRes = await pool.query(rowsSql, values);
+
+    return res.json({
+      status: 'ok',
+      picker_id: pickerId,
+      filters: {
+        client_id: client_id ? Number(client_id) : null,
+        status: status || null,
+        date_from: date_from || null,
+        date_to: date_to || null,
+      },
+      limit: lim,
+      offset: off,
+      total,
+      tasks: rowsRes.rows,
+    });
+  } catch (err) {
+    console.error('Error in GET /picking/my-tasks:', err);
+    return res.status(500).json({
+      error: 'Internal server error in /picking/my-tasks',
+      detail: err.message,
+    });
+  }
+});
+
+// ==============================
+//  PICKING: SKIP TASK
+// ==============================
+// Body: picking_task_id, reason, comment
+// Логика: помечаем задачу как cancelled, создаём (если нужно)
+//         inventory-task по этой ячейке
+app.post('/picking/skip', authRequired, requireRole('owner'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { picking_task_id, reason, comment } = req.body || {};
+
+    const taskId = Number(picking_task_id);
+    if (!Number.isInteger(taskId) || taskId <= 0) {
+      return res.status(400).json({ error: 'picking_task_id должен быть положительным целым числом' });
+    }
+
+    await client.query('BEGIN');
+
+    const sel = await client.query(
+      `
+      SELECT
+        id, client_id, barcode, sku_id, location_code, qty,
+        status, priority, order_ref, comment,
+        created_at, created_by, updated_at, updated_by
+      FROM wms.picking_tasks
+      WHERE id = $1
+      FOR UPDATE
+      `,
+      [taskId]
+    );
+
+    if (sel.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Задача на сборку не найдена' });
+    }
+
+    const task = sel.rows[0];
+
+    if (task.status !== 'new' && task.status !== 'in_progress') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Можно пропустить только задачу в статусе new / in_progress' });
+    }
+
+    const skipReason = reason || 'Picker skip';
+    const newComment = comment || task.comment;
+
+    const upd = await client.query(
+      `
+      UPDATE wms.picking_tasks
+      SET status     = 'cancelled',
+          comment    = $1,
+          updated_at = NOW(),
+          updated_by = $2
+      WHERE id = $3
+      RETURNING
+        id, client_id, barcode, sku_id, location_code, qty,
+        status, priority, order_ref, comment,
+        created_at, created_by, updated_at, updated_by
+      `,
+      [newComment, req.user.id, taskId]
+    );
+
+    const updatedTask = upd.rows[0];
+
+    // Создаём (если нет) инвентаризационную задачу по этой ячейке
+    const clientIdNum = Number(task.client_id);
+    const barcodeStr  = String(task.barcode).trim();
+    const locCode     = String(task.location_code).trim();
+
+    const existingInv = await client.query(
+      `
+      SELECT
+        id, client_id, barcode, sku_id, location_code,
+        status, priority, reason, comment,
+        created_at, created_by, updated_at, updated_by, closed_at, closed_by
+      FROM wms.inventory_tasks
+      WHERE client_id     = $1
+        AND barcode       = $2
+        AND location_code = $3
+        AND status IN ('open', 'in_progress')
+      LIMIT 1
+      `,
+      [clientIdNum, barcodeStr, locCode]
+    );
+
+    let invTask = null;
+
+    if (existingInv.rowCount > 0) {
+      invTask = existingInv.rows[0];
+    } else {
+      const insInv = await client.query(
+        `
+        INSERT INTO wms.inventory_tasks
+          (client_id, barcode, sku_id, location_code, status, priority, reason, comment,
+           created_at, created_by, updated_at, updated_by)
+        VALUES
+          ($1, $2, $3, $4, 'open', 2, $5, $6,
+           NOW(), $7, NOW(), $7)
+        RETURNING
+          id, client_id, barcode, sku_id, location_code,
+          status, priority, reason, comment,
+          created_at, created_by, updated_at, updated_by, closed_at, closed_by
+        `,
+        [
+          clientIdNum,
+          barcodeStr,
+          task.sku_id,
+          locCode,
+          skipReason,
+          newComment,
+          req.user.id,
+        ]
+      );
+      invTask = insInv.rows[0];
+    }
+
+    await client.query('COMMIT');
+
+    return res.json({
+      status: 'ok',
+      picking_task: updatedTask,
+      inventory_task: invTask,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Picking skip error:', err);
+    return res.status(500).json({ error: 'Picking skip error', detail: err.message, code: err.code });
+  } finally {
+    client.release();
+  }
+});
+
+// Универсальная функция: по коду ячейки вернуть её id из masterdata.locations.
+// Если ячейки нет или структура таблицы другая — вернём null, а приёмка отдаст 400.
+async function getLocationIdByCode(dbClient, locCode) {
+  const code = String(locCode || '').trim();
+  if (!code) return null;
+
+  try {
+    const res = await dbClient.query(
+      `SELECT id FROM masterdata.locations WHERE code = $1 LIMIT 1`,
+      [code]
+    );
+
+    if (res.rowCount > 0) {
+      return Number(res.rows[0].id);
+    }
+
+    // Ячейка не найдена
+    return null;
+  } catch (err) {
+    // Если вдруг где-то всё ещё всплывает 42703 (column "location_id" does not exist)
+    // — просто считаем, что ячейка не найдена, дальше /receiving/accept вернёт 400.
+    if (err && err.code === '42703') {
+      console.error('getLocationIdByCode: column error, returning null:', err.message);
+      return null;
+    }
+
+    // Остальные ошибки — пробрасываем дальше
+    throw err;
+  }
+}
+
+
+
+
+
+// POST /picking/confirm
+app.post('/picking/confirm', authRequired, requireRole('owner'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { picking_task_id, comment } = req.body || {};
+
+    const taskId = Number(picking_task_id);
+    if (!Number.isInteger(taskId) || taskId <= 0) {
+      return res.status(400).json({ error: 'Некорректный picking_task_id' });
+    }
+
+    await client.query('BEGIN');
+
+    // 1) Берём задачу на сборку с блокировкой
+    const taskRes = await client.query(
+      `
+      SELECT
+        id, client_id, barcode, sku_id, location_code,
+        qty, status, priority, order_ref, comment AS task_comment
+      FROM wms.picking_tasks
+      WHERE id = $1
+      FOR UPDATE
+      `,
+      [taskId]
+    );
+
+    if (taskRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Задача на сборку не найдена' });
+    }
+
+    const task = taskRes.rows[0];
+
+    if (task.status !== 'in_progress') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Подтвердить можно только задачу в статусе in_progress',
+        current_status: task.status,
+      });
+    }
+
+    const clientIdNum = Number(task.client_id);
+    const barcodeStr = String(task.barcode).trim();
+    const locCode = String(task.location_code).trim();
+    const qtyToPick = Number(task.qty);
+
+    if (!Number.isInteger(qtyToPick) || qtyToPick <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Некорректное qty в задаче на сборку' });
+    }
+
+    // 2) sku_id
+    let skuIdFinal;
+    if (task.sku_id !== null && task.sku_id !== undefined) {
+      skuIdFinal = Number(task.sku_id);
+      if (!Number.isInteger(skuIdFinal) || skuIdFinal <= 0) {
+        throw new Error('Некорректный sku_id в задаче на сборку');
+      }
+    } else {
+      skuIdFinal = await resolveSkuIdOrCreate(client, {
+        client_id: clientIdNum,
+        barcode: barcodeStr,
+      });
+    }
+
+    // 3) location_id (авто-подстройка под схему: id / location_id)
+    const locationId = await getLocationIdByCode(client, locCode);
+    if (!locationId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Не найдена ячейка с кодом ${locCode}` });
+    }
+
+    // 4) Берём остаток и списываем
+    // ВНИМАНИЕ: у тебя stock сейчас живёт по (location_id, sku_id) — используем это.
+    const stockRes = await client.query(
+      `
+      SELECT qty
+      FROM wms.stock
+      WHERE location_id = $1 AND sku_id = $2
+      FOR UPDATE
+      `,
+      [locationId, skuIdFinal]
+    );
+
+    if (stockRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'Невозможно списать при сборке: в ячейке нет остатка по этому SKU',
+      });
+    }
+
+    const currentQty = Number(stockRes.rows[0].qty || 0);
+    if (currentQty < qtyToPick) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'Недостаточно остатка для списания при сборке',
+        current_qty: currentQty,
+        required_qty: qtyToPick,
+      });
+    }
+
+    const newQty = currentQty - qtyToPick;
+
+    await client.query(
+      `
+      UPDATE wms.stock
+      SET qty = $1
+      WHERE location_id = $2 AND sku_id = $3
+      `,
+      [newQty, locationId, skuIdFinal]
+    );
+
+    // 5) Движение
+    await client.query(
+      `
+      INSERT INTO wms.movements
+        (created_at, user_id, client_id, sku_id, barcode,
+         qty, from_location, to_location, movement_type,
+         ref_type, ref_id, comment)
+      VALUES
+        (NOW(), $1, $2, $3, $4,
+         $5, $6, $7, $8,
+         $9, $10, $11)
+      `,
+      [
+        req.user.id,
+        clientIdNum,
+        skuIdFinal,
+        barcodeStr,
+        qtyToPick,
+        locCode,
+        null,
+        'writeoff',
+        'picking_task',
+        taskId,
+        comment || task.task_comment || null,
+      ]
+    );
+
+    // 6) Задача -> done
+    const updRes = await client.query(
+      `
+      UPDATE wms.picking_tasks
+      SET
+        status = 'done',
+        comment = COALESCE($1, comment),
+        sku_id = $2,
+        updated_at = NOW(),
+        updated_by = $3
+      WHERE id = $4
+      RETURNING
+        id, client_id, barcode, sku_id, location_code,
+        qty, status, priority, order_ref, comment,
+        created_at, created_by, updated_at, updated_by
+      `,
+      [
+        comment || null,
+        skuIdFinal,
+        req.user.id,
+        taskId,
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      status: 'ok',
+      task: updRes.rows[0],
+      stock_after: { location_code: locCode, sku_id: skuIdFinal, qty: newQty },
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('Picking confirm error:', err);
+    return res.status(500).json({
+      error: 'Picking confirm error',
+      detail: err.message,
+      code: err.code,
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// ---------------- MOVEMENTS (WMS.MOVEMENTS) ----------------
+// GET /movements
+// Фильтры (все опциональны):
+//   - client_id        (int > 0)
+//   - barcode          (string)
+//   - sku_id           (int > 0)
+//   - movement_type    (incoming | move | writeoff | inventory | picking | adjust)
+//   - ref_type         (любой строковый идентификатор, в т.ч. 'picking_task')
+//   - ref_id           (int > 0)
+//   - location_code    (from_location ИЛИ to_location = код)
+//   - date_from        (YYYY-MM-DD или ISO, по DATE(m.created_at) >= date_from)
+//   - date_to          (YYYY-MM-DD или ISO, по DATE(m.created_at) <= date_to)
+//   - limit            (по умолчанию 500, максимум 5000)
+//   - offset           (по умолчанию 0)
+app.get('/movements', authRequired, requireRole('owner'), async (req, res) => {
+  console.log('*** /movements NEW HANDLER HIT ***', req.originalUrl);
+  try {
+    // остальной код...
+
+    const {
+      client_id,
+      barcode,
+      sku_id,
+      movement_type,
+      ref_type,
+      ref_id,
+      location_code,
+      date_from,
+      date_to,
+      limit,
+      offset,
+    } = req.query || {};
+
+    const conditions = [];
+    const values = [];
+    let idx = 1;
+
+    // client_id
+    let clientIdNum = null;
+    if (client_id !== undefined) {
+      clientIdNum = Number(client_id);
+      if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+        return res.status(400).json({ error: 'client_id должен быть положительным целым числом' });
+      }
+      conditions.push(`m.client_id = $${idx}`);
+      values.push(clientIdNum);
+      idx++;
+    }
+
+    // barcode
+    let barcodeFilter = null;
+    if (barcode !== undefined) {
+      const b = String(barcode).trim();
+      if (!b) {
+        return res.status(400).json({ error: 'barcode не может быть пустым, если передан' });
+      }
+      barcodeFilter = b;
+      conditions.push(`m.barcode = $${idx}`);
+      values.push(b);
+      idx++;
+    }
+
+    // sku_id
+    let skuIdNum = null;
+    if (sku_id !== undefined) {
+      skuIdNum = Number(sku_id);
+      if (!Number.isInteger(skuIdNum) || skuIdNum <= 0) {
+        return res.status(400).json({ error: 'sku_id должен быть положительным целым числом' });
+      }
+      conditions.push(`m.sku_id = $${idx}`);
+      values.push(skuIdNum);
+      idx++;
+    }
+
+    // movement_type — нормализуем и проверяем по validMovementTypes
+    let movementTypeUsed = null;
+    if (movement_type !== undefined) {
+      const mtNorm = validateMovementType(movement_type); // уже приводит к нижнему регистру
+      if (!mtNorm || !validMovementTypes.includes(mtNorm)) {
+        return res.status(400).json({
+          error: `Некорректный movement_type. Допустимо: ${validMovementTypes.join(', ')}`,
+        });
+      }
+      movementTypeUsed = mtNorm;
+      conditions.push(`m.movement_type = $${idx}`);
+      values.push(mtNorm);
+      idx++;
+    }
+
+    // ref_type — фильтруем по фактическому значению в movements, НЕ нормализуем через normalizeRefType
+    let refTypeUsed = null;
+    if (ref_type !== undefined) {
+      const rt = String(ref_type).trim().toLowerCase();
+      if (!rt) {
+        return res.status(400).json({ error: 'ref_type не может быть пустым, если передан' });
+      }
+      refTypeUsed = rt;
+      conditions.push(`m.ref_type = $${idx}`);
+      values.push(rt);
+      idx++;
+    }
+
+    // ref_id
+    let refIdUsed = null;
+    if (ref_id !== undefined) {
+      const rid = Number(ref_id);
+      if (!Number.isInteger(rid) || rid <= 0) {
+        return res.status(400).json({ error: 'ref_id должен быть положительным целым числом' });
+      }
+      refIdUsed = rid;
+      conditions.push(`m.ref_id = $${idx}`);
+      values.push(rid);
+      idx++;
+    }
+
+    // location_code — либо from_location, либо to_location
+    let locationCodeFilter = null;
+    if (location_code !== undefined) {
+      const loc = String(location_code).trim();
+      if (!loc) {
+        return res.status(400).json({ error: 'location_code не может быть пустым, если передан' });
+      }
+      locationCodeFilter = loc;
+      conditions.push(`(m.from_location = $${idx} OR m.to_location = $${idx})`);
+      values.push(loc);
+      idx++;
+    }
+
+    // date_from / date_to — через DATE(m.created_at), чтобы совпадать с отчётами
+    const fromYmd = normalizeDateParamToYmd(date_from);
+    const toYmd   = normalizeDateParamToYmd(date_to);
+    let usedFrom = null;
+    let usedTo   = null;
+
+    if (date_from !== undefined) {
+      if (!fromYmd) {
+        return res.status(400).json({
+          error: 'date_from должен быть в формате YYYY-MM-DD или ISO с этой датой',
+        });
+      }
+      usedFrom = fromYmd;
+      conditions.push(`DATE(m.created_at) >= $${idx}::date`);
+      values.push(fromYmd);
+      idx++;
+    }
+
+    if (date_to !== undefined) {
+      if (!toYmd) {
+        return res.status(400).json({
+          error: 'date_to должен быть в формате YYYY-MM-DD или ISO с этой датой',
+        });
+      }
+      usedTo = toYmd;
+      conditions.push(`DATE(m.created_at) <= $${idx}::date`);
+      values.push(toYmd);
+      idx++;
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // limit / offset
+    let limitNum = Number(limit || 500);
+    if (!Number.isInteger(limitNum) || limitNum <= 0) limitNum = 500;
+    if (limitNum > 5000) limitNum = 5000;
+
+    let offsetNum = Number(offset || 0);
+    if (!Number.isInteger(offsetNum) || offsetNum < 0) offsetNum = 0;
+
+    const sql = `
+      SELECT
+        m.id,
+        m.created_at,
+        m.user_id,
+        m.client_id,
+        m.sku_id,
+        m.barcode,
+        m.qty,
+        m.from_location,
+        m.to_location,
+        m.movement_type,
+        m.ref_type,
+        m.ref_id,
+        m.comment
+      FROM wms.movements m
+      ${where}
+      ORDER BY m.created_at DESC, m.id DESC
+      LIMIT ${limitNum}
+      OFFSET ${offsetNum}
+    `;
+
+    console.log('[MOVEMENTS] WHERE:', where || '(no where)', 'VALUES:', values);
+
+    const r = await pool.query(sql, values);
+
+    return res.json({
+      status: 'ok',
+      client_id: clientIdNum || null,
+      filters: {
+        barcode: barcodeFilter || null,
+        sku_id: skuIdNum || null,
+        movement_type: movementTypeUsed || null,
+        ref_type: refTypeUsed || null,
+        ref_id: refIdUsed || null,
+        location_code: locationCodeFilter || null,
+        date_from: usedFrom || (date_from || null),
+        date_to: usedTo || (date_to || null),
+      },
+      limit: limitNum,
+      offset: offsetNum,
+      rows: r.rows,
+    });
+  } catch (err) {
+    console.error('Get movements error:', err);
+    return res.status(500).json({
+      error: 'Get movements error',
+      detail: err.message,
+      code: err.code,
+    });
+  }
+});
+
+
+// Утилита: нормализуем параметр даты в формат 'YYYY-MM-DD' без сюрпризов с часовыми поясами
+function normalizeDateParamToYmd(param) {
+  if (param === undefined || param === null) return null;
+
+  const raw = String(param).trim();
+  if (!raw) return null;
+
+  // Если простой формат 'YYYY-MM-DD' — считаем, что это локальная "календарная" дата и отдаем как есть
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  // Иначе пробуем распарсить как дату/ISO
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) {
+    return null;
+  }
+
+  // Берём UTC дату, это уже "лучше чем ничего" для экзотических форматов
+  return d.toISOString().slice(0, 10);
+}
+
+
+
+
+
+
+// ==============================
+//  REPORTS: ТЕСТОВЫЕ МАРШРУТЫ
+// ==============================
+
+// Простейший пинг без auth
+app.get('/reports/ping', (req, res) => {
+  console.log('HIT /reports/ping, path =', req.path, 'originalUrl =', req.originalUrl);
+  return res.json({ status: 'ok', path: req.path, originalUrl: req.originalUrl });
+});
+
+
+// ==============================
+//  REPORTS: PICKING SUMMARY
+//  GET /reports/picking-summary
+// ==============================
+//
+// Параметры:
+//   client_id  (обязательный, положительный int)
+//   picker_id  (опциональный, положительный int)
+//   date_from  (опциональный, YYYY-MM-DD или ISO — фильтр по DATE(m.created_at) >= date_from)
+//   date_to    (опциональный, YYYY-MM-DD или ISO — фильтр по DATE(m.created_at) <= date_to)
+//
+
+app.get('/reports/picking-summary', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const {
+      client_id,
+      picker_id,
+      date_from,
+      date_to,
+    } = req.query || {};
+
+    console.log('INCOMING REPORT picking-summary:', req.originalUrl);
+
+    // ---- client_id (обязательный) ----
+    const clientIdNum = Number(client_id);
+    if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+      return res.status(400).json({ error: 'client_id обязателен и должен быть положительным целым числом' });
+    }
+
+    const conditions = [
+      'm.client_id = $1',
+      "m.movement_type = 'writeoff'",
+      "m.ref_type = 'picking_task'",
+    ];
+    const values = [clientIdNum];
+    let idx = 2;
+
+    // ---- picker_id (опциональный) ----
+    let pickerIdNum = null;
+    if (picker_id !== undefined) {
+      pickerIdNum = Number(picker_id);
+      if (!Number.isInteger(pickerIdNum) || pickerIdNum <= 0) {
+        return res.status(400).json({ error: 'picker_id должен быть положительным целым числом' });
+      }
+      conditions.push(`m.user_id = $${idx}`);
+      values.push(pickerIdNum);
+      idx++;
+    }
+
+    // ---- date_from / date_to (по DATE(m.created_at)) ----
+    let dateFromStr = null;
+    let dateToStr   = null;
+
+    if (date_from !== undefined) {
+      const rawFrom = String(date_from).trim();
+      const df = rawFrom.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(df)) {
+        return res.status(400).json({ error: 'date_from должен быть в формате YYYY-MM-DD или ISO с этой датой' });
+      }
+      dateFromStr = df;
+      conditions.push(`DATE(m.created_at) >= $${idx}::date`);
+      values.push(df);
+      idx++;
+    }
+
+    if (date_to !== undefined) {
+      const rawTo = String(date_to).trim();
+      const dt = rawTo.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dt)) {
+        return res.status(400).json({ error: 'date_to должен быть в формате YYYY-MM-DD или ISO с этой датой' });
+      }
+      dateToStr = dt;
+      conditions.push(`DATE(m.created_at) <= $${idx}::date`);
+      values.push(dt);
+      idx++;
+    }
+
+    const whereSql = `WHERE ${conditions.join(' AND ')}`;
+
+    const sql = `
+      SELECT
+        TO_CHAR(DATE(m.created_at), 'YYYY-MM-DD') AS pick_date,
+        m.user_id                                 AS picker_id,
+        COUNT(DISTINCT m.ref_id)::int             AS tasks_count,
+        SUM(m.qty)::int                           AS items_picked,
+        AVG(m.qty::numeric)                       AS avg_items_per_task,
+        COALESCE(
+          SUM(m.qty * COALESCE(i.processing_fee, 0)),
+          0
+        ) AS total_processing_fee
+      FROM wms.movements m
+      LEFT JOIN masterdata.items i
+        ON i.id = m.sku_id
+      ${whereSql}
+      GROUP BY TO_CHAR(DATE(m.created_at), 'YYYY-MM-DD'), m.user_id
+      ORDER BY pick_date ASC, picker_id ASC
+    `;
+
+    console.log('[REPORT picking-summary] WHERE:', whereSql, 'VALUES:', values);
+
+    const r = await pool.query(sql, values);
+
+    return res.json({
+      status: 'ok',
+      client_id: clientIdNum,
+      filters: {
+        picker_id: pickerIdNum,
+        date_from: dateFromStr,
+        date_to: dateToStr,
+      },
+      rows: r.rows.map((row) => ({
+        date: row.pick_date,  // 'YYYY-MM-DD'
+        picker_id: row.picker_id,
+        tasks_count: Number(row.tasks_count) || 0,
+        items_picked: Number(row.items_picked) || 0,
+        avg_items_per_task: Number(row.avg_items_per_task) || 0,
+        total_processing_fee: row.total_processing_fee || '0',
+      })),
+    });
+  } catch (err) {
+    console.error('Error in GET /reports/picking-summary:', err);
+    return res.status(500).json({
+      error: 'Internal server error in /reports/picking-summary',
+      detail: err.message,
+      code: err.code,
+    });
+  }
+});
+
+// ==============================
+//  REPORTS: PICKING ROWS (детализация движений)
+//  GET /reports/picking-rows
+// ==============================
+//
+// Параметры:
+//   client_id  (обязательный, положительный int)
+//   picker_id  (опциональный, положительный int)
+//   date_from  (опциональный, YYYY-MM-DD, DATE(m.created_at) >= date_from)
+//   date_to    (опциональный, YYYY-MM-DD, DATE(m.created_at) <= date_to)
+//
+app.get('/reports/picking-rows', authRequired, requireRole('owner'), async (req, res) => {
+  try {
+    const {
+      client_id,
+      picker_id,
+      date_from,
+      date_to,
+    } = req.query || {};
+
+    // ---- client_id (обязательный) ----
+    const clientIdNum = Number(client_id);
+    if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+      return res.status(400).json({ error: 'client_id обязателен и должен быть положительным целым числом' });
+    }
+
+    const conditions = [
+      'm.client_id = $1',
+      "m.movement_type = 'writeoff'",
+      "m.ref_type = 'picking_task'",
+    ];
+    const values = [clientIdNum];
+    let idx = 2;
+
+    // ---- picker_id (опциональный) ----
+    let pickerIdNum = null;
+    if (picker_id !== undefined) {
+      pickerIdNum = Number(picker_id);
+      if (!Number.isInteger(pickerIdNum) || pickerIdNum <= 0) {
+        return res.status(400).json({ error: 'picker_id должен быть положительным целым числом' });
+      }
+      conditions.push(`m.user_id = $${idx}`);
+      values.push(pickerIdNum);
+      idx++;
+    }
+
+    // ---- date_from / date_to (YYYY-MM-DD, по DATE(m.created_at)) ----
+    let dateFromStr = null;
+    let dateToStr   = null;
+
+    if (date_from !== undefined) {
+      const dfStr = String(date_from).trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dfStr)) {
+        return res.status(400).json({ error: 'date_from должен быть в формате YYYY-MM-DD' });
+      }
+      dateFromStr = dfStr;
+      conditions.push(`DATE(m.created_at) >= $${idx}::date`);
+      values.push(dfStr);
+      idx++;
+    }
+
+    if (date_to !== undefined) {
+      const dtStr = String(date_to).trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dtStr)) {
+        return res.status(400).json({ error: 'date_to должен быть в формате YYYY-MM-DD' });
+      }
+      dateToStr = dtStr;
+      conditions.push(`DATE(m.created_at) <= $${idx}::date`);
+      values.push(dtStr);
+      idx++;
+    }
+
+    const whereSql = `WHERE ${conditions.join(' AND ')}`;
+
+    console.log('[REPORT picking-rows] WHERE:', whereSql, 'VALUES:', values);
+
+    const sql = `
+      SELECT
+        m.id,
+        m.created_at,
+        DATE(m.created_at)          AS pick_date,
+        m.user_id                   AS picker_id,
+        m.client_id,
+        m.sku_id,
+        m.barcode,
+        m.qty,
+        m.from_location,
+        m.to_location,
+        m.movement_type,
+        m.ref_type,
+        m.ref_id,
+        m.comment
+      FROM wms.movements m
+      ${whereSql}
+      ORDER BY pick_date ASC, m.user_id ASC, m.id ASC
+    `;
+
+    const r = await pool.query(sql, values);
+
+    return res.json({
+      status: 'ok',
+      client_id: clientIdNum,
+      filters: {
+        picker_id: pickerIdNum,
+        date_from: dateFromStr,
+        date_to: dateToStr,
+      },
+      rows: r.rows.map((row) => ({
+        id: row.id,
+        created_at: row.created_at,
+        date: row.pick_date,          // 'YYYY-MM-DD'
+        picker_id: row.picker_id,
+        client_id: row.client_id,
+        sku_id: row.sku_id,
+        barcode: row.barcode,
+        qty: row.qty,
+        from_location: row.from_location,
+        to_location: row.to_location,
+        movement_type: row.movement_type,
+        ref_type: row.ref_type,
+        ref_id: row.ref_id,
+        comment: row.comment,
+      })),
+    });
+  } catch (err) {
+    console.error('Error in GET /reports/picking-rows:', err);
+    return res.status(500).json({
+      error: 'Internal server error in /reports/picking-rows',
+      detail: err.message,
+      code: err.code,
+    });
+  }
+});
+
+
+// DEBUG: печать всех зарегистрированных маршрутов (Express 4/5 safe)
+function printRoutesSafe(appInstance) {
+  console.log('Registered routes:');
+
+  // Express 4 обычно: app._router.stack
+  // Express 5 может быть: app.router.stack
+  const stack =
+    (appInstance && appInstance._router && appInstance._router.stack) ||
+    (appInstance && appInstance.router && appInstance.router.stack) ||
+    null;
+
+  if (!stack) {
+    console.log('  (router stack is not available in this Express version / state)');
+    return;
+  }
+
+  stack
+    .filter((layer) => layer && layer.route && layer.route.path)
+    .forEach((layer) => {
+      const methods = layer.route.methods
+        ? Object.keys(layer.route.methods).map((m) => m.toUpperCase()).join(',')
+        : '';
+      console.log(`  ${methods} ${layer.route.path}`);
+    });
+}
+
+
+// ==============================
+// DEBUG: список зарегистрированных роутов
+// GET /debug/routes
+// ==============================
+app.get('/debug/routes', (req, res) => {
+  const list = [];
+
+  if (app._router && app._router.stack) {
+    app._router.stack.forEach((layer) => {
+      if (layer.route && layer.route.path) {
+        const methods = Object.keys(layer.route.methods)
+          .filter((m) => layer.route.methods[m])
+          .map((m) => m.toUpperCase());
+        list.push({
+          path: layer.route.path,
+          methods,
+        });
+      }
+    });
+  }
+
+  res.json({ routes: list });
+});
+
+
+/// ---------------- ЗАПУСК СЕРВЕРА ----------------
+const PORT = Number(process.env.PORT || 3000);
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server запущен на http://0.0.0.0:${PORT}`);
+
+  // Печать маршрутов после старта (safe)
+  try {
+    printRoutesSafe(app);
+  } catch (e) {
+    console.log('printRoutesSafe failed:', e?.message || e);
+  }
+});

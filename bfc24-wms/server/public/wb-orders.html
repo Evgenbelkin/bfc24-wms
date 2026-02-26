@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Заказы WB</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    .topbar {
+      background: #111827;
+      color: white;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .topbar-title { font-weight: 600; font-size: 16px; }
+    .topbar-sub   { font-size: 11px; opacity: 0.8; }
+    .btn-top {
+      padding: 4px 10px;
+      background: transparent;
+      color: white;
+      border: 1px solid #6b7280;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .page { padding: 10px; }
+
+    .card {
+      background: white;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .filters label { display: flex; align-items: center; gap: 4px; }
+    .filters input[type="text"],
+    .filters input[type="number"],
+    .filters input[type="date"],
+    .filters select {
+      padding: 3px 5px;
+      font-size: 12px;
+    }
+    .btn-main {
+      padding: 6px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+      border: none;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+    }
+    .btn-main:hover { background: #1d4ed8; }
+
+    .btn-fetch {
+      background: #f59e0b;
+      color: #111827;
+      font-weight: 600;
+    }
+    .btn-fetch:hover { background: #d97706; }
+
+    .btn-wave {
+      background:#16a34a;
+    }
+    .btn-wave:hover { background:#15803d; }
+
+    .status-line {
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    .summary-line {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #374151;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    thead {
+      background: #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    th, td {
+      border: 1px solid #d1d5db;
+      padding: 2px 4px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    tbody tr:nth-child(even) {
+      background: #f9fafb;
+    }
+    .table-wrapper {
+      max-height: calc(100vh - 210px);
+      overflow: auto;
+      margin-top: 6px;
+    }
+    .badge-status {
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      display: inline-block;
+    }
+    .badge-new {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .badge-confirm {
+      background: #fef9c3;
+      color: #854d0e;
+    }
+    .badge-shipped {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+    .badge-cancelled {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">Заказы WB (mp_wb_orders)</div>
+    <div class="topbar-sub" id="userInfo">Пользователь: ?</div>
+  </div>
+  <button class="btn-top" onclick="window.location.href='/menu.html'">← Меню</button>
+</div>
+
+<div class="page">
+
+  <div class="card">
+    <div class="filters">
+      <label>
+        Аккаунт WB:
+        <select id="accountId" style="min-width: 200px;">
+          <!-- заполним из /mp/accounts -->
+        </select>
+      </label>
+
+      <span id="accountInfo" style="font-size:11px; color:#4b5563;"></span>
+
+      <label>
+        Дата с:
+        <input type="date" id="dateFrom">
+      </label>
+
+      <label>
+        Дата по:
+        <input type="date" id="dateTo">
+      </label>
+
+      <label>
+        Статус:
+        <select id="statusFilter">
+          <option value="">Все</option>
+          <option value="new">Новый</option>
+          <option value="confirm">На сборке</option>
+          <option value="shipped">В доставке</option>
+          <option value="cancelled">Отменён</option>
+        </select>
+      </label>
+
+      <label>
+        Лимит (список/волна):
+        <input type="number" id="limit" min="1" max="500" value="200" style="width:90px;">
+      </label>
+
+      <label>
+        Лимит загрузки (WB→БД):
+        <input type="number" id="fetchLimit" min="1" max="1000" value="200" style="width:110px;">
+      </label>
+
+<label>
+  Лимит волны:
+  <input type="number" id="waveLimit" min="1" max="100" value="500" style="width:70px;">
+</label>
+
+
+      <button class="btn-main btn-fetch" id="btnFetch">Загрузить заказы в БД</button>
+      <button class="btn-main" id="btnLoad">Обновить список</button>
+      <button class="btn-main btn-wave" id="btnWave">Сформировать волну</button>
+    </div>
+
+    <div class="status-line" id="statusLine"></div>
+    <div class="summary-line" id="summaryLine"></div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrapper">
+      <table>
+        <thead>
+        <tr>
+          <th>#</th>
+          <th>Клиент</th>
+          <th>Аккаунт</th>
+          <th>WB заказ (orderId)</th>
+          <th>Поставка WB</th>
+          <th>Стикер (код)</th>
+          <th>SVG</th>
+          <th>Номенклатура WB (nmId)</th>
+          <th>Код размера (chrtId)</th>
+          <th>Артикул продавца</th>
+          <th>Штрихкод</th>
+          <th>Склад WB</th>
+          <th>Статус</th>
+          <th>Создан</th>
+          <!-- длинное поле wb_sticker НЕ показываем в таблице -->
+        </tr>
+        </thead>
+        <tbody id="ordersBody">
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// =========================
+//  ГЛОБАЛ
+// =========================
+let token = null;
+let role = null;
+let username = null;
+
+// словарь аккаунтов WB: { [id]: { id, label, ... } }
+const mpAccountsById = {};
+
+// =========================
+//  АВТОРИЗАЦИЯ
+// =========================
+function initAuth() {
+  token    = localStorage.getItem('wmsToken');
+  role     = localStorage.getItem('wmsRole');
+  username = localStorage.getItem('wmsUser');
+
+  if (!token) {
+    alert('Нет токена авторизации. Залогинься в меню.');
+    window.location.href = '/menu.html';
+    return false;
+  }
+
+  let displayUser = username || '?';
+  try {
+    const parsed = JSON.parse(username);
+    if (parsed && parsed.username) displayUser = parsed.username;
+  } catch (e) {}
+
+  document.getElementById('userInfo').textContent =
+    'Пользователь: ' + displayUser + ' (role: ' + (role || '?') + ')';
+
+  return true;
+}
+
+// =========================
+//  СТРОКА СТАТУСА
+// =========================
+function setStatus(text, isError = false) {
+  const el = document.getElementById('statusLine');
+  el.textContent = text || '';
+  el.style.color = isError ? '#dc2626' : '#111827';
+}
+
+function setSummary(text) {
+  const el = document.getElementById('summaryLine');
+  if (!el) return;
+  el.textContent = text || '';
+}
+
+// =========================
+//  УТИЛИТЫ
+// =========================
+function formatDateInput(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// WB-статус (fbs/new) можно просто показывать как есть
+function wbStatusRu(wbStatus) {
+  if (!wbStatus) return '';
+  if (wbStatus === 'fbs') return 'FBS';
+  return wbStatus;
+}
+
+// picking_status -> текст на русском
+function pickingStatusRu(pickingStatus) {
+  switch (pickingStatus) {
+    case 'new':         return 'Новое задание';
+    case 'in_progress': return 'В работе';
+    case 'done':        return 'Собрано';
+    case 'cancelled':   return 'Отменено';
+    default:            return 'Нет задания';
+  }
+}
+
+// picking_status -> css-класс бейджа
+function pickingStatusClass(pickingStatus) {
+  switch (pickingStatus) {
+    case 'new':         return 'badge-status badge-new';
+    case 'in_progress': return 'badge-status badge-confirm';
+    case 'done':        return 'badge-status badge-shipped';
+    case 'cancelled':   return 'badge-status badge-cancelled';
+    default:            return 'badge-status';
+  }
+}
+
+// =========================
+//  ПОДТЯГИВАЕМ СПИСОК WB-АККАУНТОВ
+// =========================
+async function loadMpAccounts() {
+  try {
+    const res = await fetch('/mp/accounts?marketplace=wb', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!res.ok) return;
+
+    const data = await res.json(); // массив
+    const select = document.getElementById('accountId');
+    if (!select) return;
+
+    // очищаем и добавляем пункт "Все аккаунты"
+    select.innerHTML = '';
+    const optAll = document.createElement('option');
+    optAll.value = '';
+    optAll.textContent = 'Все аккаунты';
+    select.appendChild(optAll);
+
+    data.forEach(acc => {
+      const idNum = Number(acc.id);
+      if (Number.isNaN(idNum)) return;
+      mpAccountsById[idNum] = acc;
+
+      const opt = document.createElement('option');
+      opt.value = String(idNum);
+      opt.textContent = `${acc.label || ('Аккаунт ' + idNum)} (ID ${idNum})`;
+      select.appendChild(opt);
+    });
+
+    // сразу ставим активный — твой "Мой кабинет ВБ", если он есть
+    Object.values(mpAccountsById).forEach(acc => {
+      if (acc.label === 'Мой кабинет ВБ') {
+        select.value = String(acc.id);
+      }
+    });
+
+  } catch (e) {
+    console.warn('loadMpAccounts error', e);
+  }
+}
+
+// =========================
+//  ЗАГРУЗИТЬ ЗАКАЗЫ WB -> В БД
+// =========================
+async function fetchOrdersToDB() {
+  try {
+    const accountId = document.getElementById('accountId').value;
+    const dateFrom  = document.getElementById('dateFrom').value;
+    const dateTo    = document.getElementById('dateTo').value;
+    const fetchLimit = Number(document.getElementById('fetchLimit').value || '200');
+
+    if (!accountId) {
+      alert('Выбери WB аккаунт (ID) перед загрузкой заказов в БД');
+      return;
+    }
+    if (!dateFrom || !dateTo) {
+      alert('Укажи Дата с / Дата по для загрузки заказов');
+      return;
+    }
+
+    setStatus(`Загружаю заказы WB в БД... (лимит=${fetchLimit})`);
+    setSummary('');
+
+    const body = {
+      client_mp_account_id: Number(accountId),
+      date_from: dateFrom,
+      date_to: dateTo,
+      limit: fetchLimit
+    };
+
+    // используем рабочий эндпоинт (как в curl)
+    const res = await fetch('/mp/wb/test-fetch-orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify(body)
+    });
+
+    let data = null;
+    try { data = await res.json(); } catch (e) {}
+
+    if (!res.ok) {
+      console.error('/mp/wb/test-fetch-orders error', data);
+      setStatus('Ошибка загрузки WB->БД: ' + (data && (data.details || data.error) ? (data.details || data.error) : res.status), true);
+      return;
+    }
+
+    const fetched = data.fetched ?? '';
+    const stored  = data.stored ?? '';
+    setStatus(`Загрузка WB->БД завершена. fetched=${fetched} stored=${stored}`);
+    await loadFromDB();
+
+  } catch (e) {
+    console.error(e);
+    setStatus('Ошибка: ' + e.message, true);
+  }
+}
+
+// =========================
+//  ЗАГРУЗКА WB-ЗАКАЗОВ ИЗ БД
+// =========================
+async function loadFromDB() {
+  const accountId = document.getElementById('accountId').value;
+  const dateFrom  = document.getElementById('dateFrom').value;
+  const dateTo    = document.getElementById('dateTo').value;
+  const limit     = document.getElementById('limit').value || '200';
+
+  const params = new URLSearchParams();
+  if (accountId) params.set('mp_account_id', accountId);
+  if (dateFrom)  params.set('date_from', dateFrom);
+  if (dateTo)    params.set('date_to', dateTo);
+  if (limit)     params.set('limit', limit);
+
+  setStatus('Загружаю заказы из БД...');
+  setSummary('');
+
+  const res = await fetch('/mp/wb/orders?' + params.toString(), {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (e) {
+    console.error('/mp/wb/orders JSON parse error', e);
+  }
+
+  if (!res.ok) {
+    console.error('/mp/wb/orders error', data);
+    setStatus('Ошибка загрузки из БД: ' +
+      (data && data.error ? data.error : res.status), true);
+    return;
+  }
+
+  let rows = [];
+  if (Array.isArray(data.rows)) rows = data.rows;
+  else if (Array.isArray(data)) rows = data;
+
+  renderTable(rows);
+
+  // summary
+  const total = data.count ?? rows.length;
+  const byPicking = rows.reduce((acc, r) => {
+    const st = r.picking_status || 'none';
+    acc[st] = (acc[st] || 0) + 1;
+    return acc;
+  }, {});
+
+  const parts = [`Всего: ${total}`];
+  if (byPicking.none)        parts.push(`Без задания: ${byPicking.none}`);
+  if (byPicking.new)         parts.push(`Новые: ${byPicking.new}`);
+  if (byPicking.in_progress) parts.push(`В работе: ${byPicking.in_progress}`);
+  if (byPicking.done)        parts.push(`Собрано: ${byPicking.done}`);
+
+  setStatus('Загрузка из БД завершена.');
+  setSummary(parts.join(' • '));
+
+  // подпись "Клиент / Аккаунт"
+  const infoEl = document.getElementById('accountInfo');
+  if (infoEl) {
+    if (accountId && mpAccountsById[Number(accountId)]) {
+      const label = mpAccountsById[Number(accountId)].label || ('Аккаунт ' + accountId);
+      infoEl.textContent = 'Клиент: ' + label + ' / Аккаунт: ' + label;
+    } else {
+      infoEl.textContent = 'Клиент: все / Аккаунт: все';
+    }
+  }
+}
+
+// =========================
+//  РЕНДЕР ТАБЛИЦЫ
+// =========================
+function renderTable(rows) {
+  const tbody = document.getElementById('ordersBody');
+  tbody.innerHTML = '';
+  if (!rows || !rows.length) return;
+
+  rows.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+
+    const created = row.created_at
+      ? new Date(row.created_at).toLocaleString('ru-RU')
+      : '';
+
+    const pickingClass = pickingStatusClass(row.picking_status);
+    const pickingText  = pickingStatusRu(row.picking_status);
+
+    const accId = Number(row.client_mp_account_id || row.mp_account_id || row.account_id || 0);
+    const accLabel = accId && mpAccountsById[accId]
+      ? (mpAccountsById[accId].label || ('Аккаунт ' + accId))
+      : (accId ? ('Аккаунт ' + accId) : '');
+
+    const clientName  = accLabel;
+    const accountName = accLabel;
+
+    const wbSupply = row.wb_supply_id || '';
+    const wbStickerCode = row.wb_sticker_code || '';
+
+    // SVG-кнопка: если есть wb_sticker (длинный svg/base64) — покажем кнопку, а не строку
+    const hasSticker = !!row.wb_sticker;
+    const svgBtn = hasSticker ? '<button type="button" class="btn-main" style="padding:2px 6px;font-size:11px;" onclick="downloadStickerSvg(' + (row.wb_order_id ?? '0') + ')">SVG</button>' : '—';
+
+    tr.innerHTML = `
+      <td>${idx + 1}</td>
+      <td>${clientName}</td>
+      <td>${accountName}</td>
+      <td>${row.wb_order_id ?? ''}</td>
+      <td>${wbSupply}</td>
+      <td>${wbStickerCode}</td>
+      <td>${svgBtn}</td>
+      <td>${row.nm_id ?? ''}</td>
+      <td>${row.chrt_id ?? ''}</td>
+      <td>${row.article ?? ''}</td>
+      <td>${row.barcode ?? ''}</td>
+      <td>${row.warehouse_name ?? ''}</td>
+      <td>
+        <div>${wbStatusRu(row.wb_status)}</div>
+        <div><span class="${pickingClass}">${pickingText}</span></div>
+      </td>
+      <td>${created}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// =========================
+//  СКАЧАТЬ SVG СТИКЕР (если бэк отдаёт wb_sticker в /mp/wb/orders)
+//  Если вдруг у тебя /mp/wb/orders wb_sticker не отдаёт — кнопка будет работать только после добавления.
+// =========================
+function downloadStickerSvg(orderId) {
+  // ВАЖНО: это заглушка “на будущее”.
+  // Сейчас мы не тянем wb_sticker по отдельному API-методу.
+  // Если хочешь — добавим эндпоинт: GET /mp/wb/orders/:id/sticker (возвращает svg)
+  alert('Нужно добавить эндпоинт на бэкенде для выдачи SVG по заказу. Сейчас кнопка-заглушка.');
+}
+
+// =========================
+//  КНОПКА "Сформировать волну"
+// =========================
+async function createWave() {
+  try {
+    const accountId = document.getElementById('accountId').value;
+    const waveLimit = Number(document.getElementById('waveLimit').value || '20');
+
+    if (!accountId) {
+      alert('Выбери WB аккаунт (ID) перед формированием волны');
+      return;
+    }
+
+    if (!Number.isInteger(waveLimit) || waveLimit <= 0 || waveLimit > 100) {
+      alert('Лимит волны должен быть числом от 1 до 100');
+      return;
+    }
+
+    setStatus('Формирую волну (создание заданий на сборку)...');
+
+    const body = {
+      mp_account_id: Number(accountId),
+      limit: waveLimit
+    };
+
+    const res = await fetch('/picking/generate-from-wb', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify(body)
+    });
+
+    let data = null;
+    try { data = await res.json(); } catch (e) {}
+
+    if (!res.ok) {
+      console.error('/picking/generate-from-wb error', data);
+      setStatus('Ошибка формирования волны: ' +
+        (data && data.details ? data.details : res.status), true);
+      return;
+    }
+
+    setStatus(data.message || 'Волна сформирована.');
+    if (data.summary) setSummary(data.summary);
+
+    await loadFromDB();
+  } catch (e) {
+    console.error(e);
+    setStatus('Ошибка: ' + e.message, true);
+  }
+}
+
+
+// =========================
+//  ИНИЦИАЛИЗАЦИЯ
+// =========================
+(async function initPage() {
+  if (!initAuth()) return;
+
+  const now = new Date();
+  const todayStr = formatDateInput(now);
+  document.getElementById('dateFrom').value = todayStr;
+  document.getElementById('dateTo').value   = todayStr;
+
+  document.getElementById('btnFetch').addEventListener('click', fetchOrdersToDB);
+  document.getElementById('btnLoad').addEventListener('click', loadFromDB);
+  document.getElementById('btnWave').addEventListener('click', createWave);
+
+  await loadMpAccounts();
+  await loadFromDB();
+})();
+</script>
+</body>
+</html>

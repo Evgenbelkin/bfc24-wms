@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Отгрузка</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #020617;
+      color: #111827;
+    }
+
+    header {
+      background: #020617;
+      color: #f9fafb;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid #111827;
+    }
+    header .title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    header .subtitle {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    header .right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    header a {
+      color: #9ca3af;
+      text-decoration: none;
+      font-size: 12px;
+    }
+    header a:hover { text-decoration: underline; }
+
+    main {
+      padding: 16px;
+      max-width: 960px;
+      margin: 0 auto 40px;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-subtitle {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 8px;
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .status-none {
+      background: #e5e7eb;
+      color: #4b5563;
+    }
+    .status-working {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .status-shipped {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .field-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .field-label {
+      color: #6b7280;
+      min-width: 90px;
+    }
+    .field-value {
+      font-weight: 500;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: transform 0.05s ease, box-shadow 0.05s ease, background 0.1s ease;
+    }
+    button:active {
+      transform: translateY(1px);
+      box-shadow: none;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 1px 2px rgba(37,99,235,0.4);
+    }
+    .btn-primary:disabled {
+      background: #93c5fd;
+      cursor: default;
+      box-shadow: none;
+    }
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+    }
+    th {
+      font-weight: 600;
+      background: #f9fafb;
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .empty-text {
+      font-size: 13px;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+    .footer-note {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 8px;
+    }
+    .error {
+      color: #b91c1c;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .success {
+      color: #166534;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 600px) {
+      main { padding: 8px; }
+      .card { padding: 12px; }
+      .field-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="title">BFC24 WMS — Отгрузка</div>
+    <div class="subtitle">Экран отгрузки (ТСД / ПК)</div>
+  </div>
+  <div class="right">
+    <a href="/menu.html">← В меню</a>
+    <span id="user-info"></span>
+  </div>
+</header>
+
+<main>
+  <!-- Текущее задание -->
+  <section class="card">
+    <div class="card-title">
+      Текущее задание
+      <span id="task-status" class="status-chip status-none">нет задания</span>
+    </div>
+    <div id="task-info">
+      <div class="card-subtitle">
+        Нажмите “Взять задание”, чтобы начать отгрузку.
+      </div>
+    </div>
+    <div class="btn-row">
+      <button id="btn-take-task" class="btn-primary">Взять задание</button>
+      <button id="btn-refresh-task" class="btn-secondary">Обновить</button>
+    </div>
+    <div id="task-message"></div>
+  </section>
+
+  <!-- Сканирование WG-кода отгрузки -->
+  <section class="card">
+    <div class="card-title">Сканирование WG-кода отгрузки</div>
+    <div class="card-subtitle">
+      Сканируйте штрихкод WG-... с листа поставки. После успешного скана отгрузка переводится
+      в статус «в доставке» и печатается QR поставки.
+    </div>
+
+    <div class="field-row" style="margin-bottom:8px;">
+      <div class="field-label">WG-код:</div>
+      <div class="field-value">
+        <input
+          id="wg-input"
+          type="text"
+          placeholder="Сканируйте WG-код"
+          style="padding:6px 8px;border-radius:6px;border:1px solid #d1d5db;min-width:220px;"
+        />
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="btn-confirm" class="btn-primary" disabled>Подтвердить отгрузку</button>
+    </div>
+
+    <div id="confirm-message"></div>
+    <!-- Превью QR поставки -->
+    <div id="qr-preview" style="margin-top:8px;"></div>
+  </section>
+
+  <!-- Состав отгрузки -->
+  <section class="card">
+    <div class="card-title">Состав отгрузки</div>
+    <div id="shipment-lines-wrapper">
+      <div class="empty-text">Задание не получено.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const API_BASE = '';
+  let currentShipment = null;
+  let currentLines = [];
+  let lastScannedWg = '';
+
+  function getToken() {
+    // Ищем JWT в localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      const value = localStorage.getItem(key);
+      if (typeof value === 'string' && value.split('.').length === 3) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  function localStatusText(status) {
+    if (!status) return '—';
+    switch (status) {
+      case 'new':        return 'new';
+      case 'packed':     return 'packed';
+      case 'shipping':   return 'shipping';
+      case 'in_transit': return 'в доставке';
+      default:           return status;
+    }
+  }
+
+  function setStatusNone() {
+    const chip = document.getElementById('task-status');
+    chip.textContent = 'нет задания';
+    chip.className = 'status-chip status-none';
+    document.getElementById('btn-take-task').disabled = false;
+    document.getElementById('btn-confirm').disabled = true;
+  }
+
+  function setStatusWorking() {
+    const chip = document.getElementById('task-status');
+    chip.textContent = 'в работе';
+    chip.className = 'status-chip status-working';
+    document.getElementById('btn-take-task').disabled = true;
+    document.getElementById('btn-confirm').disabled = false;
+  }
+
+  function setStatusShipped() {
+    const chip = document.getElementById('task-status');
+    chip.textContent = 'в доставке';
+    chip.className = 'status-chip status-shipped';
+    document.getElementById('btn-confirm').disabled = true;
+  }
+
+  function renderTaskInfo(shipment) {
+    const el = document.getElementById('task-info');
+
+    if (!shipment) {
+      el.innerHTML = '<div class="card-subtitle">Нажмите “Взять задание”, чтобы начать отгрузку.</div>';
+      setStatusNone();
+      return;
+    }
+
+    const wbCode = shipment.external_id || '—';
+    const mx = shipment.location_code || '—';
+
+    el.innerHTML = `
+      <div class="field-row">
+        <div class="field-label">Отгрузка:</div>
+        <div class="field-value">${wbCode}</div>
+      </div>
+      <div class="field-row">
+        <div class="field-label">MX:</div>
+        <div class="field-value">${mx}</div>
+      </div>
+      <div class="field-row">
+        <div class="field-label">Клиент:</div>
+        <div class="field-value">${shipment.client_id ?? '—'}</div>
+      </div>
+      <div class="field-row">
+        <div class="field-label">Статус:</div>
+        <div class="field-value">${localStatusText(shipment.status)}</div>
+      </div>
+    `;
+
+    if (shipment.status === 'in_transit') {
+      setStatusShipped();
+    } else {
+      setStatusWorking();
+    }
+  }
+
+  function renderLines() {
+    const wrapper = document.getElementById('shipment-lines-wrapper');
+    const lines = currentLines;
+
+    if (!lines || !lines.length) {
+      wrapper.innerHTML = '<div class="empty-text">Нет данных по составу отгрузки.</div>';
+      return;
+    }
+
+    const rowsHtml = lines.map(
+      (row) => `
+        <tr>
+          <td>${row.barcode || ''}</td>
+          <td>${row.item_name || ''}</td>
+          <td>${row.qty ?? ''}</td>
+        </tr>
+      `
+    ).join('');
+
+    wrapper.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Штрихкод</th>
+            <th>Наименование</th>
+            <th>Кол-во</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function apiRequest(path, options = {}) {
+    const token = getToken();
+    if (!token) {
+      throw new Error('Не найден токен авторизации. Перезайдите в систему.');
+    }
+
+    const headers = options.headers || {};
+    headers['Authorization'] = 'Bearer ' + token;
+    if (!headers['Content-Type'] && options.body) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const res = await fetch(API_BASE + path, {
+      ...options,
+      headers,
+    });
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = {};
+    }
+
+    if (!res.ok) {
+      const msg =
+        data.message ||
+        (res.status === 401 ? 'Ошибка авторизации (401)' : 'Ошибка запроса');
+      throw new Error(msg);
+    }
+
+    return data;
+  }
+
+  async function loadCurrentTask() {
+    const msgEl = document.getElementById('task-message');
+    const confirmMsgEl = document.getElementById('confirm-message');
+    const previewEl = document.getElementById('qr-preview');
+
+    msgEl.textContent = '';
+    msgEl.className = '';
+    confirmMsgEl.textContent = '';
+    confirmMsgEl.className = '';
+    if (previewEl) previewEl.innerHTML = '';
+
+    try {
+      const data = await apiRequest('/shipping/current', { method: 'GET' });
+      currentShipment = data.shipment || null;
+      currentLines = data.lines || [];
+      renderTaskInfo(currentShipment);
+      renderLines();
+    } catch (err) {
+      currentShipment = null;
+      currentLines = [];
+      renderTaskInfo(null);
+      renderLines();
+      msgEl.textContent = err.message;
+      msgEl.className = 'error';
+    }
+  }
+
+  async function takeTask() {
+    const msgEl = document.getElementById('task-message');
+    const confirmMsgEl = document.getElementById('confirm-message');
+    const previewEl = document.getElementById('qr-preview');
+
+    msgEl.textContent = '';
+    msgEl.className = '';
+    confirmMsgEl.textContent = '';
+    confirmMsgEl.className = '';
+    if (previewEl) previewEl.innerHTML = '';
+    lastScannedWg = '';
+    document.getElementById('wg-input').value = '';
+
+    try {
+      const data = await apiRequest('/shipping/next', { method: 'POST' });
+      currentShipment = data.shipment || null;
+      currentLines = data.lines || [];
+      renderTaskInfo(currentShipment);
+      renderLines();
+      msgEl.textContent = 'Задание получено.';
+      msgEl.className = 'success';
+    } catch (err) {
+      msgEl.textContent = err.message;
+      msgEl.className = 'error';
+    }
+  }
+
+  // Нормализуем base64 в полноценный src
+  function makeQrSrc(qrBase64) {
+    if (!qrBase64) return null;
+    let src = qrBase64;
+    // Если пришёл чистый base64 — добавим префикс
+    if (!/^data:image\//i.test(src)) {
+      src = 'data:image/png;base64,' + src;
+    }
+    return src;
+  }
+
+  // Печать настоящего WB-стикера
+  function openQrWindowAndPrint(qrBase64) {
+    const src = makeQrSrc(qrBase64);
+    if (!src) return;
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      alert('Браузер блокирует всплывающие окна, разрешите открытие окна для печати.');
+      return;
+    }
+
+    win.document.write(`
+      <html>
+        <head><title>QR поставки</title></head>
+        <body style="margin:0;display:flex;align-items:center;justify-content:center;">
+          <img src="${src}" style="max-width:100%;max-height:100%;" />
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
+  // Подтверждение отгрузки — строго только стикер от WB
+  async function confirmShipping() {
+    const msgEl = document.getElementById('confirm-message');
+    const previewEl = document.getElementById('qr-preview');
+    msgEl.textContent = '';
+    msgEl.className = '';
+    if (previewEl) previewEl.innerHTML = '';
+
+    if (!currentShipment) {
+      msgEl.textContent = 'Нет активного задания на отгрузку.';
+      msgEl.className = 'error';
+      return;
+    }
+
+    const wgInput = document.getElementById('wg-input');
+    const wgCode = (wgInput.value || '').trim();
+    if (!wgCode) {
+      msgEl.textContent = 'Сначала отсканируйте WG-код.';
+      msgEl.className = 'error';
+      return;
+    }
+
+    try {
+      const data = await apiRequest('/shipping/confirm', {
+        method: 'POST',
+        body: JSON.stringify({
+          shipment_id: currentShipment.id,
+          wg_code: wgCode,
+        }),
+      });
+
+      console.log('[shipping.html] /shipping/confirm response:', {
+        ok: data && data.ok,
+        hasQr: !!(data && data.qr_base64),
+        len: data && data.qr_base64 ? data.qr_base64.length : 0,
+        prefix: data && data.qr_base64 ? data.qr_base64.slice(0, 40) : null,
+      });
+
+      if (!data || !data.qr_base64) {
+        msgEl.textContent =
+          'WB не вернул стикер поставки. Проверь отгрузку в личном кабинете WB.';
+        msgEl.className = 'error';
+        return;
+      }
+
+      // Нормализованный src
+      const src = makeQrSrc(data.qr_base64);
+
+      // Превью QR на экране
+      if (previewEl && src) {
+        previewEl.innerHTML = `
+          <div style="margin-top:4px;">
+            <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">QR поставки:</div>
+            <img src="${src}" style="max-width:200px;max-height:200px;border:1px solid #e5e7eb;padding:4px;border-radius:4px;" />
+          </div>
+        `;
+      }
+
+      // Печать
+      openQrWindowAndPrint(data.qr_base64);
+
+      wgInput.value = '';
+      msgEl.textContent = 'Отгрузка подтверждена. Печатаем QR поставки...';
+      msgEl.className = 'success';
+
+      // Локально очищаем задачу (на бэке статус уже in_transit)
+      currentShipment = null;
+      currentLines = [];
+      renderTaskInfo(null);
+      renderLines();
+    } catch (err) {
+      msgEl.textContent = err.message || 'Ошибка подтверждения отгрузки.';
+      msgEl.className = 'error';
+      if (previewEl) previewEl.innerHTML = '';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document
+      .getElementById('btn-take-task')
+      .addEventListener('click', takeTask);
+    document
+      .getElementById('btn-refresh-task')
+      .addEventListener('click', loadCurrentTask);
+    document
+      .getElementById('btn-confirm')
+      .addEventListener('click', confirmShipping);
+
+    const wgInput = document.getElementById('wg-input');
+    wgInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        lastScannedWg = e.target.value;
+        confirmShipping();
+      }
+    });
+
+    loadCurrentTask();
+  });
+</script>
+</body>
+</html>

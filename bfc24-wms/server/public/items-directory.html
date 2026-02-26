@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Справочник товаров</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: #fff;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .topbar-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+
+    .topbar-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #374151;
+    }
+    .chip.ok { background: #16a34a; }
+    .chip.offline { background: #b91c1c; }
+    .chip-role { background: #4b5563; }
+
+    .btn-top {
+      border-radius: 999px;
+      border: 1px solid #6b7280;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .page { padding: 10px; }
+
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    h2 {
+      font-size: 14px;
+      margin: 0;
+    }
+
+    label {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 7px;
+      font-size: 13px;
+      margin-top: 3px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+    }
+
+    button {
+      margin-top: 8px;
+      padding: 9px;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+      width: 100%;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .btn-small {
+      font-size: 12px;
+      padding: 6px 8px;
+    }
+
+    .two-cols {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .three-cols {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .status {
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    .status.ok { color: #059669; }
+    .status.error { color: #dc2626; }
+
+    .hidden { display: none !important; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th, td {
+      border: 1px solid #e5e7eb;
+      padding: 4px 6px;
+      text-align: left;
+    }
+
+    th {
+      background: #f9fafb;
+      font-weight: 600;
+    }
+
+    tr:hover {
+      background: #f3f4ff;
+      cursor: pointer;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      background: #e5e7eb;
+    }
+    .badge-ok {
+      background: #d1fae5;
+      color: #047857;
+    }
+    .badge-off {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 11px;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 8px;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow: auto;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-row">
+      <div>
+        <div class="topbar-title">BFC24 WMS — Справочник товаров</div>
+        <div class="topbar-sub" id="userInfo">Загрузка...</div>
+      </div>
+      <div class="topbar-actions">
+        <span id="onlineChip" class="chip offline">offline</span>
+        <span id="roleChip" class="chip chip-role hidden"></span>
+        <button class="btn-top" onclick="window.location.href='/menu.html'">Меню</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page">
+    <!-- Фильтр -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Фильтр</h2>
+        <button id="btnReload" class="btn-secondary btn-small">Обновить список</button>
+      </div>
+      <div class="two-cols">
+        <label>
+          Клиент:
+          <select id="filterClientId"></select>
+        </label>
+        <label>
+          Поиск (barcode или часть названия):
+          <input type="text" id="filterSearch" placeholder="123456789 или 'бутылка'"/>
+        </label>
+      </div>
+      <div id="filterStatus" class="status"></div>
+    </div>
+
+    <!-- Форма товара -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Карточка товара</h2>
+        <button id="btnNewItem" class="btn-secondary btn-small">Новый товар</button>
+      </div>
+
+      <input type="hidden" id="itemId" />
+
+      <div class="three-cols">
+        <label>
+          Клиент:
+          <select id="itemClientId"></select>
+        </label>
+        <label>
+          Штрихкод (barcode):
+          <input type="text" id="itemBarcode" />
+        </label>
+        <label>
+          Наименование (item_name):
+          <input type="text" id="itemName" />
+        </label>
+      </div>
+
+      <div class="three-cols">
+        <label>
+          Артикул клиента (vendor_code):
+          <input type="text" id="itemVendorCode" />
+        </label>
+        <label>
+          Артикул WB (wb_vendor_code):
+          <input type="text" id="itemWbVendorCode" />
+        </label>
+        <label>
+          Бренд (brand):
+          <input type="text" id="itemBrand" />
+        </label>
+      </div>
+
+      <div class="three-cols">
+        <label>
+          Ед. изм. (unit):
+          <input type="text" id="itemUnit" placeholder="шт, л и т.п." />
+        </label>
+        <label>
+          Литраж (volume_liters):
+          <input type="number" step="0.001" id="itemVolumeLiters" />
+        </label>
+        <label>
+          Упаковка (needs_packaging):
+          <select id="itemNeedsPackaging">
+            <option value="">— не задано —</option>
+            <option value="false">Не нужна</option>
+            <option value="true">Нужна</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="three-cols">
+        <label>
+          Себестоимость (cost_price, ₽):
+          <input type="number" step="0.01" id="itemCostPrice" />
+        </label>
+        <label>
+          Тариф/комиссия за обработку (processing_fee, ₽):
+          <input type="number" step="0.01" id="itemProcessingFee" />
+        </label>
+        <label>
+          Активен (is_active):
+          <select id="itemIsActive">
+            <option value="true" selected>Да</option>
+            <option value="false">Нет</option>
+          </select>
+        </label>
+      </div>
+
+      <button id="btnSaveItem" class="btn-primary">Сохранить товар</button>
+      <div id="itemStatus" class="status"></div>
+    </div>
+
+    <!-- Список товаров -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Список товаров</h2>
+        <span id="itemsCount" style="font-size:12px;color:#6b7280;"></span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="itemsTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Клиент</th>
+              <th>Штрихкод</th>
+              <th>Наименование</th>
+              <th>Артикул клиента</th>
+              <th>Артикул WB</th>
+              <th>Ед. изм.</th>
+              <th>Литраж, л</th>
+              <th>Упаковка</th>
+              <th>Себестоимость, ₽</th>
+              <th>Тариф обработки, ₽</th>
+              <th>Активен</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Загрузка из CSV -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Загрузка из файла (CSV из Excel)</h2>
+      </div>
+      <p style="font-size:12px;">
+        1. В Excel сделай таблицу и <b>сохрани как CSV (разделители точка с запятой ;)</b>.<br/>
+        2. В первой строке должны быть заголовки (любая последовательность):<br/>
+        <code>client_id;barcode;item_name;vendor_code;wb_vendor_code;brand;unit;volume_liters;needs_packaging;cost_price;processing_fee</code><br/>
+        3. Мы для каждой строки попробуем сделать <b>POST /items</b> (новый товар). При конфликте (дубликат) будет показана ошибка.
+      </p>
+      <input type="file" id="csvFile" accept=".csv" />
+      <button id="btnUploadCsv" class="btn-secondary">Загрузить CSV в справочник</button>
+      <div id="csvStatus" class="status"></div>
+      <pre id="csvLog" class="hidden"></pre>
+    </div>
+  </div>
+
+  <script>
+    let token = null;
+    let usernameGlobal = null;
+    let userRole = null;
+    let currentItems = [];
+    let clientsCache = [];
+
+    // === ТОПБАР ===
+    function initTopbar() {
+      token = localStorage.getItem('wmsToken');
+      usernameGlobal = localStorage.getItem('wmsUser') || null;
+      userRole = localStorage.getItem('wmsRole') || null;
+
+      const onlineChip = document.getElementById('onlineChip');
+      const roleChip = document.getElementById('roleChip');
+
+      if (token) {
+        onlineChip.textContent = 'online';
+        onlineChip.className = 'chip ok';
+      } else {
+        onlineChip.textContent = 'offline';
+        onlineChip.className = 'chip offline';
+      }
+
+      const userInfo = document.getElementById('userInfo');
+      if (usernameGlobal) {
+        userInfo.textContent = 'Пользователь: ' + usernameGlobal;
+      } else {
+        userInfo.textContent = 'Нет данных пользователя (зайди через меню).';
+      }
+
+      if (userRole) {
+        roleChip.textContent = 'role: ' + userRole;
+        roleChip.classList.remove('hidden');
+      } else {
+        roleChip.classList.add('hidden');
+      }
+    }
+
+    function setStatus(elId, text, ok) {
+      const el = document.getElementById(elId);
+      el.textContent = text || '';
+      if (!text) {
+        el.className = 'status';
+      } else {
+        el.className = 'status ' + (ok ? 'ok' : 'error');
+      }
+    }
+
+    function apiHeaders(extra) {
+      const headers = extra ? { ...extra } : {};
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return headers;
+    }
+
+    async function apiGetJson(url) {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: apiHeaders(),
+      });
+
+      let data = {};
+      try { data = await res.json(); } catch (e) { data = {}; }
+
+      if (!res.ok) {
+        const parts = [];
+        if (data.error) parts.push(data.error);
+        if (data.detail) parts.push(data.detail);
+        const msg = parts.length ? parts.join(': ') : ('HTTP ' + res.status);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    async function apiPostJson(url, body, method = 'POST') {
+      const res = await fetch(url, {
+        method,
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const parts = [];
+        if (data.error) parts.push(data.error);
+        if (data.detail) parts.push(data.detail);
+        const msg = parts.length ? parts.join(': ') : ('HTTP ' + res.status);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    // === СПИСОК КЛИЕНТОВ ===
+    async function loadClientsList() {
+      const filterSelect = document.getElementById('filterClientId');
+      const itemSelect = document.getElementById('itemClientId');
+
+      filterSelect.innerHTML = '';
+      itemSelect.innerHTML = '';
+
+      if (!token) {
+        setStatus('filterStatus', 'Нет токена. Зайди через /menu.html', false);
+        return;
+      }
+
+      try {
+        const data = await apiGetJson('/clients-short');
+        const clients = data.clients || data.rows || [];
+        clientsCache = clients;
+
+        // Фильтр: "все клиенты"
+        const optAll = document.createElement('option');
+        optAll.value = '';
+        optAll.textContent = '— все клиенты —';
+        filterSelect.appendChild(optAll);
+
+        // Клиенты
+        clients.forEach(c => {
+          const label = `${c.id} — ${c.client_name || 'без названия'}`;
+
+          const optFilter = document.createElement('option');
+          optFilter.value = String(c.id);
+          optFilter.textContent = label;
+          filterSelect.appendChild(optFilter);
+
+          const optItem = document.createElement('option');
+          optItem.value = String(c.id);
+          optItem.textContent = label;
+          itemSelect.appendChild(optItem);
+        });
+
+        const storedId = localStorage.getItem('wmsClientId');
+        const hasStored = storedId && clients.some(c => String(c.id) === storedId);
+
+        // Фильтр: если есть сохранённый client_id — выберем его, иначе "все клиенты"
+        if (hasStored) {
+          filterSelect.value = storedId;
+        } else {
+          filterSelect.value = '';
+        }
+
+        // Форма товара: либо сохранённый клиент, либо первый из списка
+        if (hasStored) {
+          itemSelect.value = storedId;
+        } else if (clients.length > 0) {
+          itemSelect.value = String(clients[0].id);
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus('filterStatus', 'Ошибка загрузки клиентов: ' + err.message, false);
+      }
+    }
+
+    // === СПИСОК ТОВАРОВ ===
+    async function loadItems() {
+      const filterSelect = document.getElementById('filterClientId');
+      const clientIdStr = filterSelect.value; // '' либо id
+      const search = document.getElementById('filterSearch').value.trim();
+
+      if (!token) {
+        setStatus('filterStatus', 'Нет токена. Зайди через /menu.html', false);
+        return;
+      }
+
+      // сохраняем выбранного клиента, если он конкретный
+      if (clientIdStr) {
+        localStorage.setItem('wmsClientId', clientIdStr);
+        const cidNum = Number(clientIdStr);
+        const foundClient = clientsCache.find(c => c.id === cidNum);
+        if (foundClient) {
+          localStorage.setItem('wmsClientName', foundClient.client_name || '');
+        }
+      } else {
+        localStorage.removeItem('wmsClientId');
+        localStorage.removeItem('wmsClientName');
+      }
+
+      setStatus('filterStatus', 'Загружаю...', false);
+
+      try {
+        let url = '/items';
+        const params = [];
+
+        if (clientIdStr) {
+          const clientId = Number(clientIdStr);
+          if (!clientId || clientId <= 0) {
+            setStatus('filterStatus', 'client_id должен быть > 0', false);
+            return;
+          }
+          params.push(`client_id=${clientId}`);
+        }
+
+        if (search) {
+          // пока используем тот же параметр, что и раньше
+          params.push(`barcode=${encodeURIComponent(search)}`);
+        }
+
+        if (params.length) {
+          url += '?' + params.join('&');
+        }
+
+        const data = await apiGetJson(url);
+        const items = (data.items || data.rows || data.data || []);
+        currentItems = items;
+        renderItemsTable(items);
+
+        setStatus('filterStatus', `Готово: найдено ${items.length} строк.`, true);
+      } catch (err) {
+        console.error(err);
+        setStatus('filterStatus', 'Ошибка загрузки: ' + err.message, false);
+      }
+    }
+
+    function renderItemsTable(items) {
+      const tbody = document.querySelector('#itemsTable tbody');
+      tbody.innerHTML = '';
+
+      items.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.dataset.id = item.id;
+
+        const needsPackaging =
+          item.needs_packaging === true || item.needs_packaging === 'true';
+        const isActive =
+          item.is_active !== false && item.is_active !== 'false';
+
+        const clientLabel = item.client_name
+          ? item.client_name
+          : (item.client_id != null ? `ID ${item.client_id}` : '');
+
+        tr.innerHTML = `
+          <td>${item.id ?? ''}</td>
+          <td>${clientLabel}</td>
+          <td>${item.barcode ?? ''}</td>
+          <td>${item.item_name ?? ''}</td>
+          <td>${item.vendor_code ?? ''}</td>
+          <td>${item.wb_vendor_code ?? ''}</td>
+          <td>${item.unit ?? ''}</td>
+          <td>${item.volume_liters ?? ''}</td>
+          <td>${needsPackaging ? '<span class="badge badge-ok">нужна</span>' : '<span class="badge">не нужна</span>'}</td>
+          <td>${item.cost_price ?? ''}</td>
+          <td>${item.processing_fee ?? ''}</td>
+          <td>${isActive ? '<span class="badge badge-ok">on</span>' : '<span class="badge badge-off">off</span>'}</td>
+        `;
+
+        tr.addEventListener('click', () => fillFormFromItem(item));
+        tbody.appendChild(tr);
+      });
+
+      const countEl = document.getElementById('itemsCount');
+      countEl.textContent = `Показано ${items.length} товаров`;
+    }
+
+    function clearItemForm() {
+      document.getElementById('itemId').value = '';
+
+      const filterSelect = document.getElementById('filterClientId');
+      const itemSelect = document.getElementById('itemClientId');
+
+      // в форме клиента ставим выбранный в фильтре, если он не "все"
+      if (filterSelect.value) {
+        itemSelect.value = filterSelect.value;
+      } else if (clientsCache.length > 0) {
+        itemSelect.value = String(clientsCache[0].id);
+      }
+
+      document.getElementById('itemBarcode').value = '';
+      document.getElementById('itemName').value = '';
+      document.getElementById('itemVendorCode').value = '';
+      document.getElementById('itemWbVendorCode').value = '';
+      document.getElementById('itemBrand').value = '';
+      document.getElementById('itemUnit').value = '';
+      document.getElementById('itemVolumeLiters').value = '';
+      document.getElementById('itemNeedsPackaging').value = '';
+      document.getElementById('itemCostPrice').value = '';
+      document.getElementById('itemProcessingFee').value = '';
+      document.getElementById('itemIsActive').value = 'true';
+      setStatus('itemStatus', '', false);
+    }
+
+    function fillFormFromItem(item) {
+      document.getElementById('itemId').value = item.id ?? '';
+      document.getElementById('itemClientId').value =
+        item.client_id != null ? String(item.client_id) : '';
+      document.getElementById('itemBarcode').value = item.barcode ?? '';
+      document.getElementById('itemName').value = item.item_name ?? '';
+      document.getElementById('itemVendorCode').value = item.vendor_code ?? '';
+      document.getElementById('itemWbVendorCode').value = item.wb_vendor_code ?? '';
+      document.getElementById('itemBrand').value = item.brand ?? '';
+      document.getElementById('itemUnit').value = item.unit ?? '';
+      document.getElementById('itemVolumeLiters').value = item.volume_liters ?? '';
+
+      const needsPackaging =
+        item.needs_packaging === true || item.needs_packaging === 'true';
+      document.getElementById('itemNeedsPackaging').value =
+        needsPackaging ? 'true' : 'false';
+
+      document.getElementById('itemCostPrice').value = item.cost_price ?? '';
+      document.getElementById('itemProcessingFee').value = item.processing_fee ?? '';
+
+      const isActive =
+        item.is_active !== false && item.is_active !== 'false';
+      document.getElementById('itemIsActive').value = isActive ? 'true' : 'false';
+
+      setStatus('itemStatus', 'Режим редактирования существующего товара.', true);
+    }
+
+    async function saveItem() {
+      const id = document.getElementById('itemId').value || null;
+      const clientId = Number(document.getElementById('itemClientId').value || '0');
+      const barcode = document.getElementById('itemBarcode').value.trim();
+      const itemName = document.getElementById('itemName').value.trim();
+
+      if (!clientId || clientId <= 0) {
+        setStatus('itemStatus', 'client_id должен быть > 0', false);
+        return;
+      }
+      if (!barcode) {
+        setStatus('itemStatus', 'barcode обязателен', false);
+        return;
+      }
+      if (!itemName) {
+        setStatus('itemStatus', 'item_name обязателен', false);
+        return;
+      }
+      if (!token) {
+        setStatus('itemStatus', 'Нет токена. Зайди через /menu.html', false);
+        return;
+      }
+
+      const payload = {
+        client_id: clientId,
+        barcode,
+        item_name: itemName,
+        vendor_code: document.getElementById('itemVendorCode').value.trim() || null,
+        wb_vendor_code: document.getElementById('itemWbVendorCode').value.trim() || null,
+        brand: document.getElementById('itemBrand').value.trim() || null,
+        unit: document.getElementById('itemUnit').value.trim() || null,
+      };
+
+      const volStr = document.getElementById('itemVolumeLiters').value.trim();
+      if (volStr) payload.volume_liters = Number(volStr);
+
+      const needs = document.getElementById('itemNeedsPackaging').value;
+      if (needs === 'true') payload.need_packaging = true;
+      if (needs === 'false') payload.need_packaging = false;
+
+      const costStr = document.getElementById('itemCostPrice').value.trim();
+      if (costStr) payload.cost_price = Number(costStr);
+
+      const feeStr = document.getElementById('itemProcessingFee').value.trim();
+      if (feeStr) payload.processing_fee = Number(feeStr);
+
+      const isActiveVal = document.getElementById('itemIsActive').value;
+      if (isActiveVal === 'true') payload.is_active = true;
+      if (isActiveVal === 'false') payload.is_active = false;
+
+      setStatus('itemStatus', 'Сохраняю...', false);
+
+      try {
+        if (id) {
+          await apiPostJson(`/items/${id}`, payload, 'PATCH');
+        } else {
+          await apiPostJson('/items', payload, 'POST');
+        }
+        setStatus('itemStatus', 'Сохранено успешно.', true);
+        await loadItems();
+      } catch (err) {
+        console.error(err);
+        setStatus('itemStatus', 'Ошибка сохранения: ' + err.message, false);
+      }
+    }
+
+    // === CSV === (без логики изменения)
+    function parseCsv(text) {
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+      if (lines.length < 2) return { headers: [], rows: [] };
+
+      const delimiter = ';';
+      const headers = lines[0].split(delimiter).map(h => h.trim());
+      const rows = lines.slice(1).map(line => {
+        const cols = line.split(delimiter).map(c => c.trim());
+        const obj = {};
+        headers.forEach((h, i) => { obj[h] = cols[i] ?? ''; });
+        return obj;
+      });
+      return { headers, rows };
+    }
+
+    function col(obj, name) {
+      return (obj[name] ?? '').trim();
+    }
+
+    async function uploadCsv() {
+      const fileInput = document.getElementById('csvFile');
+      const file = fileInput.files[0];
+      if (!file) {
+        setStatus('csvStatus', 'Выберите CSV-файл.', false);
+        return;
+      }
+      if (!token) {
+        setStatus('csvStatus', 'Нет токена. Зайди через /menu.html', false);
+        return;
+      }
+
+      setStatus('csvStatus', 'Читаю файл...', false);
+      const logEl = document.getElementById('csvLog');
+      logEl.classList.remove('hidden');
+      logEl.textContent = '';
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const text = e.target.result;
+          const { headers, rows } = parseCsv(text);
+          if (!headers.length || !rows.length) {
+            setStatus('csvStatus', 'Файл пустой или без строк.', false);
+            return;
+          }
+
+          logEl.textContent += 'Заголовки: ' + headers.join(', ') + '\n';
+          let okCount = 0;
+          let errCount = 0;
+
+          for (let i = 0; i < rows.length; i++) {
+            const r = rows[i];
+
+            const clientId = Number(col(r, 'client_id') || '0');
+            const barcode = col(r, 'barcode');
+            const itemName = col(r, 'item_name');
+
+            if (!clientId || !barcode || !itemName) {
+              errCount++;
+              logEl.textContent += `Строка ${i+2}: пропуск (нет client_id/barcode/item_name)\n`;
+              continue;
+            }
+
+            const payload = {
+              client_id: clientId,
+              barcode,
+              item_name: itemName,
+              vendor_code: col(r, 'vendor_code') || null,
+              wb_vendor_code: col(r, 'wb_vendor_code') || null,
+              brand: col(r, 'brand') || null,
+              unit: col(r, 'unit') || null,
+            };
+
+            const volStr = col(r, 'volume_liters');
+            if (volStr) payload.volume_liters = Number(volStr.replace(',', '.'));
+
+            const np = col(r, 'needs_packaging').toLowerCase();
+            if (np === 'true' || np === '1' || np === 'yes' || np === 'да') payload.need_packaging = true;
+            else if (np === 'false' || np === '0' || np === 'no' || np === 'нет') payload.need_packaging = false;
+
+            const costStr = col(r, 'cost_price');
+            if (costStr) payload.cost_price = Number(costStr.replace(',', '.'));
+
+            const feeStr = col(r, 'processing_fee');
+            if (feeStr) payload.processing_fee = Number(feeStr.replace(',', '.'));
+
+            try {
+              await apiPostJson('/items', payload, 'POST');
+              okCount++;
+            } catch (err) {
+              errCount++;
+              logEl.textContent += `Строка ${i+2}: ошибка: ${err.message}\n`;
+            }
+          }
+
+          setStatus('csvStatus', `Импорт завершён. Успешно: ${okCount}, ошибок: ${errCount}. См. лог ниже.`, errCount === 0);
+          await loadItems();
+        } catch (err) {
+          console.error(err);
+          setStatus('csvStatus', 'Ошибка обработки файла: ' + err.message, false);
+        }
+      };
+      reader.onerror = () => {
+        setStatus('csvStatus', 'Ошибка чтения файла.', false);
+      };
+      reader.readAsText(file, 'utf-8');
+    }
+
+    (async function init() {
+      initTopbar();
+
+      document.getElementById('btnReload').addEventListener('click', loadItems);
+      document.getElementById('btnNewItem').addEventListener('click', clearItemForm);
+      document.getElementById('btnSaveItem').addEventListener('click', saveItem);
+      document.getElementById('btnUploadCsv').addEventListener('click', uploadCsv);
+      document.getElementById('filterClientId').addEventListener('change', () => {
+        const filterSelect = document.getElementById('filterClientId');
+        // при смене клиента в фильтре, если это не "все", подставляем в форму
+        if (filterSelect.value) {
+          document.getElementById('itemClientId').value = filterSelect.value;
+        }
+        loadItems();
+      });
+
+      await loadClientsList();
+      clearItemForm();
+      await loadItems();
+    })();
+  </script>
+</body>
+</html>
+

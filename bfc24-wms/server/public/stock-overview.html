@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Склад (общий обзор)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: #fff;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .topbar-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .topbar-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .topbar-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #374151;
+    }
+    .chip.ok      { background: #16a34a; }
+    .chip.offline { background: #b91c1c; }
+    .chip-role    { background: #4b5563; }
+
+    .btn-top {
+      border-radius: 999px;
+      border: 1px solid #6b7280;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .page {
+      padding: 10px;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    h2 {
+      font-size: 14px;
+      margin: 0 0 6px 0;
+    }
+
+    label {
+      font-size: 12px;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 6px;
+      font-size: 13px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37,99,235,0.2);
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .filters-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: center;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .filters-row label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 0;
+      font-size: 12px;
+    }
+
+    button.main {
+      width: 100%;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 9px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+
+    .status-text {
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .status-text.ok    { color: #059669; }
+    .status-text.error { color: #b91c1c; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    thead {
+      background: #f9fafb;
+    }
+
+    th, td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 4px 6px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    .qty-pos { color: #16a34a; }
+    .qty-zero { color: #6b7280; }
+    .qty-neg { color: #b91c1c; }
+
+    .badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+    }
+    .badge-ok      { background: #dcfce7; color: #166534; }
+    .badge-warn    { background: #fef9c3; color: #92400e; }
+    .badge-error   { background: #fee2e2; color: #b91c1c; }
+
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 11px;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 8px;
+      border-radius: 8px;
+      max-height: 220px;
+      overflow: auto;
+      margin: 0;
+    }
+
+    .summary-row {
+      font-size: 11px;
+      margin-top: 4px;
+      color: #6b7280;
+      text-align: right;
+    }
+
+    @media (max-width: 768px) {
+      .grid-3 { grid-template-columns: 1fr; }
+      th, td { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Топбар -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title">BFC24 WMS — Склад (общий обзор)</div>
+      <div class="topbar-sub" id="userInfo">Не авторизован</div>
+    </div>
+    <div class="topbar-actions">
+      <span id="onlineChip" class="chip offline">offline</span>
+      <span id="roleChip" class="chip chip-role" style="display:none;"></span>
+      <button class="btn-top" id="btnMenu">Меню</button>
+    </div>
+  </div>
+
+  <div class="page">
+    <!-- Фильтр -->
+    <div class="card">
+      <h2>Фильтр</h2>
+
+      <div class="grid-3">
+        <div>
+          <label for="clientId">Клиент:</label>
+          <select id="clientId">
+            <option value="">(все клиенты)</option>
+          </select>
+        </div>
+        <div>
+          <label for="barcode">Штрихкод (barcode):</label>
+          <input id="barcode" type="text" placeholder="4600..." />
+        </div>
+        <div>
+          <label for="locationCode">Ячейка (location_code):</label>
+          <input id="locationCode" type="text" placeholder="A-01-01" />
+        </div>
+      </div>
+
+      <div class="filters-row">
+        <label><input id="hideZero" type="checkbox" /> скрыть нулевые остатки</label>
+        <label><input id="onlyActiveItems" type="checkbox" /> только активные товары</label>
+        <label><input id="onlyActiveSku" type="checkbox" /> только активные SKU</label>
+        <label><input id="onlyActiveMx" type="checkbox" /> только активные МХ</label>
+      </div>
+
+      <button id="btnShowStock" class="main">Показать склад</button>
+      <div id="filterStatus" class="status-text"></div>
+    </div>
+
+    <!-- Таблица склада -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <h2>Остатки по складу</h2>
+        <div id="stockSummary" class="summary-row"></div>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Клиент</th>
+              <th>Штрихкод</th>
+              <th>SKU</th>
+              <th>Наименование</th>
+              <th>Ед.</th>
+              <th>Литраж</th>
+              <th>Упаковка</th>
+              <th>МХ</th>
+              <th>Остаток</th>
+              <th>Статусы</th>
+            </tr>
+          </thead>
+          <tbody id="stockBody">
+            <tr><td colspan="10">Нет данных.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Отладка -->
+    <div class="card">
+      <h2>Отладка</h2>
+      <pre id="debugBox">{}</pre>
+    </div>
+  </div>
+
+  <script>
+  let token = null;
+  let usernameGlobal = null;
+  let userRole = null;
+  let clientsCache = [];
+
+  // ---------------- ТОПБАР ----------------
+  function setOnlineState(ok) {
+    const chip = document.getElementById('onlineChip');
+    chip.textContent = ok ? 'online' : 'offline';
+    chip.className = 'chip ' + (ok ? 'ok' : 'offline');
+  }
+
+  function setUserInfo(text) {
+    document.getElementById('userInfo').textContent = text;
+  }
+
+  function setRoleChip(role) {
+    const chip = document.getElementById('roleChip');
+    if (!chip) return;
+    if (!role) {
+      chip.style.display = 'none';
+      return;
+    }
+    chip.textContent = 'role: ' + role;
+    chip.style.display = 'inline-block';
+  }
+
+  function setFilterStatus(text, ok) {
+    const el = document.getElementById('filterStatus');
+    el.textContent = text || '';
+    el.className = 'status-text' + (text ? (' ' + (ok ? 'ok' : 'error')) : '');
+  }
+
+  function setDebug(obj) {
+    const el = document.getElementById('debugBox');
+    if (!el) return;
+    try {
+      el.textContent = JSON.stringify(obj, null, 2);
+    } catch (e) {
+      el.textContent = String(obj);
+    }
+  }
+
+  function renderStockTable(rows) {
+    const tbody = document.getElementById('stockBody');
+    if (!tbody) return;
+
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10">Нет данных.</td></tr>';
+      const summary = document.getElementById('stockSummary');
+      if (summary) summary.textContent = 'Строк: 0, суммарный остаток: 0';
+      return;
+    }
+
+    let totalQty = 0;
+    const html = rows.map((row) => {
+      const qty = Number(row.qty || 0);
+      totalQty += qty;
+
+      let qtyClass = 'qty-zero';
+      if (qty > 0) qtyClass = 'qty-pos';
+      if (qty < 0) qtyClass = 'qty-neg';
+
+      const itemName = row.item_name || '';
+      const unit = row.unit || '';
+      const vol = (row.volume_liters != null)
+        ? Number(row.volume_liters).toFixed(2)
+        : '';
+
+      let packText = '';
+      if (row.need_packaging === true) packText = 'нужна';
+      else if (row.need_packaging === false) packText = 'не нужна';
+
+      const statusFlags = [];
+      if (!row.item_name) statusFlags.push('нет в справочнике');
+      if (row.item_active === false) statusFlags.push('товар выкл');
+      if (row.sku_active === false) statusFlags.push('SKU выкл');
+      if (row.location_active === false) statusFlags.push('МХ выкл');
+
+      let statusBadgeClass = 'badge-ok';
+      if (statusFlags.length > 0) {
+        statusBadgeClass = statusFlags.some(s => /выкл|нет/.test(s))
+          ? 'badge-warn'
+          : 'badge-ok';
+      }
+      const statusText = statusFlags.length ? statusFlags.join(', ') : 'ok';
+
+           const clientText = row.client_name
+        ? `${row.client_id ?? ''} — ${row.client_name}`
+        : (row.client_id ?? '');
+
+      // приоритет: ШК из SKU, потом из stock, потом что угодно в "barcode"
+      const skuBarcode =
+        row.sku_barcode ??
+        row.stock_barcode ??
+        row.barcode ??
+        '';
+
+
+      return `
+        <tr>
+          <td>${clientText}</td>
+          <td>${skuBarcode}</td>
+          <td>${row.sku_id ?? ''}</td>
+          <td>${itemName}</td>
+          <td>${unit}</td>
+          <td>${vol}</td>
+          <td>${packText}</td>
+          <td>${row.location_code ?? ''}</td>
+          <td class="${qtyClass}">${qty}</td>
+          <td><span class="badge ${statusBadgeClass}">${statusText}</span></td>
+        </tr>
+      `;
+
+    }).join('');
+
+    tbody.innerHTML = html;
+
+    const summary = document.getElementById('stockSummary');
+    if (summary) {
+      summary.textContent =
+        'Строк: ' + rows.length + ', суммарный остаток: ' + totalQty;
+    }
+  }
+
+  function apiHeaders(extra) {
+    const headers = extra ? { ...extra } : {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    return headers;
+  }
+
+  async function apiGetJson(url) {
+    const res = await fetch(url, { headers: apiHeaders() });
+    let data = {};
+    try { data = await res.json(); } catch (e) { data = {}; }
+
+    if (!res.ok) {
+      const parts = [];
+      if (data.error) parts.push(data.error);
+      if (data.detail) parts.push(data.detail);
+      const msg = parts.length ? parts.join(': ') : ('HTTP ' + res.status);
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  // -------- Загрузка клиентов в фильтр client_id --------
+  async function loadClientsList() {
+    const select = document.getElementById('clientId');
+    if (!select) return;
+
+    // базовый вариант — "все клиенты"
+    select.innerHTML = '';
+    const optAll = document.createElement('option');
+    optAll.value = '';
+    optAll.textContent = '(все клиенты)';
+    select.appendChild(optAll);
+
+    if (!token) {
+      setFilterStatus('Нет токена. Зайди через /menu.html', false);
+      return;
+    }
+
+    try {
+      const data = await apiGetJson('/clients-short');
+      const clients = data.clients || data.rows || [];
+      clientsCache = clients;
+
+      clients.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = String(c.id);
+        opt.textContent = `${c.id} — ${c.client_name || 'без названия'}`;
+        select.appendChild(opt);
+      });
+
+      // восстанавливаем сохранённый client_id, если есть
+      const storedId = localStorage.getItem('wmsClientId');
+      if (storedId && clients.some(c => String(c.id) === storedId)) {
+        select.value = storedId;
+      }
+    } catch (err) {
+      console.error(err);
+      setFilterStatus('Ошибка загрузки клиентов: ' + err.message, false);
+    }
+  }
+
+  // -------- Загрузка остатков со склада --------
+  async function loadStock() {
+    if (!token) {
+      setFilterStatus('Нет токена. Зайди через /menu.html', false);
+      return;
+    }
+
+    const clientSelect = document.getElementById('clientId');
+    const barcodeInput = document.getElementById('barcode');
+    const locInput = document.getElementById('locationCode');
+
+    const hideZero = document.getElementById('hideZero').checked;
+    const onlyActiveItems = document.getElementById('onlyActiveItems').checked;
+    const onlyActiveSku = document.getElementById('onlyActiveSku').checked;
+    const onlyActiveMx = document.getElementById('onlyActiveMx').checked;
+
+    const params = new URLSearchParams();
+
+    // client_id — опциональный; если пусто => все клиенты
+    if (clientSelect && clientSelect.value) {
+      params.set('client_id', clientSelect.value);
+      localStorage.setItem('wmsClientId', clientSelect.value);
+    } else {
+      localStorage.removeItem('wmsClientId');
+    }
+
+    if (barcodeInput && barcodeInput.value.trim()) {
+      params.set('barcode', barcodeInput.value.trim());
+    }
+    if (locInput && locInput.value.trim()) {
+      params.set('location_code', locInput.value.trim());
+    }
+
+    if (hideZero) params.set('hide_zero', 'true');
+    if (onlyActiveItems) params.set('only_active_items', 'true');
+    if (onlyActiveSku) params.set('only_active_sku', 'true');
+    if (onlyActiveMx) params.set('only_active_mx', 'true');
+
+    setFilterStatus('Загрузка...', false);
+
+    try {
+      const res = await fetch('/stock?' + params.toString(), {
+        headers: apiHeaders(),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      setDebug(data);
+
+      if (!res.ok) {
+        setFilterStatus('Ошибка запроса: ' + (data.error || res.status), false);
+        renderStockTable([]);
+        return;
+      }
+
+      const rows = data.stock || [];
+      renderStockTable(rows);
+      setFilterStatus('Готово: найдено ' + rows.length + ' строк.', true);
+    } catch (err) {
+      console.error(err);
+      setFilterStatus('Ошибка: ' + err.message, false);
+      renderStockTable([]);
+    }
+  }
+
+  // -------- Инициализация страницы --------
+  (function init() {
+    token = localStorage.getItem('wmsToken');
+    usernameGlobal = localStorage.getItem('wmsUser') || null;
+    userRole = localStorage.getItem('wmsRole') || null;
+
+    if (token) {
+      setOnlineState(true);
+      setUserInfo(usernameGlobal ? 'Пользователь: ' + usernameGlobal : 'Авторизован');
+    } else {
+      setOnlineState(false);
+      setUserInfo('Не авторизован');
+    }
+    setRoleChip(userRole);
+
+    const btnMenu = document.getElementById('btnMenu');
+    if (btnMenu) {
+      btnMenu.addEventListener('click', () => {
+        window.location.href = '/menu.html';
+      });
+    }
+
+    const btnShow = document.getElementById('btnShowStock');
+    if (btnShow) {
+      btnShow.addEventListener('click', loadStock);
+    }
+
+    // сначала клиенты, потом сразу показываем склад
+    loadClientsList().then(loadStock).catch(loadStock);
+  })();
+  </script>
+
+</body>
+</html>

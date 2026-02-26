@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Товар (SKU)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: #fff;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .topbar-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+
+    .topbar-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #374151;
+    }
+    .chip.ok { background: #16a34a; }
+    .chip.offline { background: #b91c1c; }
+    .chip-role { background: #4b5563; }
+
+    .btn-top {
+      border-radius: 999px;
+      border: 1px solid #6b7280;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .page {
+      padding: 10px;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    h2 {
+      font-size: 14px;
+      margin: 0;
+    }
+
+    label {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 7px;
+      font-size: 14px;
+      margin-top: 3px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+    }
+
+    button {
+      padding: 9px;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .btn-primary:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .status-text {
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .status-text.ok   { color: #059669; }
+    .status-text.warn { color: #d97706; }
+    .status-text.err  { color: #dc2626; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    th, td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 4px 6px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      background: #f9fafb;
+      font-weight: 600;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+    }
+    .badge-ok   { background: #dcfce7; color: #16a34a; }
+    .badge-warn { background: #fef9c3; color: #92400e; }
+    .badge-err  { background: #fee2e2; color: #b91c1c; }
+
+    .flex-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .flex-row > button {
+      flex: 0 0 auto;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 11px;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 8px;
+      border-radius: 8px;
+      max-height: 220px;
+      overflow: auto;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">BFC24 WMS — Товар (SKU)</div>
+      <div class="topbar-sub" id="userInfo">Не авторизован</div>
+    </div>
+    <div class="topbar-actions">
+      <span id="onlineChip" class="chip offline">offline</span>
+      <span id="roleChip" class="chip chip-role"></span>
+      <button class="btn-top" onclick="window.location.href='/menu.html'">Меню</button>
+    </div>
+  </div>
+
+  <div class="page">
+    <!-- Фильтр -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Фильтр</h2>
+      </div>
+      <div class="filters-grid">
+        <label>
+          client_id:
+          <select id="clientId">
+            <option value="">(все клиенты)</option>
+          </select>
+        </label>
+        <label>
+          Штрихкод (barcode):
+          <input type="text" id="barcodeInput" placeholder="4600..." />
+        </label>
+        <div>
+          <button class="btn-primary" id="btnLoadSku" style="width:100%;">Показать SKU</button>
+        </div>
+      </div>
+      <div id="filterStatus" class="status-text"></div>
+    </div>
+
+    <!-- Информация по SKU / товару -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Карточка SKU и товара</h2>
+        <div class="flex-row">
+          <button class="btn-secondary" id="btnOpenItem" disabled>
+            Открыть карточку товара (items)
+          </button>
+        </div>
+      </div>
+
+      <div id="skuStatusLine" class="status-text"></div>
+
+      <table>
+        <tbody>
+          <tr>
+            <th style="width:160px;">client_id</th>
+            <td id="cellClientId"></td>
+          </tr>
+          <tr>
+            <th>Клиент</th>
+            <td id="cellClientName"></td>
+          </tr>
+          <tr>
+            <th>Штрихкод</th>
+            <td id="cellBarcode"></td>
+          </tr>
+          <tr>
+            <th>SKU (внутренний id)</th>
+            <td id="cellSkuId"></td>
+          </tr>
+          <tr>
+            <th>Статус SKU</th>
+            <td id="cellSkuActive"></td>
+          </tr>
+          <tr>
+            <th>ID товара (item_id)</th>
+            <td id="cellItemId"></td>
+          </tr>
+          <tr>
+            <th>Наименование</th>
+            <td id="cellItemName"></td>
+          </tr>
+          <tr>
+            <th>Артикул клиента</th>
+            <td id="cellVendorCode"></td>
+          </tr>
+          <tr>
+            <th>Артикул WB</th>
+            <td id="cellWbVendorCode"></td>
+          </tr>
+          <tr>
+            <th>Ед. изм.</th>
+            <td id="cellUnit"></td>
+          </tr>
+          <tr>
+            <th>Литраж (volume_liters)</th>
+            <td id="cellVolume"></td>
+          </tr>
+          <tr>
+            <th>Упаковка</th>
+            <td id="cellPackaging"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Остатки по ячейкам -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Остатки по ячейкам</h2>
+      </div>
+      <div class="status-text" id="stockSummary"></div>
+      <div class="status-text" id="stockStatus"></div>
+      <table id="stockTable">
+        <thead>
+          <tr>
+            <th>Ячейка</th>
+            <th>SKU</th>
+            <th>Остаток</th>
+          </tr>
+        </thead>
+        <tbody id="stockTbody">
+          <tr><td colspan="3">Нет данных</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Отладка -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Отладка</h2>
+      </div>
+      <pre id="debugBox">{}</pre>
+    </div>
+  </div>
+
+  <script>
+    let token = localStorage.getItem('wmsToken') || null;
+    const userName = localStorage.getItem('wmsUser') || 'unknown';
+    const userRole = localStorage.getItem('wmsRole') || '';
+
+    // кэш клиентов: id -> объект клиента (для подписи имени в карточке)
+    let clientsById = null;
+
+    // Топбар
+    document.getElementById('userInfo').textContent = 'Пользователь: ' + userName;
+    const roleChip = document.getElementById('roleChip');
+    roleChip.textContent = userRole ? ('role: ' + userRole) : '';
+    const onlineChip = document.getElementById('onlineChip');
+    if (token) {
+      onlineChip.textContent = 'online';
+      onlineChip.className = 'chip ok';
+    } else {
+      onlineChip.textContent = 'offline';
+      onlineChip.className = 'chip offline';
+    }
+
+    function setFilterStatus(text, type) {
+      const el = document.getElementById('filterStatus');
+      el.textContent = text || '';
+      el.className = 'status-text';
+      if (type === 'ok')   el.classList.add('ok');
+      if (type === 'warn') el.classList.add('warn');
+      if (type === 'err')  el.classList.add('err');
+    }
+
+    function setSkuStatusLine(text, type) {
+      const el = document.getElementById('skuStatusLine');
+      el.textContent = text || '';
+      el.className = 'status-text';
+      if (type === 'ok')   el.classList.add('ok');
+      if (type === 'warn') el.classList.add('warn');
+      if (type === 'err')  el.classList.add('err');
+    }
+
+    function setStockStatus(text, type) {
+      const el = document.getElementById('stockStatus');
+      el.textContent = text || '';
+      el.className = 'status-text';
+      if (type === 'ok')   el.classList.add('ok');
+      if (type === 'warn') el.classList.add('warn');
+      if (type === 'err')  el.classList.add('err');
+    }
+
+    function setStockSummary(text) {
+      const el = document.getElementById('stockSummary');
+      el.textContent = text || '';
+      el.className = 'status-text';
+    }
+
+    function setDebug(obj) {
+      const el = document.getElementById('debugBox');
+      try {
+        el.textContent = JSON.stringify(obj, null, 2);
+      } catch (e) {
+        el.textContent = String(obj);
+      }
+    }
+
+    // карта клиентов по id — для подписей
+    async function loadClientsMap() {
+      if (clientsById !== null) return clientsById;
+      clientsById = {};
+      if (!token) return clientsById;
+
+      try {
+        const res = await fetch('/clients', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && Array.isArray(data.clients)) {
+          data.clients.forEach(c => {
+            if (c && typeof c.id !== 'undefined') {
+              clientsById[c.id] = c;
+            }
+          });
+        }
+      } catch (e) {
+        console.error('Load clients error:', e);
+      }
+      return clientsById;
+    }
+
+    // заполняем селект клиентов в фильтре
+    async function loadClientsForSkuSelect() {
+      const select = document.getElementById('clientId');
+      if (!select) return;
+
+      select.innerHTML = '';
+      const optAll = document.createElement('option');
+      optAll.value = '';
+      optAll.textContent = '(все клиенты)';
+      select.appendChild(optAll);
+
+      if (!token) return;
+
+      try {
+        const res = await fetch('/clients-short', {
+          headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        const data = await res.json().catch(() => ({}));
+        const clients = data.clients || data.rows || [];
+
+        clients.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = String(c.id);
+          opt.textContent = `${c.id} — ${c.client_name || 'без названия'}`;
+          select.appendChild(opt);
+        });
+
+        const stored = localStorage.getItem('wmsClientIdSku');
+        if (stored && clients.some(c => String(c.id) === stored)) {
+          select.value = stored;
+        }
+      } catch (e) {
+        console.error('loadClientsForSkuSelect error', e);
+      }
+
+      select.addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (val) {
+          localStorage.setItem('wmsClientIdSku', val);
+        } else {
+          localStorage.removeItem('wmsClientIdSku');
+        }
+      });
+    }
+
+    function fillSkuCard(row) {
+      document.getElementById('cellClientId').textContent   = row?.client_id ?? '';
+      document.getElementById('cellClientName').textContent = row?.client_name ?? '';
+      document.getElementById('cellBarcode').textContent    = row?.barcode ?? '';
+      document.getElementById('cellSkuId').textContent      = row?.sku_id ?? '';
+      document.getElementById('cellItemId').textContent     = row?.item_id ?? '';
+      document.getElementById('cellItemName').textContent   = row?.item_name ?? '';
+      document.getElementById('cellVendorCode').textContent = row?.vendor_code ?? '';
+      document.getElementById('cellWbVendorCode').textContent = row?.wb_vendor_code ?? '';
+      document.getElementById('cellUnit').textContent       = row?.unit ?? '';
+      document.getElementById('cellVolume').textContent =
+        row?.volume_liters != null ? String(row.volume_liters) : '';
+
+      let packTxt = '';
+      if (row?.need_packaging === true || row?.needs_packaging === true) {
+        packTxt = 'нужна';
+      } else if (row?.need_packaging === false || row?.needs_packaging === false) {
+        packTxt = 'не нужна';
+      }
+      document.getElementById('cellPackaging').textContent = packTxt;
+
+      const skuActiveCell = document.getElementById('cellSkuActive');
+      skuActiveCell.innerHTML = '';
+      if (row && typeof row.is_active !== 'undefined') {
+        const span = document.createElement('span');
+        span.className = 'badge ' + (row.is_active ? 'badge-ok' : 'badge-err');
+        span.textContent = row.is_active ? 'активен' : 'выключен';
+        skuActiveCell.appendChild(span);
+      }
+    }
+
+    function clearSkuCard() {
+      fillSkuCard(null);
+      document.getElementById('cellSkuActive').textContent = '';
+    }
+
+    function fillStockTable(list) {
+      const tbody = document.getElementById('stockTbody');
+      tbody.innerHTML = '';
+      if (!list || list.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 3;
+        td.textContent = 'Нет остатков по этому штрихкоду';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        setStockSummary('Сводка: по этому штрихкоду остатков нет.');
+        return;
+      }
+
+      let total = 0;
+
+      list.forEach(row => {
+        const tr = document.createElement('tr');
+        const tdLoc = document.createElement('td');
+        tdLoc.textContent = row.location_code || '';
+        const tdSku = document.createElement('td');
+        tdSku.textContent = row.sku_id ?? '';
+        const tdQty = document.createElement('td');
+        tdQty.textContent = row.qty ?? '';
+        total += Number(row.qty) || 0;
+
+        tr.appendChild(tdLoc);
+        tr.appendChild(tdSku);
+        tr.appendChild(tdQty);
+        tbody.appendChild(tr);
+      });
+
+      setStockSummary(`Сводка: всего по всем ячейкам ${total} шт, ячеек: ${list.length}.`);
+    }
+
+    // Кнопка "Открыть карточку товара (items)"
+    document.getElementById('btnOpenItem').addEventListener('click', () => {
+      const barcode = document.getElementById('cellBarcode').textContent.trim();
+      if (!barcode) return;
+      window.location.href = '/items-directory.html?barcode=' + encodeURIComponent(barcode);
+    });
+
+    // Основная загрузка SKU
+    document.getElementById('btnLoadSku').addEventListener('click', async () => {
+      if (!token) {
+        setFilterStatus('Нет токена. Выполни вход через меню.', 'err');
+        return;
+      }
+
+      const clientSelect = document.getElementById('clientId');
+      const clientId = clientSelect ? clientSelect.value.trim() : '';
+      const barcode = document.getElementById('barcodeInput').value.trim();
+
+      if (!barcode) {
+        setFilterStatus('Укажи штрихкод.', 'err');
+        return;
+      }
+
+      setFilterStatus('Загружаю SKU и остатки...', 'warn');
+      setSkuStatusLine('', null);
+      setStockStatus('', null);
+      setStockSummary('');
+      clearSkuCard();
+      fillStockTable([]);
+
+      const paramsSku = new URLSearchParams();
+      const paramsStock = new URLSearchParams();
+
+      if (clientId) {
+        paramsSku.set('client_id', clientId);
+        paramsStock.set('client_id', clientId);
+      }
+      paramsSku.set('barcode', barcode);
+      paramsStock.set('barcode', barcode);
+
+      const querySku = '/sku?' + paramsSku.toString();
+      const queryStock = '/stock/by-barcode?' + paramsStock.toString();
+
+      try {
+        // заранее подгружаем карту клиентов (для имени)
+        const clientsMap = await loadClientsMap();
+        let clientNameForRow = '';
+        if (clientId) {
+          const numericClientId = Number(clientId);
+          if (clientsMap && clientsMap[numericClientId]) {
+            clientNameForRow = clientsMap[numericClientId].name || '';
+          }
+        }
+
+        const [resSku, resStock] = await Promise.all([
+          fetch(querySku,   { headers: token ? { 'Authorization': 'Bearer ' + token } : {} }),
+          fetch(queryStock, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} }),
+        ]);
+
+        const dataSku   = await resSku.json().catch(() => ({}));
+        const dataStock = await resStock.json().catch(() => ({}));
+
+        setDebug({ sku: dataSku, stock: dataStock });
+
+        // Обработка SKU
+        let mainRow = null;
+        if (resSku.ok && Array.isArray(dataSku.sku) && dataSku.sku.length > 0) {
+          mainRow = dataSku.sku[0];
+
+          // если не выбрали клиента — попробуем подтянуть имя по client_id из строки
+          if (!clientNameForRow && mainRow.client_id && clientsMap && clientsMap[mainRow.client_id]) {
+            clientNameForRow = clientsMap[mainRow.client_id].name || '';
+          }
+          if (clientNameForRow) {
+            mainRow.client_name = clientNameForRow;
+          }
+
+          fillSkuCard(mainRow);
+
+          if (!mainRow.item_id) {
+            setSkuStatusLine('SKU найден, но товара нет в справочнике (masterdata.items).', 'warn');
+          } else {
+            setSkuStatusLine('OK: SKU и товар найдены.', 'ok');
+          }
+        } else if (resSku.status === 404 || (Array.isArray(dataSku.sku) && dataSku.sku.length === 0)) {
+          setSkuStatusLine('SKU по этому barcode (и client_id, если задан) не найден.', 'err');
+        } else if (!resSku.ok) {
+          setSkuStatusLine('Ошибка загрузки SKU: ' + (dataSku.error || resSku.status), 'err');
+        } else {
+          setSkuStatusLine('Нет данных по SKU.', 'warn');
+        }
+
+        // Кнопка перехода в items
+        const btnOpenItem = document.getElementById('btnOpenItem');
+        if (mainRow && mainRow.barcode) {
+          btnOpenItem.disabled = false;
+        } else {
+          btnOpenItem.disabled = true;
+        }
+
+        // Обработка остатков
+        if (resStock.ok && Array.isArray(dataStock.stock)) {
+          fillStockTable(dataStock.stock);
+          const total = dataStock.stock.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+          if (total > 0) {
+            setStockStatus('Остатки загружены.', 'ok');
+          } else {
+            setStockStatus('Остатки = 0 по всем ячейкам.', 'warn');
+          }
+        } else if (!resStock.ok) {
+          setStockStatus('Ошибка загрузки остатков: ' + (dataStock.error || resStock.status), 'err');
+          fillStockTable([]);
+        } else {
+          setStockStatus('Нет данных по остаткам.', 'warn');
+          fillStockTable([]);
+        }
+
+        setFilterStatus('Готово.', 'ok');
+      } catch (err) {
+        console.error(err);
+        setFilterStatus('Ошибка запроса: ' + err.message, 'err');
+        setSkuStatusLine('', null);
+        setStockStatus('', null);
+        setStockSummary('');
+      }
+    });
+
+    // Инициализация из URL (если есть ?client_id=&barcode=)
+    function initFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const cid = params.get('client_id');
+      const bc  = params.get('barcode');
+
+      if (cid) {
+        const sel = document.getElementById('clientId');
+        if (sel) sel.value = cid;
+      }
+      if (bc) {
+        document.getElementById('barcodeInput').value = bc;
+      }
+      if (bc) {
+        document.getElementById('btnLoadSku').click();
+      }
+    }
+
+    // Общая инициализация страницы
+    (async function initPage() {
+      await loadClientsForSkuSelect();
+      initFromUrl();
+    })();
+  </script>
+</body>
+</html>
+

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Приёмка</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: #fff;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .topbar-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .topbar-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #374151;
+    }
+    .chip.ok      { background: #16a34a; }
+    .chip.offline { background: #b91c1c; }
+    .chip-role    { background: #4b5563; }
+
+    .btn-top {
+      border-radius: 999px;
+      border: 1px solid #6b7280;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .page {
+      padding: 10px;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    h2 {
+      font-size: 14px;
+      margin: 0 0 6px 0;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 7px;
+      font-size: 13px;
+      margin-top: 3px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+    }
+
+    button {
+      margin-top: 10px;
+      padding: 9px;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+      width: 100%;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    .status {
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    .status.ok { color: #059669; }
+    .status.error { color: #dc2626; }
+
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 11px;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 8px;
+      border-radius: 8px;
+      max-height: 220px;
+      overflow: auto;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Топбар -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title">BFC24 WMS — Приёмка</div>
+      <div class="topbar-sub" id="userInfo">Не авторизован</div>
+    </div>
+    <div class="topbar-actions">
+      <span id="onlineChip" class="chip offline">offline</span>
+      <span id="roleChip" class="chip chip-role" style="display:none;"></span>
+      <button class="btn-top" id="btnMenu">В меню</button>
+    </div>
+  </div>
+
+  <div class="page">
+    <!-- Форма приёмки -->
+    <div class="card">
+      <h2>Приёмка товара</h2>
+
+      <label>
+        Клиент:
+        <select id="clientId"></select>
+      </label>
+
+      <label>
+        Штрихкод товара (barcode):
+        <input type="text" id="barcode" />
+      </label>
+
+      <label>
+        Ячейка (location_code):
+        <input type="text" id="locationCode" />
+      </label>
+
+      <label>
+        Количество (qty):
+        <input type="number" id="qty" value="1" />
+      </label>
+
+      <button id="btnAccept" class="btn-primary">Принять</button>
+      <div id="statusBox" class="status"></div>
+    </div>
+
+    <!-- Ответ сервера -->
+    <div class="card">
+      <h2>Ответ сервера</h2>
+      <pre id="serverResponse">{}</pre>
+    </div>
+  </div>
+
+  <script>
+    let token = null;
+    let usernameGlobal = null;
+    let userRole = null;
+
+    // ---------- ТОПБАР / АВТОРИЗАЦИЯ ----------
+    function initTopbar() {
+      token = localStorage.getItem('wmsToken') || null;
+      usernameGlobal = localStorage.getItem('wmsUser') || null;
+      userRole = localStorage.getItem('wmsRole') || null;
+
+      const onlineChip = document.getElementById('onlineChip');
+      const roleChip   = document.getElementById('roleChip');
+      const userInfo   = document.getElementById('userInfo');
+
+      if (token) {
+        onlineChip.textContent = 'online';
+        onlineChip.className = 'chip ok';
+      } else {
+        onlineChip.textContent = 'offline';
+        onlineChip.className = 'chip offline';
+      }
+
+      if (usernameGlobal) {
+        userInfo.textContent = 'Пользователь: ' + usernameGlobal;
+      } else {
+        userInfo.textContent = 'Не авторизован (зайдите через меню).';
+      }
+
+      if (userRole) {
+        roleChip.textContent = 'role: ' + userRole;
+        roleChip.style.display = 'inline-block';
+      } else {
+        roleChip.style.display = 'none';
+      }
+
+      document.getElementById('btnMenu').addEventListener('click', () => {
+        window.location.href = '/menu.html';
+      });
+    }
+
+    // ---------- HELPERS ----------
+    function setStatus(text, ok) {
+      const el = document.getElementById('statusBox');
+      el.textContent = text || '';
+      if (!text) {
+        el.className = 'status';
+      } else {
+        el.className = 'status ' + (ok ? 'ok' : 'error');
+      }
+    }
+
+    function setServerResponse(obj) {
+      const el = document.getElementById('serverResponse');
+      try {
+        el.textContent = JSON.stringify(obj, null, 2);
+      } catch (e) {
+        el.textContent = String(obj);
+      }
+    }
+
+    function apiHeaders(extra) {
+      const headers = extra ? { ...extra } : {};
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return headers;
+    }
+
+    async function apiGetJson(url) {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: apiHeaders(),
+      });
+
+      let data = {};
+      try { data = await res.json(); } catch (e) { data = {}; }
+
+      if (!res.ok) {
+        const parts = [];
+        if (data.error) parts.push(data.error);
+        if (data.detail) parts.push(data.detail);
+        const msg = parts.length ? parts.join(': ') : ('HTTP ' + res.status);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    // ---------- ЗАГРУЗКА КЛИЕНТОВ ДЛЯ ПРИЁМКИ ----------
+    async function loadClientsForReceiving() {
+      const select = document.getElementById('clientId');
+      if (!select) return;
+      select.innerHTML = '';
+
+      if (!token) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '— нет токена —';
+        select.appendChild(opt);
+        setStatus('Нет токена. Зайдите через меню и выполните вход.', false);
+        return;
+      }
+
+      try {
+        const data = await apiGetJson('/clients-short');
+        const clients = data.clients || data.rows || [];
+
+        const optDefault = document.createElement('option');
+        optDefault.value = '';
+        optDefault.textContent = '— выберите клиента —';
+        select.appendChild(optDefault);
+
+        clients.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = String(c.id);
+          opt.textContent = `${c.id} — ${c.client_name || ''}`;
+          select.appendChild(opt);
+        });
+
+        const storedId = localStorage.getItem('wmsClientId');
+        if (storedId && clients.some(c => String(c.id) === storedId)) {
+          select.value = storedId;
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки клиентов для приёмки:', err);
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '— ошибка загрузки клиентов —';
+        select.appendChild(opt);
+        setStatus('Ошибка загрузки клиентов: ' + err.message, false);
+      }
+    }
+
+    function initClientSelectHandlers() {
+      const select = document.getElementById('clientId');
+      if (!select) return;
+
+      select.addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (val) {
+          localStorage.setItem('wmsClientId', val);
+        } else {
+          localStorage.removeItem('wmsClientId');
+        }
+      });
+    }
+
+    // ---------- ОТПРАВКА ПРИЁМКИ ----------
+    async function sendReceiving() {
+      const clientIdVal = document.getElementById('clientId').value;
+      const clientId = Number(clientIdVal || '0');
+      const barcodeInput = document.getElementById('barcode');
+      const locationInput = document.getElementById('locationCode');
+      const qtyInput = document.getElementById('qty');
+
+      const barcode = barcodeInput.value.trim();
+      const locationCode = locationInput.value.trim();
+      const qty = Number(qtyInput.value || '0');
+
+      if (!clientId || clientId <= 0) {
+        setStatus('Выберите клиента.', false);
+        return;
+      }
+      if (!barcode) {
+        setStatus('Введите штрихкод товара.', false);
+        return;
+      }
+      if (!locationCode) {
+        setStatus('Укажите ячейку (location_code).', false);
+        return;
+      }
+      if (!qty || qty <= 0) {
+        setStatus('Количество должно быть > 0.', false);
+        return;
+      }
+      if (!token) {
+        setStatus('Нет токена. Зайдите через меню.', false);
+        return;
+      }
+
+      setStatus('Отправляю запрос...', false);
+
+      try {
+        const res = await fetch('/receiving/accept', {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            client_id: clientId,
+            barcode,
+            location_code: locationCode,
+            qty
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        setServerResponse(data);
+
+        if (!res.ok) {
+          const msg = data.error || data.detail || ('HTTP ' + res.status);
+          setStatus('Ошибка приёмки: ' + msg, false);
+          return;
+        }
+
+        setStatus('Приёмка выполнена успешно.', true);
+
+        // очистка полей и возврат фокуса на штрихкод (под ТСД)
+        barcodeInput.value = '';
+        locationInput.value = '';
+        qtyInput.value = '1';
+        barcodeInput.focus();
+      } catch (err) {
+        console.error(err);
+        setStatus('Ошибка запроса: ' + err.message, false);
+        setServerResponse({ error: err.message });
+      }
+    }
+
+    // ---------- ИНИЦИАЛИЗАЦИЯ ----------
+    (function init() {
+      initTopbar();
+      loadClientsForReceiving();
+      initClientSelectHandlers();
+
+      const btnAccept = document.getElementById('btnAccept');
+      const barcodeInput = document.getElementById('barcode');
+      const locationInput = document.getElementById('locationCode');
+      const qtyInput = document.getElementById('qty');
+
+      btnAccept.addEventListener('click', sendReceiving);
+
+      // автопереход фокуса (под ТСД)
+      barcodeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          locationInput.focus();
+        }
+      });
+
+      locationInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          qtyInput.focus();
+          qtyInput.select();
+        }
+      });
+
+      qtyInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          btnAccept.focus();
+        }
+      });
+
+      // при открытии страницы сразу встаём на штрихкод
+      barcodeInput.focus();
+    })();
+  </script>
+</body>
+</html>

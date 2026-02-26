@@ -1,0 +1,62 @@
+// wbService.js
+
+const WB_ORDERS_URL = 'https://marketplace-api.wildberries.ru/api/v3/orders/new';
+
+/**
+ * Универсальный вызов WB API для заказов.
+ * Ничего не знает про структуру ответа — просто возвращает data как есть.
+ * Нормализацию (array / { orders: [...] }) делаем в маршруте /mp/wb/test-fetch-orders.
+ */
+async function fetchOrders(wbToken, { dateFrom, dateTo, limit = 100 } = {}) {
+  const params = new URLSearchParams();
+
+  if (dateFrom) params.append('dateFrom', dateFrom);
+  if (dateTo)   params.append('dateTo', dateTo);
+  if (limit)    params.append('limit', String(limit));
+
+  const query = params.toString();
+  const url   = query ? `${WB_ORDERS_URL}?${query}` : WB_ORDERS_URL;
+
+  console.log('[WB FETCH] URL =', url, 'params =', { dateFrom, dateTo, limit });
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      // В docs WB токен передаётся просто в Authorization без Bearer
+      'Authorization': wbToken,
+    },
+  });
+
+  // Читаем тело ОДИН раз
+  const text = await res.text();
+
+  if (!res.ok) {
+    console.error('[WB FETCH] HTTP error', res.status, text);
+    throw new Error('WB HTTP ' + res.status);
+  }
+
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error('[WB FETCH] JSON parse error:', e);
+      console.error('[WB FETCH] raw text:', text);
+      throw new Error('WB JSON parse error');
+    }
+  }
+
+  if (data && typeof data === 'object') {
+    console.log('[WB FETCH] top-level keys =', Object.keys(data));
+  }
+  console.log('[WB FETCH] response type =', Array.isArray(data) ? 'array' : typeof data);
+
+  // ВАЖНО: просто возвращаем ответ WB как есть.
+  return data;
+}
+
+module.exports = {
+  fetchOrders,
+  WB_ORDERS_URL,
+};

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Просмотр МХ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      margin: 0;
+      padding: 0;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: #fff;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+    }
+    .chip.ok { background: #16a34a; }
+    .chip.offline { background: #dc2626; }
+
+    .page { padding: 12px; }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 12px;
+    }
+
+    input {
+      width: 100%;
+      padding: 9px;
+      font-size: 15px;
+      margin-top: 6px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 6px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    th {
+      background: #f9fafb;
+      text-align: left;
+      font-weight: 600;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <div>
+      <div style="font-weight:600;">Просмотр МХ</div>
+      <div id="userInfo" style="font-size:11px; opacity:0.8;"></div>
+    </div>
+
+    <div style="display:flex; gap:6px; align-items:center;">
+      <span id="onlineChip" class="chip offline">offline</span>
+      <button id="btnMenu"
+              type="button"
+              style="border:1px solid #6b7280; padding:4px 8px; border-radius:999px; background:#111827; color:white;">
+        В меню
+      </button>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <!-- Ввод ячейки -->
+    <div class="card">
+      <h3>Сканируй МХ</h3>
+      <input id="locationInput" type="text" placeholder="Например: A-01-05" autofocus />
+      <div id="statusBox" style="margin-top:6px; font-size:12px;"></div>
+    </div>
+
+    <!-- Результат -->
+    <div class="card">
+      <h3>Содержимое ячейки</h3>
+      <div id="resultBox">— Пока ничего —</div>
+    </div>
+
+  </div>
+
+<script>
+  let token = null;
+
+  function initTopbar() {
+    token = localStorage.getItem("wmsToken");
+
+    const onlineChip = document.getElementById("onlineChip");
+    const userInfo   = document.getElementById("userInfo");
+
+    if (token) {
+      onlineChip.textContent = "online";
+      onlineChip.className = "chip ok";
+      userInfo.textContent = "Пользователь: " + (localStorage.getItem("wmsUser") || "—");
+    } else {
+      onlineChip.textContent = "offline";
+      onlineChip.className = "chip offline";
+      userInfo.textContent = "Не авторизован";
+    }
+
+    document.getElementById("btnMenu").onclick = () => {
+      window.location.href = "/menu.html";
+    };
+  }
+
+  function setStatus(msg, ok=false) {
+    const el = document.getElementById("statusBox");
+    el.textContent = msg;
+    el.style.color = ok ? "#059669" : "#dc2626";
+  }
+
+  async function loadLocationContent() {
+    const code = document.getElementById("locationInput").value.trim();
+    if (!code) {
+      setStatus("Введите ячейку");
+      return;
+    }
+    if (!token) {
+      setStatus("Нет токена. Зайдите через меню.");
+      return;
+    }
+
+    setStatus("Загрузка...", false);
+
+    const res = await fetch(`/stock/by-location?location_code=${encodeURIComponent(code)}`, {
+      method: "GET",
+      headers: { Authorization: "Bearer " + token }
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setStatus(data.error || ("Ошибка " + res.status));
+      return;
+    }
+
+    setStatus("Готово", true);
+
+    const box = document.getElementById("resultBox");
+    if (!data.rows || data.rows.length === 0) {
+      box.innerHTML = "Остатков нет";
+      return;
+    }
+
+    let html = `
+      <table>
+        <tr>
+          <th>ШК</th>
+          <th>Наименование</th>
+          <th>SKU</th>
+          <th>Клиент</th>
+          <th>Кол-во</th>
+        </tr>
+    `;
+
+    for (const r of data.rows) {
+      html += `
+        <tr>
+          <td>${r.barcode     || ""}</td>
+          <td>${r.item_name   || ""}</td>
+          <td>${r.sku_id      || ""}</td>
+          <td>${r.client_name || r.client_id || ""}</td>
+          <td>${r.qty ?? 0}</td>
+        </tr>`;
+    }
+
+    html += "</table>";
+    box.innerHTML = html;
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    initTopbar();
+
+    const input = document.getElementById("locationInput");
+
+    // Сканер → Enter
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        loadLocationContent();
+        // после сканирования сразу выделяем поле,
+        // чтобы следующий скан затёр старое значение
+        setTimeout(() => input.select(), 50);
+      }
+    });
+
+    input.focus();
+  });
+</script>
+
+</body>
+</html>

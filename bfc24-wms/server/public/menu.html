@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Меню</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: #f9fafb;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .topbar-left {
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .btn-top {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #6b7280;
+      background: transparent;
+      color: #f9fafb;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .page {
+      padding: 12px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .card-sub {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 8px;
+    }
+
+    ul.menu-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 6px;
+    }
+    ul.menu-list li a {
+      display: block;
+      padding: 8px 10px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 13px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      color: #111827;
+    }
+    ul.menu-list li a:hover {
+      background: #e5efff;
+      border-color: #3b82f6;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin: 10px 0 4px;
+      color: #4b5563;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-title">BFC24 WMS — Меню</div>
+    <div class="topbar-sub" id="userInfo">Пользователь: ?</div>
+  </div>
+  <div class="topbar-right">
+    <span id="userRoleInfo"></span>
+    <button class="btn-top" id="btnLogout">Выйти</button>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ОСНОВНЫЕ ОПЕРАЦИИ СКЛАДА -->
+  <div class="card">
+    <div class="card-title">Основные операции склада</div>
+    <div class="card-sub">Приёмка, размещение, сборка, упаковка, отгрузка.</div>
+    <ul class="menu-list">
+      <!-- Приёмка -->
+      <li><a href="/receiving.html">Приёмка</a></li>
+
+      <!-- Места хранения -->
+      <li><a href="/locations.html">Места хранения</a></li>
+
+      <!-- Склад — общий обзор -->
+      <li><a href="/stock-overview.html">Склад — общий обзор</a></li>
+
+      <!-- Сборка -->
+      <li><a href="/picking.html">Задачи на сборку</a></li>
+
+      <!-- Упаковка -->
+      <li><a href="/packing.html">Упаковка</a></li>
+
+      <!-- Отгрузка -->
+      <li><a href="/shipping.html">Отгрузка</a></li>
+
+      <!-- Инвентаризация -->
+      <li><a href="/inventory-tasks.html">Задачи инвентаризации</a></li>
+    </ul>
+  </div>
+
+  <!-- СПРАВОЧНИКИ И НАСТРОЙКИ -->
+  <div class="card">
+    <div class="card-title">Справочники и настройки</div>
+    <div class="card-sub">Товары, клиенты, настройки маркетплейсов.</div>
+    <ul class="menu-list">
+      <li><a href="/items-directory.html">Справочник товаров</a></li>
+      <li><a href="/clients-directory.html">Клиенты (WMS)</a></li>
+      <li><a href="/mp-accounts.html">MP аккаунты</a></li>
+      <li><a href="/mp-wb-items.html">Справочник WB (карточки)</a></li>
+      <li><a href="/wb-orders.html">WB заказы</a></li>
+    </ul>
+  </div>
+
+<li><a href="/admin-tools.html">Админка (очистка WB)</a></li>
+
+  <!-- ОТЧЁТЫ И АНАЛИТИКА -->
+  <div class="card">
+    <div class="card-title">Отчёты и аналитика</div>
+    <div class="card-sub">Приёмка, остатки, отчёты по складу.</div>
+    <ul class="menu-list">
+      <li><a href="/stock-report.html">Отчёт по складу</a></li>
+      <li><a href="/receiving-report.html">Отчёт по приёмке</a></li>
+      <li><a href="/publicreceiving-report.html">Публичная приёмка (отчёт)</a></li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+  function getStoredUser() {
+    const raw = localStorage.getItem('wmsUser');
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (e) {}
+    return { username: raw };
+  }
+
+  function initAuth() {
+    const token = localStorage.getItem('wmsToken');
+    const role  = localStorage.getItem('wmsRole');
+    const user  = getStoredUser();
+
+    if (!token) {
+      alert('Нет токена авторизации. Залогинься заново.');
+      window.location.href = '/login.html';
+      return;
+    }
+
+    const username =
+      (user && (user.username || user.login || user.name)) ||
+      'unknown';
+
+    const ui = document.getElementById('userInfo');
+    if (ui) {
+      ui.textContent = 'Пользователь: ' + username;
+    }
+
+    const ri = document.getElementById('userRoleInfo');
+    if (ri) {
+      ri.textContent = 'Роль: ' + (role || '?');
+    }
+  }
+
+  function setupLogout() {
+    const btn = document.getElementById('btnLogout');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+      localStorage.removeItem('wmsToken');
+      localStorage.removeItem('wmsRole');
+      localStorage.removeItem('wmsUser');
+      window.location.href = '/login.html';
+    });
+  }
+
+  (function initPage() {
+    initAuth();
+    setupLogout();
+  })();
+</script>
+
+</body>
+</html>
