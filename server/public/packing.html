@@ -270,458 +270,74 @@
   </main>
 
   <script>
-    const API_BASE = '';
-    let currentShipment = null;
-    let currentStickerBase64 = null;
-    let currentPreviewUrl = null;
-    let currentLines = [];
-    let locationScanned = false;
-    let currentLocationCode = null;
-
-    function getToken() {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        const value = localStorage.getItem(key);
-        if (typeof value === 'string' && value.split('.').length === 3) {
-          return value;
-        }
-      }
-      return null;
+  // qrData — это либо полный data-url (data:image/svg+xml;base64,....),
+  // либо просто base64-строка от WB.
+  function openQrWindowAndPrint(qrData) {
+    if (!qrData) {
+      alert('Нет QR-кода для печати');
+      return;
     }
 
-    function getScanStorageKey() {
-      if (!currentShipment || !currentShipment.external_id) return null;
-      return 'packingScan_' + currentShipment.external_id;
+    // Если прилетает "голая" base64, добавим префикс
+    let src = qrData;
+    if (!qrData.startsWith('data:') && !qrData.startsWith('http')) {
+      src = 'data:image/svg+xml;base64,' + qrData;
     }
 
-    function loadScansFromStorage() {
-      const key = getScanStorageKey();
-      if (!key) return new Set();
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) return new Set();
-        const arr = JSON.parse(raw);
-        return new Set((arr || []).map(String));
-      } catch {
-        return new Set();
-      }
+    const printWindow = window.open('', '_blank', 'width=400,height=400');
+    if (!printWindow) {
+      alert('Разрешите всплывающие окна для печати QR-кода');
+      return;
     }
 
-    function saveScansToStorage() {
-      const key = getScanStorageKey();
-      if (!key) return;
-      const barcodes = currentLines
-        .filter(l => l._scanned)
-        .map(l => String(l.barcode));
-      localStorage.setItem(key, JSON.stringify(barcodes));
-    }
-
-    function clearScansStorage() {
-      const key = getScanStorageKey();
-      if (!key) return;
-      localStorage.removeItem(key);
-    }
-
-    function setStatusNone() {
-      const chip = document.getElementById('task-status');
-      chip.textContent = 'нет задания';
-      chip.className = 'status-chip status-none';
-      document.getElementById('btn-take-task').disabled = false;
-    }
-
-    function setStatusWorking() {
-      const chip = document.getElementById('task-status');
-      chip.textContent = 'в работе';
-      chip.className = 'status-chip status-working';
-      document.getElementById('btn-take-task').disabled = true;
-    }
-
-    function allLinesScanned() {
-      return currentLines.length > 0 && currentLines.every(l => l._scanned);
-    }
-
-    function updateConfirmButtonState() {
-      const btn = document.getElementById('btn-confirm');
-      const locInput = document.getElementById('scan-location-input');
-
-      locInput.disabled = !(currentShipment && allLinesScanned());
-      btn.disabled = !(currentShipment && allLinesScanned() && locationScanned);
-    }
-
-    function renderTaskInfo(shipment) {
-      const el = document.getElementById('task-info');
-
-      if (!shipment) {
-        el.innerHTML = '<div class="card-subtitle">Нажмите “Взять задание”, чтобы начать упаковку.</div>';
-        setStatusNone();
-        locationScanned = false;
-        currentLocationCode = null;
-        updateConfirmButtonState();
-        return;
-      }
-
-      const wbCode = shipment.external_id || '—';
-
-      el.innerHTML = `
-        <div class="field-row">
-          <div class="field-label">Клиент:</div>
-          <div class="field-value">${shipment.client_id ?? '—'}</div>
-        </div>
-        <div class="field-row">
-          <div class="field-label">Код отгрузки (WB):</div>
-          <div class="field-value">${wbCode}</div>
-        </div>
-        <div class="field-row">
-          <div class="field-label">Статус задания:</div>
-          <div class="field-value">${shipment.status || '—'}</div>
-        </div>
-      `;
-
-      setStatusWorking();
-      updateConfirmButtonState();
-    }
-
-    function renderMediaFromLines() {
-      const lines = currentLines;
-      const photoEl = document.getElementById('item-photo');
-      const photoCaption = document.getElementById('item-photo-caption');
-      const stickerEl = document.getElementById('sticker-preview');
-      const stickerCaption = document.getElementById('sticker-caption');
-      const btnPrint = document.getElementById('btn-print-sticker');
-
-      currentPreviewUrl = null;
-      currentStickerBase64 = null;
-
-      photoEl.style.display = 'none';
-      photoCaption.style.display = 'none';
-      stickerEl.style.display = 'none';
-      stickerCaption.style.display = 'none';
-      btnPrint.disabled = true;
-
-      if (!lines || !lines.length) return;
-
-      const first = lines[0];
-
-      if (first.preview_url) {
-        currentPreviewUrl = first.preview_url;
-        photoEl.src = first.preview_url;
-        photoEl.style.display = 'block';
-        photoCaption.style.display = 'block';
-      }
-
-      if (first.wb_sticker) {
-        currentStickerBase64 = first.wb_sticker;
-        stickerEl.src = 'data:image/svg+xml;base64,' + first.wb_sticker;
-        stickerEl.style.display = 'block';
-        stickerCaption.style.display = 'block';
-        btnPrint.disabled = false;
-      }
-    }
-
-    function renderLines() {
-      const wrapper = document.getElementById('shipment-lines-wrapper');
-      const lines = currentLines;
-
-      if (!lines || !lines.length) {
-        wrapper.innerHTML = '<div class="empty-text">Нет данных по составу отгрузки.</div>';
-        renderMediaFromLines();
-        updateConfirmButtonState();
-        return;
-      }
-
-      const rowsHtml = lines
-        .map(
-          (row) => `
-          <tr class="${row._scanned ? 'row-ok' : ''}">
-            <td>${row.barcode || ''}</td>
-            <td>${row.item_name || ''}</td>
-            <td>${row.wb_sticker_code || ''}</td>
-            <td class="${row._scanned ? 'status-ok' : ''}">
-              ${row._scanned ? 'OK' : (row.qty ?? '')}
-            </td>
-          </tr>
-        `
-        )
-        .join('');
-
-      wrapper.innerHTML = `
-        <table>
-          <thead>
-            <tr>
-              <th>Штрихкод</th>
-              <th>Наименование</th>
-              <th>Код стикера (WB)</th>
-              <th>Кол-во / статус</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-      `;
-
-      renderMediaFromLines();
-      updateConfirmButtonState();
-    }
-
-    async function apiRequest(path, options = {}) {
-      const token = getToken();
-      if (!token) {
-        throw new Error('Не найден токен авторизации. Перезайдите в систему.');
-      }
-
-      const headers = options.headers || {};
-      headers['Authorization'] = 'Bearer ' + token;
-      if (!headers['Content-Type'] && options.body) {
-        headers['Content-Type'] = 'application/json';
-      }
-
-      const res = await fetch(API_BASE + path, {
-        ...options,
-        headers,
-      });
-
-      let data = {};
-      try {
-        data = await res.json();
-      } catch (_) {
-        data = {};
-      }
-
-      if (!res.ok) {
-        const msg =
-          data.message ||
-          (res.status === 401 ? 'Ошибка авторизации (401)' : 'Ошибка запроса');
-        throw new Error(msg);
-      }
-
-      return data;
-    }
-
-    async function loadCurrentTask() {
-      const msgEl = document.getElementById('task-message');
-      msgEl.textContent = '';
-      msgEl.className = '';
-
-      try {
-        const data = await apiRequest('/packing/current', { method: 'GET' });
-        currentShipment = data.shipment || null;
-
-        const scannedSet = loadScansFromStorage();
-        currentLines = (data.lines || []).map(l => ({
-          ...l,
-          _scanned: scannedSet.has(String(l.barcode))
-        }));
-
-        locationScanned = false;
-        currentLocationCode = null;
-
-        renderTaskInfo(currentShipment);
-        renderLines();
-      } catch (err) {
-        currentShipment = null;
-        currentLines = [];
-        locationScanned = false;
-        currentLocationCode = null;
-        renderTaskInfo(null);
-        renderLines();
-        msgEl.textContent = err.message;
-        msgEl.className = 'error';
-      }
-    }
-
-    async function takeTask() {
-      const msgEl = document.getElementById('task-message');
-      msgEl.textContent = '';
-      msgEl.className = '';
-
-      try {
-        const data = await apiRequest('/packing/next', { method: 'POST' });
-        currentShipment = data.shipment || null;
-
-        const scannedSet = loadScansFromStorage();
-        currentLines = (data.lines || []).map(l => ({
-          ...l,
-          _scanned: scannedSet.has(String(l.barcode))
-        }));
-
-        locationScanned = false;
-        currentLocationCode = null;
-
-        renderTaskInfo(currentShipment);
-        renderLines();
-        msgEl.textContent = 'Задание получено.';
-        msgEl.className = 'success';
-      } catch (err) {
-        msgEl.textContent = err.message;
-        msgEl.className = 'error';
-      }
-    }
-
-    async function confirmPacking() {
-      const msgEl = document.getElementById('confirm-message');
-      msgEl.textContent = '';
-      msgEl.className = '';
-
-      if (!currentShipment) {
-        msgEl.textContent = 'Нет активного задания на упаковку.';
-        msgEl.className = 'error';
-        return;
-      }
-
-      if (!allLinesScanned()) {
-        msgEl.textContent = 'Не все строки со статусом OK.';
-        msgEl.className = 'error';
-        return;
-      }
-
-      if (!locationScanned) {
-        msgEl.textContent = 'Сначала отсканируйте МХ стола упаковки (зона "Упаковка").';
-        msgEl.className = 'error';
-        return;
-      }
-
-      try {
-        await apiRequest('/packing/confirm', {
-          method: 'POST',
-          body: JSON.stringify({
-            shipment_id: currentShipment.id,
-            location_code: currentLocationCode
-          }),
-        });
-
-        msgEl.textContent = 'Упаковка подтверждена. Задание завершено.';
-        msgEl.className = 'success';
-
-        clearScansStorage();
-        currentShipment = null;
-        currentLines = [];
-        locationScanned = false;
-        currentLocationCode = null;
-
-        renderTaskInfo(null);
-        renderLines();
-      } catch (err) {
-        msgEl.textContent = err.message;
-        msgEl.className = 'error';
-      }
-    }
-
-    function openStickerWindowAndPrint() {
-      if (!currentStickerBase64) return;
-      const win = window.open('', '_blank');
-      win.document.write(`
-        <html>
-          <head><title>Стикер</title></head>
-          <body style="margin:0;display:flex;align-items:center;justify-content:center;">
-            <img src="data:image/svg+xml;base64,${currentStickerBase64}" style="max-width:100%;max-height:100%;" />
-          </body>
-        </html>
-      `);
-      win.document.close();
-      win.focus();
-      win.print();
-    }
-
-    function handleScan(barcode) {
-      if (!barcode) return;
-      barcode = String(barcode).trim();
-      if (!barcode) return;
-
-      const line = currentLines.find(l => String(l.barcode) === barcode);
-      if (!line) {
-        return;
-      }
-
-      line._scanned = true;
-      saveScansToStorage();
-      renderLines();
-
-      if (currentStickerBase64) {
-        openStickerWindowAndPrint();
-      }
-
-      if (allLinesScanned()) {
-        const locInput = document.getElementById('scan-location-input');
-        locInput.focus();
-      }
-    }
-
-            async function handleLocationScan(code) {
-      const msgEl = document.getElementById('confirm-message');
-      msgEl.textContent = '';
-      msgEl.className = '';
-
-      if (!code) return;
-      code = String(code).trim();
-      if (!code) return;
-
-      try {
-        const data = await apiRequest(
-          '/locations/by-code?code=' + encodeURIComponent(code),
-          { method: 'GET' }
-        );
-
-        if (!data || !data.location) {
-          msgEl.textContent = 'МХ не найдена.';
-          msgEl.className = 'error';
-          locationScanned = false;
-          updateConfirmButtonState();
-          return;
-        }
-
-        // Используем флаг, который посчитал бэкенд
-        if (!data.is_packing_zone) {
-          msgEl.textContent = 'МХ не относится к зоне "Упаковка".';
-          msgEl.className = 'error';
-          locationScanned = false;
-          updateConfirmButtonState();
-          return;
-        }
-
-        const loc = data.location;
-        const zoneText = (loc.zone || '').trim();
-
-        currentLocationCode = loc.code || loc.location_code || code;
-        locationScanned = true;
-
-        msgEl.textContent = `МХ ${currentLocationCode} (зона "${zoneText || 'Упаковка'}") принята.`;
-        msgEl.className = 'success';
-        updateConfirmButtonState();
-      } catch (err) {
-        msgEl.textContent = err.message;
-        msgEl.className = 'error';
-        locationScanned = false;
-        updateConfirmButtonState();
-      }
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('btn-take-task').addEventListener('click', takeTask);
-      document.getElementById('btn-refresh-task').addEventListener('click', loadCurrentTask);
-      document.getElementById('btn-confirm').addEventListener('click', confirmPacking);
-
-      document.getElementById('btn-print-sticker')
-        .addEventListener('click', openStickerWindowAndPrint);
-
-      const scanInput = document.getElementById('scan-input');
-      scanInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          handleScan(e.target.value);
-          e.target.value = '';
-        }
-      });
-
-      const scanLocInput = document.getElementById('scan-location-input');
-      scanLocInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          handleLocationScan(e.target.value);
-          e.target.value = '';
-        }
-      });
-
-      loadCurrentTask();
-    });
-  </script>
+    const doc = printWindow.document;
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html lang="ru">
+      <head>
+        <meta charset="UTF-8" />
+        <title>QR поставки</title>
+        <style>
+          html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+          }
+          body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          img {
+            max-width: 100%;
+            max-height: 100%;
+          }
+        </style>
+      </head>
+      <body>
+        <img id="qrImage" src="${src}" alt="QR поставки" />
+        <script>
+          const img = document.getElementById('qrImage');
+
+          img.onload = function () {
+            // даём браузеру дорисовать картинку
+            setTimeout(function () {
+              window.print();
+              window.close();
+            }, 100);
+          };
+
+          img.onerror = function () {
+            alert('Ошибка загрузки QR-кода');
+          };
+        <\/script>
+      </body>
+      </html>
+    `);
+    doc.close();
+  }
+</script>
 </body>
 </html>
