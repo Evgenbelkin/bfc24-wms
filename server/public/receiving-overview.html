@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Журнал приёмки</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: #fff;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .topbar-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+
+    .topbar-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #374151;
+    }
+
+    .chip.ok {
+      background: #16a34a;
+    }
+
+    .chip.offline {
+      background: #b91c1c;
+    }
+
+    .chip-role {
+      background: #4b5563;
+    }
+
+    .btn-top {
+      border-radius: 999px;
+      border: 1px solid #6b7280;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .page {
+      padding: 10px;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      gap: 8px;
+    }
+
+    h2 {
+      font-size: 14px;
+      margin: 0;
+    }
+
+    label {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 7px;
+      font-size: 14px;
+      margin-top: 3px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+    }
+
+    button {
+      margin-top: 8px;
+      padding: 9px;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+      width: 100%;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .status {
+      margin-top: 6px;
+      font-size: 12px;
+    }
+
+    .status.ok { color: #059669; }
+    .status.error { color: #dc2626; }
+
+    .table-wrapper {
+      max-height: 420px;
+      overflow: auto;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    thead {
+      background: #f9fafb;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    th, td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      font-weight: 600;
+      font-size: 11px;
+      color: #4b5563;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    tbody tr:hover {
+      background: #e5f0ff;
+    }
+
+    .qty-plus {
+      color: #16a34a;
+      font-weight: 600;
+    }
+
+    .comment-cell {
+      max-width: 260px;
+      white-space: normal;
+    }
+
+    .hidden { display: none !important; }
+
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 11px;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 8px;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow: auto;
+      margin-top: 6px;
+    }
+
+    @media (max-width: 768px) {
+      .filters-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- ТОПБАР -->
+  <div class="topbar">
+    <div class="topbar-row">
+      <div>
+        <div class="topbar-title">BFC24 WMS — Журнал приёмки</div>
+        <div class="topbar-sub" id="userInfo">Не авторизован</div>
+      </div>
+      <div class="topbar-actions">
+        <span id="onlineChip" class="chip offline">offline</span>
+        <span id="roleChip" class="chip chip-role hidden"></span>
+        <button id="btnGoMenu" class="btn-top">Меню</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page">
+    <!-- ФИЛЬТРЫ -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Фильтры</h2>
+        <button id="btnToday" class="btn-secondary" type="button" style="width:auto;font-size:11px;padding:4px 8px;margin-top:0;">
+          Сегодня
+        </button>
+      </div>
+
+      <div class="filters-grid">
+        <div>
+          <label>
+            client_id:
+            <!-- по умолчанию (все клиенты), список подгружается из /clients-short -->
+            <select id="clientId">
+              <option value="">(все клиенты)</option>
+            </select>
+          </label>
+        </div>
+        <div>
+          <label>
+            Штрихкод (barcode):
+            <input type="text" id="barcode" autocomplete="off" />
+          </label>
+        </div>
+        <div>
+          <label>
+            Ячейка (location_code):
+            <input type="text" id="locationCode" autocomplete="off" />
+          </label>
+        </div>
+        <div>
+          <label>
+            Дата с (date_from):
+            <input type="date" id="dateFrom" />
+          </label>
+        </div>
+        <div>
+          <label>
+            Дата по (date_to):
+            <input type="date" id="dateTo" />
+          </label>
+        </div>
+        <div>
+          <label>
+            Тип движения:
+            <input type="text" value="incoming" disabled />
+          </label>
+        </div>
+      </div>
+
+      <button id="btnLoad" class="btn-primary" type="button">
+        Показать журнал приёмки
+      </button>
+      <div id="loadStatus" class="status"></div>
+    </div>
+
+    <!-- ТАБЛИЦА ДВИЖЕНИЙ -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Движения (приёмка)</h2>
+        <span id="rowsInfo" style="font-size:11px;color:#6b7280;">0 записей</span>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Дата/время</th>
+              <th>client_id</th>
+              <th>barcode</th>
+              <th>qty</th>
+              <th>ячейка</th>
+              <th>user_id</th>
+              <th>ref_type</th>
+              <th>ref_id</th>
+              <th>комментарий</th>
+            </tr>
+          </thead>
+          <tbody id="rowsBody">
+            <!-- наполняется из JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ОТЛАДКА (опционально) -->
+    <div class="card hidden" id="debugCard">
+      <div class="card-header">
+        <h2>Отладка</h2>
+      </div>
+      <pre id="responseBox">{}</pre>
+    </div>
+  </div>
+
+  <script>
+    let token = null;
+    let usernameGlobal = null;
+    let userRole = null;
+
+    function setUserInfo(text) {
+      document.getElementById('userInfo').textContent = text;
+    }
+
+    function setOnlineState(ok) {
+      const chip = document.getElementById('onlineChip');
+      chip.textContent = ok ? 'online' : 'offline';
+      chip.className = 'chip ' + (ok ? 'ok' : 'offline');
+    }
+
+    function setRoleChip(role) {
+      const chip = document.getElementById('roleChip');
+      if (!role) {
+        chip.classList.add('hidden');
+        return;
+      }
+      chip.textContent = 'role: ' + role;
+      chip.classList.remove('hidden');
+    }
+
+    function setStatus(text, ok) {
+      const el = document.getElementById('loadStatus');
+      el.textContent = text || '';
+      el.className = 'status ' + (ok ? 'ok' : 'error');
+    }
+
+    function setResponseBox(obj) {
+      const el = document.getElementById('responseBox');
+      try {
+        el.textContent = JSON.stringify(obj, null, 2);
+      } catch (e) {
+        el.textContent = String(obj);
+      }
+      document.getElementById('debugCard').classList.remove('hidden');
+    }
+
+    function formatDateTime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      return (
+        d.getFullYear() +
+        '-' + pad(d.getMonth() + 1) +
+        '-' + pad(d.getDate()) +
+        ' ' +
+        pad(d.getHours()) +
+        ':' + pad(d.getMinutes()) +
+        ':' + pad(d.getSeconds())
+      );
+    }
+
+    function initAuth() {
+      const savedToken = localStorage.getItem('wmsToken');
+      const savedUser = localStorage.getItem('wmsUser');
+      const savedRole = localStorage.getItem('wmsRole');
+
+      if (!savedToken) {
+        setOnlineState(false);
+        window.location.href = '/menu.html';
+        return false;
+      }
+
+      token = savedToken;
+      usernameGlobal = savedUser || null;
+      userRole = savedRole || null;
+
+      setOnlineState(true);
+      if (usernameGlobal) {
+        setUserInfo('Пользователь: ' + usernameGlobal);
+      } else {
+        setUserInfo('Авторизован');
+      }
+      setRoleChip(userRole);
+      return true;
+    }
+
+    // ---- Загрузка списка клиентов для селекта ----
+    async function loadClientsForJournal() {
+      const select = document.getElementById('clientId');
+      if (!select) return;
+
+      // базовый вариант — "(все клиенты)"
+      select.innerHTML = '';
+      const optAll = document.createElement('option');
+      optAll.value = '';
+      optAll.textContent = '(все клиенты)';
+      select.appendChild(optAll);
+
+      if (!token) {
+        setStatus('Нет токена. Войдите через меню.', false);
+        return;
+      }
+
+      try {
+        const res = await fetch('/clients-short', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          setStatus('Ошибка загрузки клиентов: ' + (data.error || res.status), false);
+          return;
+        }
+
+        const clients = data.clients || data.rows || [];
+        clients.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = String(c.id);
+          opt.textContent = `${c.id} — ${c.client_name || 'без названия'}`;
+          select.appendChild(opt);
+        });
+
+        // восстановить сохранённый client_id, если есть
+        const storedId = localStorage.getItem('wmsClientIdJournal');
+        if (storedId && clients.some(c => String(c.id) === storedId)) {
+          select.value = storedId;
+        }
+
+        // слушатель для сохранения выбора
+        select.addEventListener('change', (e) => {
+          const v = e.target.value;
+          if (v) {
+            localStorage.setItem('wmsClientIdJournal', v);
+          } else {
+            localStorage.removeItem('wmsClientIdJournal');
+          }
+        });
+      } catch (err) {
+        console.error('Ошибка загрузки клиентов:', err);
+        setStatus('Ошибка загрузки клиентов: ' + err.message, false);
+      }
+    }
+
+    async function loadMovements() {
+      if (!token) {
+        setStatus('Нет токена. Войдите через меню.', false);
+        return;
+      }
+
+      const clientId = document.getElementById('clientId').value.trim();
+      const barcode = document.getElementById('barcode').value.trim();
+      const locationCode = document.getElementById('locationCode').value.trim();
+      const dateFrom = document.getElementById('dateFrom').value;
+      const dateTo = document.getElementById('dateTo').value;
+
+      const params = {
+        movement_type: 'incoming',
+        limit: 500
+      };
+
+      // client_id — только если выбран (иначе все клиенты)
+      if (clientId) {
+        params.client_id = clientId;
+        localStorage.setItem('wmsClientIdJournal', clientId);
+      } else {
+        localStorage.removeItem('wmsClientIdJournal');
+      }
+
+      if (barcode) params.barcode = barcode;
+      if (locationCode) params.location_code = locationCode;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+
+      const qs = new URLSearchParams(params).toString();
+
+      setStatus('Загрузка...', true);
+      document.getElementById('rowsBody').innerHTML = '';
+      document.getElementById('rowsInfo').textContent = '0 записей';
+
+      try {
+        const res = await fetch('/movements?' + qs, {
+          method: 'GET',
+          headers: {
+            'Authorization': 'Bearer ' + token
+          }
+        });
+
+        const data = await res.json().catch(() => ({}));
+        setResponseBox(data);
+
+        if (res.status === 401 || res.status === 403) {
+          setStatus('Сессия истекла или нет прав. Войдите заново.', false);
+          setOnlineState(false);
+          setTimeout(() => { window.location.href = '/menu.html'; }, 1000);
+          return;
+        }
+
+        if (!res.ok) {
+          setStatus('Ошибка загрузки: ' + (data.error || res.status), false);
+          return;
+        }
+
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        const tbody = document.getElementById('rowsBody');
+
+        rows.forEach((row) => {
+          const tr = document.createElement('tr');
+
+          const tdCreated = document.createElement('td');
+          tdCreated.textContent = formatDateTime(row.created_at);
+          tr.appendChild(tdCreated);
+
+          const tdClient = document.createElement('td');
+          tdClient.textContent = row.client_id ?? '';
+          tr.appendChild(tdClient);
+
+          const tdBarcode = document.createElement('td');
+          tdBarcode.textContent = row.barcode ?? '';
+          tr.appendChild(tdBarcode);
+
+          const tdQty = document.createElement('td');
+          tdQty.textContent = '+' + (row.qty ?? '');
+          tdQty.className = 'qty-plus';
+          tr.appendChild(tdQty);
+
+          const tdLoc = document.createElement('td');
+          tdLoc.textContent = row.to_location ?? row.from_location ?? '';
+          tr.appendChild(tdLoc);
+
+          const tdUser = document.createElement('td');
+          tdUser.textContent = row.user_id ?? '';
+          tr.appendChild(tdUser);
+
+          const tdRefType = document.createElement('td');
+          tdRefType.textContent = row.ref_type ?? '';
+          tr.appendChild(tdRefType);
+
+          const tdRefId = document.createElement('td');
+          tdRefId.textContent = row.ref_id ?? '';
+          tr.appendChild(tdRefId);
+
+          const tdComment = document.createElement('td');
+          tdComment.textContent = row.comment ?? '';
+          tdComment.className = 'comment-cell';
+          tr.appendChild(tdComment);
+
+          tbody.appendChild(tr);
+        });
+
+        document.getElementById('rowsInfo').textContent = rows.length + ' записей';
+        setStatus('Готово: найдено ' + rows.length + ' записей.', true);
+      } catch (err) {
+        console.error(err);
+        setStatus('Ошибка запроса: ' + err.message, false);
+      }
+    }
+
+    function setTodayRange() {
+      const today = new Date();
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      const y = today.getFullYear();
+      const m = pad(today.getMonth() + 1);
+      const d = pad(today.getDate());
+      const ymd = `${y}-${m}-${d}`;
+      document.getElementById('dateFrom').value = ymd;
+      document.getElementById('dateTo').value = ymd;
+    }
+
+    (function init() {
+      if (!initAuth()) return;
+
+      document.getElementById('btnGoMenu').addEventListener('click', () => {
+        window.location.href = '/menu.html';
+      });
+
+      document.getElementById('btnLoad').addEventListener('click', () => {
+        loadMovements();
+      });
+
+      document.getElementById('btnToday').addEventListener('click', () => {
+        setTodayRange();
+      });
+
+      // По умолчанию ставим сегодня,
+      // загружаем список клиентов, затем журнал
+      setTodayRange();
+      loadClientsForJournal()
+        .then(loadMovements)
+        .catch(loadMovements);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Справочник клиентов</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing:border-box; }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      margin:0;
+      padding:0;
+      background:#f3f4f6;
+      color:#111827;
+    }
+    .topbar {
+      background:#111827;
+      color:#fff;
+      padding:8px 10px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+    .topbar-title { font-size:16px; font-weight:600; }
+    .topbar-sub { font-size:11px; opacity:0.8; }
+    .chip {
+      font-size:11px;
+      padding:3px 7px;
+      border-radius:999px;
+      background:#374151;
+    }
+    .chip.ok { background:#16a34a; }
+    .chip.offline { background:#b91c1c; }
+    .chip-role { background:#4b5563; }
+    .btn-top {
+      border-radius:999px;
+      border:1px solid #6b7280;
+      background:#111827;
+      color:#e5e7eb;
+      font-size:11px;
+      padding:4px 8px;
+      cursor:pointer;
+    }
+    .page { padding:10px; }
+    .card {
+      background:#fff;
+      border-radius:10px;
+      padding:10px;
+      margin-bottom:10px;
+      box-shadow:0 1px 3px rgba(0,0,0,0.08);
+    }
+    .card-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:6px;
+    }
+    h2{font-size:14px;margin:0;}
+    label{
+      display:block;
+      margin-top:6px;
+      font-size:12px;
+    }
+    input,select{
+      width:100%;
+      padding:7px;
+      font-size:13px;
+      margin-top:3px;
+      border-radius:6px;
+      border:1px solid #d1d5db;
+    }
+    input:focus,select:focus{
+      outline:none;
+      border-color:#2563eb;
+      box-shadow:0 0 0 1px rgba(37,99,235,0.2);
+    }
+    button{
+      margin-top:8px;
+      padding:9px;
+      font-size:14px;
+      cursor:pointer;
+      border-radius:8px;
+      border:none;
+    }
+    .btn-primary{background:#2563eb;color:#fff;width:100%;}
+    .btn-secondary{background:#e5e7eb;color:#111827;}
+    .btn-small{font-size:12px;padding:6px 8px;}
+    .two-cols{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:8px;
+    }
+    .status{
+      margin-top:6px;
+      font-size:12px;
+    }
+    .status.ok{color:#059669;}
+    .status.error{color:#dc2626;}
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+    }
+    th,td{
+      border:1px solid #e5e7eb;
+      padding:4px 6px;
+      text-align:left;
+    }
+    th{
+      background:#f9fafb;
+      font-weight:600;
+    }
+    tr:hover{
+      background:#f3f4ff;
+      cursor:pointer;
+    }
+    .badge{
+      display:inline-block;
+      padding:1px 6px;
+      border-radius:999px;
+      font-size:10px;
+      background:#e5e7eb;
+    }
+    .badge-ok{
+      background:#d1fae5;
+      color:#047857;
+    }
+    .badge-off{
+      background:#fee2e2;
+      color:#b91c1c;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">BFC24 WMS — Клиенты</div>
+      <div class="topbar-sub" id="userInfo">Загрузка...</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span id="onlineChip" class="chip offline">offline</span>
+      <span id="roleChip" class="chip chip-role" style="display:none;"></span>
+      <button class="btn-top" onclick="window.location.href='/menu.html'">Меню</button>
+    </div>
+  </div>
+
+  <div class="page">
+    <!-- Фильтр -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Фильтр клиентов</h2>
+        <button id="btnReload" class="btn-secondary btn-small">Обновить список</button>
+      </div>
+      <div class="two-cols">
+        <label>
+          Поиск (имя или код):
+          <input type="text" id="filterSearch" placeholder="TEST1 или 'Тестовый'"/>
+        </label>
+        <label>
+          Только активные:
+          <select id="filterActive">
+            <option value="">все</option>
+            <option value="true">только активные</option>
+            <option value="false">только неактивные</option>
+          </select>
+        </label>
+      </div>
+      <div id="filterStatus" class="status"></div>
+    </div>
+
+    <!-- Форма клиента -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Карточка клиента</h2>
+        <button id="btnNewClient" class="btn-secondary btn-small">Новый клиент</button>
+      </div>
+
+      <input type="hidden" id="clientId"/>
+
+      <div class="two-cols">
+        <label>
+          Название (client_name):
+          <input type="text" id="clientName"/>
+        </label>
+        <label>
+          Код (client_code):
+          <input type="text" id="clientCode" placeholder="уникальный код, напр. TEST1"/>
+        </label>
+      </div>
+
+      <div class="two-cols">
+        <label>
+          Telegram chat_id:
+          <input type="text" id="clientTelegram"/>
+        </label>
+        <label>
+          Активен (is_active):
+          <select id="clientIsActive">
+            <option value="true" selected>Да</option>
+            <option value="false">Нет</option>
+          </select>
+        </label>
+      </div>
+
+      <button id="btnSaveClient" class="btn-primary">Сохранить клиента</button>
+      <div id="clientStatus" class="status"></div>
+    </div>
+
+    <!-- Список клиентов -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Список клиентов</h2>
+        <span id="clientsCount" style="font-size:12px;color:#6b7280;"></span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="clientsTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Название</th>
+              <th>Код</th>
+              <th>Telegram</th>
+              <th>Активен</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+let token = null;
+let usernameGlobal = null;
+let userRole = null;
+let currentClients = [];
+
+function initTopbar() {
+  token = localStorage.getItem("wmsToken");
+  usernameGlobal = localStorage.getItem("wmsUser") || null;
+  userRole = localStorage.getItem("wmsRole") || null;
+
+  const onlineChip = document.getElementById("onlineChip");
+  const roleChip = document.getElementById("roleChip");
+  const userInfo = document.getElementById("userInfo");
+
+  if (token) {
+    onlineChip.textContent = "online";
+    onlineChip.className = "chip ok";
+  } else {
+    onlineChip.textContent = "offline";
+    onlineChip.className = "chip offline";
+  }
+
+  userInfo.textContent = usernameGlobal
+    ? "Пользователь: " + usernameGlobal
+    : "Нет данных пользователя (зайди через меню).";
+
+  if (userRole) {
+    roleChip.textContent = "role: " + userRole;
+    roleChip.style.display = "inline-block";
+  } else {
+    roleChip.style.display = "none";
+  }
+}
+
+function apiHeaders(extra) {
+  const h = extra ? { ...extra } : {};
+  if (token) h["Authorization"] = "Bearer " + token;
+  return h;
+}
+function setStatus(id, text, ok) {
+  const el = document.getElementById(id);
+  el.textContent = text || "";
+  if (!text) {
+    el.className = "status";
+  } else {
+    el.className = "status " + (ok ? "ok" : "error");
+  }
+}
+
+async function apiGetJson(url) {
+  const res = await fetch(url, { method: "GET", headers: apiHeaders() });
+  let data = {};
+  try { data = await res.json(); } catch(e) { data = {}; }
+  if (!res.ok) {
+    const parts = [];
+    if (data.error) parts.push(data.error);
+    if (data.detail) parts.push(data.detail);
+    throw new Error(parts.length ? parts.join(": ") : "HTTP " + res.status);
+  }
+  return data;
+}
+async function apiSendJson(url, body, method="POST") {
+  const res = await fetch(url, {
+    method,
+    headers: apiHeaders({ "Content-Type":"application/json" }),
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await res.json(); } catch(e) { data = {}; }
+  if (!res.ok) {
+    const parts = [];
+    if (data.error) parts.push(data.error);
+    if (data.detail) parts.push(data.detail);
+    throw new Error(parts.length ? parts.join(": ") : "HTTP " + res.status);
+  }
+  return data;
+}
+
+// ---- LIST ----
+async function loadClients() {
+  if (!token) {
+    setStatus("filterStatus","Нет токена. Зайди через /menu.html",false);
+    return;
+  }
+
+  const search = document.getElementById("filterSearch").value.trim();
+  const isActive = document.getElementById("filterActive").value;
+
+  setStatus("filterStatus","Загружаю...",false);
+
+  const params = [];
+  if (search) params.push("search="+encodeURIComponent(search));
+  if (isActive) params.push("is_active="+encodeURIComponent(isActive));
+  const qs = params.length ? ("?"+params.join("&")) : "";
+
+  try {
+    const data = await apiGetJson("/clients"+qs);
+    const clients = data.clients || [];
+    currentClients = clients;
+    renderClientsTable(clients);
+    setStatus("filterStatus","Готово: найдено "+clients.length+" строк.",true);
+  } catch(err) {
+    console.error(err);
+    setStatus("filterStatus","Ошибка загрузки: "+err.message,false);
+  }
+}
+
+function renderClientsTable(clients) {
+  const tbody = document.querySelector("#clientsTable tbody");
+  tbody.innerHTML = "";
+  clients.forEach(c => {
+    const tr = document.createElement("tr");
+    tr.dataset.id = c.id;
+    const isActive = c.is_active !== false && c.is_active !== "false";
+    tr.innerHTML = `
+      <td>${c.id}</td>
+      <td>${c.client_name || c.name || ""}</td>
+      <td>${c.client_code || ""}</td>
+      <td>${c.telegram_chat_id || ""}</td>
+      <td>${isActive
+          ? '<span class="badge badge-ok">on</span>'
+          : '<span class="badge badge-off">off</span>'}
+      </td>
+    `;
+    tr.addEventListener("click", () => fillClientForm(c));
+    tbody.appendChild(tr);
+  });
+  document.getElementById("clientsCount").textContent =
+    "Показано "+clients.length+" клиентов";
+}
+
+function clearClientForm() {
+  document.getElementById("clientId").value = "";
+  document.getElementById("clientName").value = "";
+  document.getElementById("clientCode").value = "";
+  document.getElementById("clientTelegram").value = "";
+  document.getElementById("clientIsActive").value = "true";
+  setStatus("clientStatus","",false);
+}
+
+function fillClientForm(c) {
+  document.getElementById("clientId").value = c.id;
+  document.getElementById("clientName").value = c.client_name || c.name || "";
+  document.getElementById("clientCode").value = c.client_code || "";
+  document.getElementById("clientTelegram").value = c.telegram_chat_id || "";
+  const isActive = c.is_active !== false && c.is_active !== "false";
+  document.getElementById("clientIsActive").value = isActive ? "true" : "false";
+  setStatus("clientStatus","Режим редактирования клиента.",true);
+}
+
+// ---- SAVE ----
+async function saveClient() {
+  if (!token) {
+    setStatus("clientStatus","Нет токена. Зайди через /menu.html",false);
+    return;
+  }
+  const id = document.getElementById("clientId").value || null;
+  const name = document.getElementById("clientName").value.trim();
+  const code = document.getElementById("clientCode").value.trim();
+  const tg   = document.getElementById("clientTelegram").value.trim();
+  const isActiveVal = document.getElementById("clientIsActive").value;
+
+  if (!name) {
+    setStatus("clientStatus","client_name обязателен",false);
+    return;
+  }
+  if (!code) {
+    setStatus("clientStatus","client_code обязателен",false);
+    return;
+  }
+
+  const payload = {
+    client_name: name,
+    client_code: code,
+    telegram_chat_id: tg || null,
+    is_active: isActiveVal === "true",
+  };
+
+  setStatus("clientStatus","Сохраняю...",false);
+
+  try {
+    if (id) {
+      await apiSendJson("/clients/"+id, payload, "PATCH");
+    } else {
+      await apiSendJson("/clients", payload, "POST");
+    }
+    setStatus("clientStatus","Сохранено успешно.",true);
+    await loadClients();
+  } catch(err){
+    console.error(err);
+    setStatus("clientStatus","Ошибка сохранения: "+err.message,false);
+  }
+}
+
+// ---- INIT ----
+(function init(){
+  initTopbar();
+
+  document.getElementById("btnReload").addEventListener("click", loadClients);
+  document.getElementById("btnNewClient").addEventListener("click", clearClientForm);
+  document.getElementById("btnSaveClient").addEventListener("click", saveClient);
+
+  clearClientForm();
+  loadClients();
+})();
+</script>
+</body>
+</html>

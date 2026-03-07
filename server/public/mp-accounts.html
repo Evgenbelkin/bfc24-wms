@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — MP-аккаунты (Wildberries)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f7;
+      color: #222;
+    }
+
+    header {
+      background: #4b3ff3;
+      color: #fff;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      font-size: 18px;
+      margin: 0;
+    }
+
+    header .menu-link {
+      color: #fff;
+      text-decoration: none;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    main {
+      padding: 16px 20px 30px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      padding: 14px 16px 16px;
+    }
+
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-left,
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: #eee;
+      color: #444;
+    }
+
+    .badge.wb {
+      background: #6400ff11;
+      color: #6400ff;
+      border: 1px solid #6400ff33;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      border-bottom: 1px solid #eee;
+      padding: 6px 4px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      font-weight: 600;
+      font-size: 12px;
+      color: #555;
+      background: #fafafa;
+    }
+
+    tr:hover td { background: #faf5ff; }
+
+    .btn {
+      border: none;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #eceff1;
+      color: #222;
+    }
+
+    .btn.primary { background: #4b3ff3; color: #fff; }
+    .btn.success { background: #00a86b; color: #fff; }
+    .btn.warning { background: #ff9800; color: #fff; }
+    .btn.small { padding: 3px 8px; font-size: 11px; }
+    .btn:disabled { opacity: 0.6; cursor: default; }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    .status-dot.active { background: #00c853; }
+    .status-dot.inactive { background: #ccc; }
+
+    .field { margin-bottom: 10px; }
+    .field label {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 3px;
+      color: #555;
+    }
+
+    .field input[type="text"],
+    .field input[type="number"],
+    .field input[type="password"],
+    .field input[type="date"],
+    .field select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 13px;
+      background: #fff;
+    }
+
+    .field-row { display: flex; gap: 8px; }
+    .field-row .field { flex: 1; }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    .switch-row input[type="checkbox"] { transform: scale(1.1); }
+
+    .help-text {
+      font-size: 11px;
+      color: #777;
+      line-height: 1.4;
+      margin-top: 4px;
+    }
+
+    .log-area {
+      margin-top: 8px;
+      padding: 6px 8px;
+      font-size: 11px;
+      background: #0b1020;
+      color: #e0e8ff;
+      border-radius: 6px;
+      max-height: 140px;
+      overflow-y: auto;
+      white-space: pre-line;
+    }
+
+    .log-area h3 {
+      font-size: 11px;
+      margin: 0 0 4px;
+      color: #9fa8ff;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      background: #e0e0e0;
+      color: #555;
+      margin-right: 4px;
+    }
+
+    .tag.id { background: #ede7f6; color: #5e35b1; }
+    .tag.code { background: #e8f5e9; color: #2e7d32; }
+    .tag.supplier { background: #e3f2fd; color: #1565c0; }
+
+    .row-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>BFC24 WMS — MP-аккаунты (Wildberries)</h1>
+    <a href="/menu.html" class="menu-link">← Меню</a>
+  </header>
+
+  <main>
+    <div class="layout">
+      <!-- Левая колонка: таблица аккаунтов -->
+      <section class="card">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <h2>Аккаунты маркетплейсов</h2>
+            <span class="badge wb">Wildberries</span>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn primary" onclick="startCreateAccount()">+ Новый аккаунт</button>
+            <button class="btn" onclick="reloadAccounts()">Обновить список</button>
+          </div>
+        </div>
+
+        <table id="accounts-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Имя</th>
+              <th>Код</th>
+              <th>SupplierID</th>
+              <th>API</th>
+              <th>Клиент WMS</th>
+              <th>Срок годности</th>
+              <th>Статус</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="accounts-tbody">
+            <tr><td colspan="9">Загрузка...</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Правая колонка: форма аккаунта + лог -->
+      <section class="card">
+        <h2 id="form-title">Создание аккаунта</h2>
+
+        <form id="account-form" onsubmit="submitAccountForm(event)">
+          <input type="hidden" id="account-id" />
+
+          <div class="field">
+            <label for="label">Имя аккаунта (label)</label>
+            <input type="text" id="label" required placeholder="Например: Китайский клиент WB" />
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="account_code">Внутренний код (account_code)</label>
+              <input type="text" id="account_code" placeholder="Например: cn001" />
+            </div>
+            <div class="field">
+              <label for="supplier_id">WB Supplier ID</label>
+              <input type="number" id="supplier_id" placeholder="Например: 123456" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="wms_client_id">Клиент WMS</label>
+            <select id="wms_client_id"></select>
+            <div class="help-text">
+              Один раз привяжи WB-аккаунт к клиенту WMS — дальше волны и сборка работают автоматически.
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="api_token">WB API-token</label>
+            <input type="password" id="api_token" placeholder="Вставь сюда ключ API WB" />
+            <div class="help-text">Токен хранится в базе как есть. При редактировании можешь менять/очищать.</div>
+          </div>
+
+          <div class="field">
+            <label for="expiry_date">Срок годности токена</label>
+            <input type="date" id="expiry_date" />
+            <div class="help-text">
+              Вспомогательная дата, когда нужно обновить ключ WB (3&nbsp;месяца, полгода и т.п.).
+            </div>
+          </div>
+
+          <div class="switch-row">
+            <input type="checkbox" id="is_active" checked />
+            <label for="is_active">Аккаунт активен</label>
+          </div>
+
+          <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+            <button type="submit" class="btn success" id="save-btn">Сохранить</button>
+            <button type="button" class="btn" onclick="resetForm()">Сбросить форму</button>
+          </div>
+        </form>
+
+        <div class="help-text" style="margin-top:12px;">
+          После сохранения аккаунта можно запускать:<br />
+          — импорт карточек через Content API;<br />
+          — импорт остатков (FBS/FBO) через Marketplace API;<br />
+          — открывать справочник WB (wbDirectory).
+        </div>
+
+        <div class="log-area" id="log"><h3>Лог действий</h3></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = '';
+
+    let mpAccountsCache = [];     // кэш списка аккаунтов
+    let wmsClientsCache = [];     // кэш клиентов WMS
+
+    function log(msg) {
+      const logEl = document.getElementById('log');
+      const time = new Date().toLocaleTimeString();
+      logEl.innerHTML += '\n[' + time + '] ' + msg;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'","&#039;");
+    }
+
+    function getToken() {
+      const token = localStorage.getItem('wmsToken');
+      if (!token) console.warn('Нет wmsToken в localStorage');
+      return token || '';
+    }
+
+    function handleAuthError(resp, data) {
+      if (resp.status === 401 || data?.error === 'invalid_token' || data?.error === 'auth_required') {
+        log('Авторизация истекла или невалидна, очищаем токен');
+        localStorage.removeItem('wmsToken');
+        alert('Сессия истекла. Зайдите в систему заново.');
+        window.location.href = '/menu.html';
+        return true;
+      }
+      return false;
+    }
+
+    function ensureTokenOrRedirect() {
+      const token = getToken();
+      if (!token) {
+        alert('Нет токена авторизации. Зайдите в систему заново.');
+        window.location.href = '/menu.html';
+        return null;
+      }
+      return token;
+    }
+
+    function setClientsSelectOptions(selectedId) {
+      const sel = document.getElementById('wms_client_id');
+
+      sel.innerHTML = '';
+      const opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = '— выбери клиента WMS —';
+      sel.appendChild(opt0);
+
+      for (const c of wmsClientsCache) {
+        const opt = document.createElement('option');
+        opt.value = String(c.id);
+        const code = String(c.client_code || '').trim();
+        opt.textContent = code ? `${c.client_name} (${code}) [ID ${c.id}]` : `${c.client_name} [ID ${c.id}]`;
+        sel.appendChild(opt);
+      }
+
+      sel.value = (selectedId != null && selectedId !== '') ? String(selectedId) : '';
+    }
+
+    async function loadWmsClients() {
+      const token = ensureTokenOrRedirect();
+      if (!token) return;
+
+      // Сразу показываем placeholder (даже если сеть упала)
+      setClientsSelectOptions('');
+
+      try {
+        // Твой текущий эндпоинт возвращает: { clients: [...] }
+        const resp = await fetch(API_BASE + '/clients?is_active=true', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          if (handleAuthError(resp, data)) return;
+          log('Не удалось загрузить клиентов WMS: ' + (data.error || resp.status));
+          wmsClientsCache = [];
+          setClientsSelectOptions('');
+          return;
+        }
+
+        const clients =
+          Array.isArray(data.clients) ? data.clients :
+          Array.isArray(data) ? data :
+          Array.isArray(data.rows) ? data.rows : [];
+
+        // Фильтр активных (на всякий случай)
+        wmsClientsCache = clients.filter(c => c && (c.is_active === true || c.is_active === undefined));
+
+        // Сортировка по названию
+        wmsClientsCache.sort((a,b) =>
+          String(a.client_name || '').localeCompare(String(b.client_name || ''), 'ru')
+        );
+
+        setClientsSelectOptions('');
+        log('Загружено клиентов WMS: ' + wmsClientsCache.length);
+
+        if (!wmsClientsCache.length) {
+          log('ВНИМАНИЕ: список клиентов пуст. Проверь /clients?is_active=true и данные в masterdata.clients.');
+        }
+      } catch (err) {
+        console.error(err);
+        log('Ошибка loadWmsClients: ' + err.message);
+        wmsClientsCache = [];
+        setClientsSelectOptions('');
+      }
+    }
+
+    function getClientNameById(id) {
+      const c = wmsClientsCache.find(x => String(x.id) === String(id));
+      if (!c) return id ? `id=${id}` : '—';
+      const code = String(c.client_code || '').trim();
+      return code ? `${c.client_name} (${code})` : c.client_name;
+    }
+
+    async function reloadAccounts() {
+      const tbody = document.getElementById('accounts-tbody');
+      tbody.innerHTML = '<tr><td colspan="9">Загрузка...</td></tr>';
+
+      const token = ensureTokenOrRedirect();
+      if (!token) {
+        tbody.innerHTML = '<tr><td colspan="9">Нет токена авторизации</td></tr>';
+        return;
+      }
+
+      try {
+        const resp = await fetch(API_BASE + '/mp/accounts?marketplace=wb', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          if (handleAuthError(resp, data)) return;
+          tbody.innerHTML = '<tr><td colspan="9">Ошибка: ' + (data.error || resp.status) + '</td></tr>';
+          log('Ошибка загрузки аккаунтов: ' + (data.error || resp.status));
+          return;
+        }
+
+        mpAccountsCache = Array.isArray(data) ? data : [];
+        renderAccountsTable(mpAccountsCache);
+        log('Загружено аккаунтов: ' + mpAccountsCache.length);
+      } catch (err) {
+        console.error(err);
+        tbody.innerHTML = '<tr><td colspan="9">Ошибка загрузки</td></tr>';
+        log('Ошибка загрузки аккаунтов: ' + err.message);
+      }
+    }
+
+    function renderAccountsTable(accounts) {
+      const tbody = document.getElementById('accounts-tbody');
+
+      if (!accounts || !accounts.length) {
+        tbody.innerHTML = '<tr><td colspan="9">Пока нет аккаунтов Wildberries</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '';
+
+      for (const acc of accounts) {
+        const tr = document.createElement('tr');
+
+        const statusDotClass = acc.is_active ? 'status-dot active' : 'status-dot inactive';
+        const statusText = acc.is_active ? 'Активен' : 'Отключен';
+
+        // поддерживаем разные форматы бэка:
+        // 1) has_api_token boolean
+        // 2) api_token (не должен отдавать, но вдруг)
+        const hasApi = (acc.has_api_token === true) || (!!acc.api_token);
+        const apiText = hasApi ? 'есть' : 'нет';
+
+        const expiry = acc.expiry_date || '';
+
+        const wmsClientText = acc.wms_client_id
+          ? escapeHtml(getClientNameById(acc.wms_client_id))
+          : '—';
+
+        tr.innerHTML = `
+          <td><span class="tag id">ID ${escapeHtml(acc.id)}</span></td>
+          <td>${escapeHtml(acc.label)}</td>
+          <td>${escapeHtml(acc.account_code || '')}</td>
+          <td>${escapeHtml(acc.supplier_id || '')}</td>
+          <td>${escapeHtml(apiText)}</td>
+          <td>${wmsClientText}</td>
+          <td>${escapeHtml(expiry)}</td>
+          <td><span class="${statusDotClass}"></span>${escapeHtml(statusText)}</td>
+          <td>
+            <div class="row-actions">
+              <button class="btn small" onclick="editAccount(${Number(acc.id)})">Редактировать</button>
+              <button class="btn small warning" onclick="importWbItems(${Number(acc.id)})">Карточки WB</button>
+              <button class="btn small primary" onclick="importWbStocks(${Number(acc.id)})">Остатки WB</button>
+              <button class="btn small" onclick="openWbDirectory(${Number(acc.id)})">Справочник WB</button>
+            </div>
+          </td>
+        `;
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    function startCreateAccount() {
+      resetForm();
+      document.getElementById('form-title').textContent = 'Создание аккаунта';
+      log('Режим: создание нового аккаунта');
+    }
+
+    function resetForm() {
+      document.getElementById('account-id').value = '';
+      document.getElementById('label').value = '';
+      document.getElementById('account_code').value = '';
+      document.getElementById('supplier_id').value = '';
+      document.getElementById('api_token').value = '';
+      document.getElementById('expiry_date').value = '';
+      document.getElementById('is_active').checked = true;
+
+      // Клиент WMS сбрасываем
+      setClientsSelectOptions('');
+
+      document.getElementById('form-title').textContent = 'Создание аккаунта';
+    }
+
+    function editAccount(id) {
+      const acc = mpAccountsCache.find(a => String(a.id) === String(id));
+      if (!acc) {
+        log('Аккаунт ID ' + id + ' не найден в кэше. Обнови список.');
+        alert('Аккаунт ID ' + id + ' не найден. Нажми "Обновить список" и попробуй ещё раз.');
+        return;
+      }
+
+      document.getElementById('account-id').value = acc.id;
+      document.getElementById('label').value = acc.label || '';
+      document.getElementById('account_code').value = acc.account_code || '';
+      document.getElementById('supplier_id').value = acc.supplier_id || '';
+      document.getElementById('api_token').value = ''; // токен обратно не показываем
+      document.getElementById('expiry_date').value = acc.expiry_date || '';
+      document.getElementById('is_active').checked = !!acc.is_active;
+
+      // проставляем выбранного клиента (если есть)
+      setClientsSelectOptions(acc.wms_client_id || '');
+
+      document.getElementById('form-title').textContent = 'Редактирование аккаунта ID ' + acc.id;
+      log('Режим: редактирование аккаунта ID ' + acc.id);
+    }
+
+    async function submitAccountForm(event) {
+      event.preventDefault();
+
+      const token = ensureTokenOrRedirect();
+      if (!token) return;
+
+      const id = document.getElementById('account-id').value;
+      const label = document.getElementById('label').value.trim();
+      const account_code = document.getElementById('account_code').value.trim() || null;
+      const supplier_id_raw = document.getElementById('supplier_id').value.trim();
+      const api_token = document.getElementById('api_token').value.trim() || null;
+      const expiry_date_raw = document.getElementById('expiry_date').value.trim();
+      const expiry_date = expiry_date_raw || null;
+      const is_active = document.getElementById('is_active').checked;
+
+      const wms_client_id_raw = (document.getElementById('wms_client_id').value || '').trim();
+      const wms_client_id = wms_client_id_raw ? Number(wms_client_id_raw) : null;
+
+      if (!label) {
+        alert('Заполни Имя аккаунта (label)');
+        return;
+      }
+
+      const supplier_id = supplier_id_raw ? Number(supplier_id_raw) : null;
+
+      const payload = {
+        label,
+        account_code,
+        supplier_id,
+        wms_client_id,   // ✅ КЛЮЧЕВОЕ
+        api_token,
+        expiry_date,
+        is_active,
+      };
+
+      const method = id ? 'PATCH' : 'POST';
+      const url = id ? (API_BASE + '/mp/accounts/' + id) : (API_BASE + '/mp/accounts');
+
+      try {
+        const resp = await fetch(url, {
+          method,
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          if (handleAuthError(resp, data)) return;
+
+          alert('Ошибка сохранения: ' + (data.error || resp.status));
+          log('Ошибка сохранения аккаунта: ' + (data.error || resp.status));
+          return;
+        }
+
+        log((id ? 'Обновлён' : 'Создан') + ' аккаунт ID ' + data.id + ' (' + data.label + ')' +
+            (payload.wms_client_id ? (' | WMS клиент: ' + getClientNameById(payload.wms_client_id)) : ''));
+
+        await reloadAccounts();
+
+        // не держим токен в поле
+        document.getElementById('api_token').value = '';
+      } catch (err) {
+        console.error(err);
+        alert('Ошибка сохранения: ' + err.message);
+        log('Ошибка submitAccountForm: ' + err.message);
+      }
+    }
+
+    async function importWbItems(accountId) {
+      const token = ensureTokenOrRedirect();
+      if (!token) return;
+
+      if (!confirm('Импортировать карточки WB для аккаунта ID ' + accountId + '?')) return;
+
+      try {
+        const resp = await fetch(API_BASE + '/mp/wb/import-items?account_id=' + accountId, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          if (handleAuthError(resp, data)) return;
+
+          alert('Ошибка импорта карточек: ' + (data.error || resp.status));
+          log('Ошибка импорта карточек: ' + (data.error || resp.status));
+          return;
+        }
+
+        alert('Импорт карточек завершён. Загружено: ' + (data.fetched_cards || 'см. лог'));
+        log('Импорт карточек WB для account_id=' + accountId + ' завершён');
+      } catch (err) {
+        console.error(err);
+        alert('Ошибка импорта карточек: ' + err.message);
+        log('Ошибка importWbItems: ' + err.message);
+      }
+    }
+
+    async function importWbStocks(accountId) {
+      const token = ensureTokenOrRedirect();
+      if (!token) return;
+
+      if (!confirm('Импортировать остатки WB для аккаунта ID ' + accountId + '?')) return;
+
+      try {
+        const resp = await fetch(API_BASE + '/mp/wb/import-stocks?account_id=' + accountId, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          if (handleAuthError(resp, data)) return;
+
+          alert('Ошибка импорта остатков: ' + (data.error || resp.status));
+          log('Ошибка импорта остатков: ' + (data.error || resp.status));
+          return;
+        }
+
+        alert('Импорт остатков завершён. FBS строк: ' + data.fbs_rows + ', FBO строк: ' + data.fbo_rows);
+        log('Импорт остатков WB для account_id=' + accountId + ' завершён');
+      } catch (err) {
+        console.error(err);
+        alert('Ошибка импорта остатков: ' + err.message);
+        log('Ошибка importWbStocks: ' + err.message);
+      }
+    }
+
+    function openWbDirectory(accountId) {
+      window.location.href = '/mp-wb-items.html?account_id=' + accountId;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // 1) сначала клиентов, чтобы селект был готов
+      await loadWmsClients();
+
+      // 2) затем аккаунты
+      await reloadAccounts();
+
+      // 3) форма
+      startCreateAccount();
+      log('Страница MP-аккаунтов загружена');
+    });
+  </script>
+</body>
+</html>

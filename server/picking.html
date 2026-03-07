@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Сборка</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: white;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .topbar-title {
+      font-weight: 600;
+      font-size: 16px;
+    }
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .btn-top {
+      padding: 4px 10px;
+      background: transparent;
+      color: white;
+      border: 1px solid #6b7280;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .page {
+      padding: 12px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .task-main {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .task-photo-wrap {
+      width: 96px;
+      height: 96px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .task-photo {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: cover;
+    }
+    .task-photo-placeholder {
+      font-size: 11px;
+      color: #6b7280;
+      text-align: center;
+      padding: 4px;
+    }
+
+    .task-info-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .task-info-sub {
+      font-size: 12px;
+      color: #4b5563;
+      margin-bottom: 4px;
+    }
+    .task-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      color: #374151;
+    }
+    .badge-green { background: #dcfce7; color: #166534; }
+    .badge-blue { background: #dbeafe; color: #1d4ed8; }
+    .badge-purple { background: #ede9fe; color: #6d28d9; }
+
+    .location-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #111827;
+    }
+    .location-code {
+      display: inline-block;
+      margin-top: 2px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .scan-block {
+      margin-top: 12px;
+    }
+    .scan-label {
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .scan-input {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+    }
+    .scan-input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .btn {
+      flex: 1 1 0;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #16a34a;
+      color: white;
+    }
+    .btn-primary:disabled {
+      background: #9ca3af;
+      cursor: default;
+    }
+    .btn-secondary {
+      background: #f97316;
+      color: #111827;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #d1d5db;
+      color: #111827;
+      flex: 0 0 auto;
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    .status {
+      font-size: 12px;
+      margin-top: 6px;
+    }
+    .status-ok { color: #16a34a; }
+    .status-err { color: #dc2626; }
+    .status-info { color: #4b5563; }
+
+    .debug {
+      font-size: 11px;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 6px;
+      border-radius: 8px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">BFC24 WMS — Сборка</div>
+      <div class="topbar-sub" id="userInfo">Пользователь не определён</div>
+    </div>
+    <button class="btn-top" onclick="window.location.href='/menu.html'">Меню</button>
+  </div>
+
+  <div class="page">
+
+    <!-- Текущее задание -->
+    <div class="card">
+      <div class="task-header">
+        <div>
+          <div class="task-info-sub" id="clientInfo">Клиент: —</div>
+          <div class="task-info-sub" id="shipmentInfo">Отгрузка: —</div>
+          <div class="task-info-sub" id="pickerInfo">Сборщик: —</div>
+          <div class="task-badges">
+            <span class="badge badge-blue" id="warehouseBadge">Склад: —</span>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div class="location-label">Место хранения</div>
+          <div class="location-code" id="locationCode">—</div>
+        </div>
+      </div>
+
+      <div class="task-main">
+        <div class="task-photo-wrap">
+          <img id="itemPhoto" class="task-photo" src="" alt="" style="display:none;">
+          <div id="itemPhotoPlaceholder" class="task-photo-placeholder">
+            Нет фото
+          </div>
+        </div>
+
+        <div style="flex:1 1 0;">
+          <div class="task-info-title" id="itemName">Товар не загружен</div>
+          <div class="task-info-sub">
+            Штрихкод: <span id="itemBarcode">—</span>
+          </div>
+          <div class="task-badges">
+            <span class="badge badge-green">К сборке: <span id="itemQty">—</span> шт</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="scan-block">
+        <div class="scan-label">Сканируй штрихкод товара (или введи вручную):</div>
+        <input id="scanInput" class="scan-input" type="text" autocomplete="off" />
+        <div class="btn-row">
+          <button id="btnConfirm" class="btn btn-primary" disabled>✅ Подтвердить</button>
+          <button id="btnSkip" class="btn btn-secondary" disabled>⏭ Пропустить (нет товара)</button>
+          <button id="btnNext" class="btn btn-outline">🔄 Обновить задание</button>
+        </div>
+        <div id="taskStatus" class="status status-info">Задание не загружено</div>
+      </div>
+    </div>
+
+    <!-- Отладка (пригодится, чтобы видеть ответы API) -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="font-weight:600;font-size:13px;">Отладка</div>
+        <button class="btn-outline" onclick="clearDebug()">Очистить</button>
+      </div>
+      <pre id="debugBox" class="debug">{}</pre>
+    </div>
+
+  </div>
+
+
+<script>
+let token = null;
+let username = null;
+let role = null;
+let currentTask = null;
+
+// --- Простой "бип" через Web Audio API (без файлов) ---
+function playBeep(type) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    let freq = 880; // по умолчанию
+    if (type === 'new') freq = 1040;
+    if (type === 'ok') freq = 880;
+    if (type === 'err') freq = 440;
+
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.15);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+  } catch (e) {
+    // молча игнорируем, если что-то пошло не так
+  }
+}
+
+// --- Отладка ---
+function setDebug(obj) {
+  const box = document.getElementById('debugBox');
+  box.textContent = JSON.stringify(obj, null, 2);
+}
+function appendDebug(label, obj) {
+  const box = document.getElementById('debugBox');
+  const prev = box.textContent.trim();
+  const header = `\n\n--- ${label} ---\n`;
+  box.textContent = prev + header + JSON.stringify(obj, null, 2);
+}
+function clearDebug() {
+  document.getElementById('debugBox').textContent = '{}';
+}
+
+// --- Статус под карточкой ---
+function setTaskStatus(text, type = 'info') {
+  const el = document.getElementById('taskStatus');
+  el.textContent = text;
+  el.className = 'status ' + (
+    type === 'ok' ? 'status-ok' :
+    type === 'err' ? 'status-err' :
+    'status-info'
+  );
+}
+
+// --- Вспомогательный fetch с токеном ---
+async function apiFetch(url, options = {}) {
+  if (!token) {
+    throw new Error('no_token');
+  }
+
+  const opts = Object.assign({}, options);
+  if (!opts.method) {
+    opts.method = 'GET';
+  }
+
+  const baseHeaders = Object.assign({}, options.headers || {}, {
+    'Authorization': 'Bearer ' + token
+  });
+
+  const methodUpper = opts.method.toUpperCase();
+  if (methodUpper !== 'GET' && methodUpper !== 'HEAD') {
+    baseHeaders['Content-Type'] = 'application/json';
+  }
+
+  opts.headers = baseHeaders;
+
+  const res = await fetch(url, opts);
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (e) {
+    data = null;
+  }
+  appendDebug(url, { status: res.status, ok: res.ok, data });
+  if (!res.ok) {
+    const errMsg = (data && (data.error || data.message)) || ('HTTP ' + res.status);
+    throw new Error(errMsg);
+  }
+  return data;
+}
+
+// --- Рендер текущего задания ---
+function renderTask(task) {
+  currentTask = task || null;
+
+  const clientInfoEl = document.getElementById('clientInfo');
+  const shipmentInfoEl = document.getElementById('shipmentInfo');
+  const warehouseBadgeEl = document.getElementById('warehouseBadge');
+  const locationCodeEl = document.getElementById('locationCode');
+  const itemNameEl = document.getElementById('itemName');
+  const itemBarcodeEl = document.getElementById('itemBarcode');
+  const itemQtyEl = document.getElementById('itemQty');
+  const photoEl = document.getElementById('itemPhoto');
+  const photoPhEl = document.getElementById('itemPhotoPlaceholder');
+  const btnConfirm = document.getElementById('btnConfirm');
+  const btnSkip = document.getElementById('btnSkip');
+
+  if (!task) {
+    clientInfoEl.textContent = 'Клиент: —';
+    shipmentInfoEl.textContent = 'Отгрузка: —';
+    warehouseBadgeEl.textContent = 'Склад: —';
+    locationCodeEl.textContent = '—';
+    itemNameEl.textContent = 'Заданий на сборку нет';
+    itemBarcodeEl.textContent = '—';
+    itemQtyEl.textContent = '—';
+
+    photoEl.style.display = 'none';
+    photoEl.src = '';
+    photoPhEl.style.display = 'block';
+
+    btnConfirm.disabled = true;
+    btnSkip.disabled = true;
+    setTaskStatus('Нет заданий на сборку', 'info');
+    return;
+  }
+
+  clientInfoEl.textContent = 'Клиент: ' + (task.client_name || '—');
+  shipmentInfoEl.textContent = 'Отгрузка: ' + (task.shipment_code || '—');
+
+  const whName = task.wb_warehouse_name || task.warehouse_name || '—';
+  warehouseBadgeEl.textContent = 'Склад: ' + whName;
+
+  locationCodeEl.textContent = task.location_code || '—';
+  itemNameEl.textContent = task.item_name || 'Без названия';
+  itemBarcodeEl.textContent = task.barcode || '—';
+  itemQtyEl.textContent = (task.qty != null ? task.qty : '—');
+
+  if (task.preview_url) {
+    photoEl.src = task.preview_url;
+    photoEl.style.display = 'block';
+    photoPhEl.style.display = 'none';
+  } else {
+    photoEl.style.display = 'none';
+    photoEl.src = '';
+    photoPhEl.style.display = 'block';
+  }
+
+  btnConfirm.disabled = false;
+  btnSkip.disabled = false;
+  setTaskStatus('Задание загружено. Сканируй товар и подтверждай.', 'info');
+  playBeep('new');
+}
+
+// --- Загрузка следующего задания ---
+async function loadNextTask() {
+  const input = document.getElementById('scanInput');
+  input.value = '';
+  input.focus();
+
+  setTaskStatus('Загружаю задание...', 'info');
+  try {
+    const data = await apiFetch('/picking/next', { method: 'GET' });
+
+    // Поддержка форматов: {status, task} или просто task
+    const task = data.task || data;
+    if (!task || Object.keys(task).length === 0) {
+      renderTask(null);
+      return;
+    }
+    renderTask(task);
+  } catch (err) {
+    console.error('loadNextTask error', err);
+    setTaskStatus('Ошибка загрузки задания: ' + err.message, 'err');
+    playBeep('err');
+    renderTask(null);
+  }
+}
+
+// --- Подтверждение сборки ---
+async function confirmTask() {
+  if (!currentTask) return;
+  const btnConfirm = document.getElementById('btnConfirm');
+  const btnSkip = document.getElementById('btnSkip');
+  const input = document.getElementById('scanInput');
+
+  const scanned = input.value.trim()
+  if (!scanned) {
+    setTaskStatus('Сначала отсканируй штрихкод товара', 'err');
+    playBeep('err');
+    input.focus();
+    return;
+  }
+
+  btnConfirm.disabled = true;
+  btnSkip.disabled = true;
+  setTaskStatus('Подтверждаю задание...', 'info');
+
+  try {
+    const payload = {
+      picking_task_id: currentTask.id,
+      task_id: currentTask.id,          // на всякий случай, если бэкенд ждёт task_id
+      barcode: scanned,
+      scanned_barcode: scanned,
+      picker_name: username            // логин сборщика — из токена/локального хранилища
+    };
+
+    const data = await apiFetch('/picking/confirm', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    setTaskStatus('Задание подтверждено', 'ok');
+    playBeep('ok');
+    appendDebug('confirm_result', data);
+
+    // подгружаем следующее задание
+    await loadNextTask();
+  } catch (err) {
+    console.error('confirmTask error', err);
+    setTaskStatus('Ошибка подтверждения: ' + err.message, 'err');
+    playBeep('err');
+    btnConfirm.disabled = false;
+    btnSkip.disabled = false;
+  }
+}
+
+// --- Пропуск (нет товара / не нашёл) ---
+async function skipTask() {
+  if (!currentTask) return;
+  const btnConfirm = document.getElementById('btnConfirm');
+  const btnSkip = document.getElementById('btnSkip');
+
+  btnConfirm.disabled = true;
+  btnSkip.disabled = true;
+  setTaskStatus('Передаю задание на инвентаризацию...', 'info');
+
+  try {
+    const payload = {
+      picking_task_id: currentTask.id,
+      task_id: currentTask.id,
+      reason: 'no_stock',
+      picker_name: username
+    };
+
+    const data = await apiFetch('/picking/skip', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    setTaskStatus('Задание пропущено, создана задача на инвентаризацию', 'ok');
+    playBeep('ok');
+    appendDebug('skip_result', data);
+
+    await loadNextTask();
+  } catch (err) {
+    console.error('skipTask error', err);
+    setTaskStatus('Ошибка пропуска: ' + err.message, 'err');
+    playBeep('err');
+    btnConfirm.disabled = false;
+    btnSkip.disabled = false;
+  }
+}
+
+// --- Инициализация страницы ---
+(function init() {
+  const t = localStorage.getItem('wmsToken');
+  const u = localStorage.getItem('wmsUser');
+  const r = localStorage.getItem('wmsRole');
+
+  if (!t) {
+    // нет токена — шлём на меню/логин
+    window.location.href = '/menu.html';
+    return;
+  }
+
+  token = t;
+  username = u || 'unknown';
+  role = r || '-';
+
+  document.getElementById('userInfo').textContent =
+    'Пользователь: ' + username + ' (' + role + ')';
+  document.getElementById('pickerInfo').textContent =
+    'Сборщик: ' + username;
+
+  // Привязка кнопок
+  document.getElementById('btnConfirm').onclick = confirmTask;
+  document.getElementById('btnSkip').onclick = skipTask;
+  document.getElementById('btnNext').onclick = loadNextTask;
+
+  const scanInput = document.getElementById('scanInput');
+  scanInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      confirmTask();
+    }
+  });
+
+  // Первичная загрузка задания
+  loadNextTask();
+})();
+</script>
+
+</body>
+</html>

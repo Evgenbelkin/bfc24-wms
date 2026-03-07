@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Сборка (TSD)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+  <style>
+    :root {
+      --primary: #2563eb;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --bg-gray: #f3f4f6;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; padding: 0;
+      background: var(--bg-gray); color: var(--text-main);
+      line-height: 1.4;
+    }
+
+    /* Header */
+    .topbar {
+      background: #111827; color: white;
+      padding: 10px;
+      display: flex; flex-direction: column; gap: 8px;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .topbar-row { display: flex; justify-content: space-between; align-items: center; }
+    .topbar-title { font-weight: 700; font-size: 16px; letter-spacing: 0.5px; }
+    .topbar-sub { font-size: 11px; opacity: 0.8; }
+    .topbar-btns { display: flex; gap: 5px; }
+
+    .btn-top {
+      padding: 6px 10px;
+      background: rgba(255,255,255,0.1);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .page { padding: 8px; }
+
+    /* Cards */
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      border: 1px solid #e5e7eb;
+    }
+
+    /* Wave Panel */
+    .wave {
+      border: 2px solid #fdba74;
+      background: #fff7ed;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .wave-title { font-weight: 800; font-size: 15px; margin-bottom: 4px; color: #9a3412; }
+    .wave-sub { font-size: 12px; color: #431407; margin-bottom: 12px; font-weight: 500; }
+    .wave-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    
+    .btn-wave {
+      height: 48px;
+      border-radius: 10px;
+      border: none;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-take  { background: var(--primary); color: #fff; grid-column: span 2; height: 54px; font-size: 15px; }
+    .btn-close { background: var(--danger); color: #fff; }
+    .btn-reset { background: #6b7280; color: #fff; }
+    .btn-print { background: #fff; border: 1px solid #d1d5db; color: #374151; }
+    .btn-wave:disabled { background: #d1d5db; color: #9ca3af; cursor: not-allowed; }
+
+    /* Task Header & Location */
+    .task-header-tsd {
+      display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;
+    }
+    .location-card {
+      background: #fee2e2;
+      border: 2px solid #ef4444;
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+    .location-label { font-size: 11px; font-weight: 800; color: #b91c1c; text-transform: uppercase; }
+    .location-code { font-size: 28px; font-weight: 900; color: #b91c1c; display: block; margin-top: 2px; }
+
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .info-item { background: #f8fafc; padding: 8px; border-radius: 8px; border: 1px solid #f1f5f9; }
+    .info-label { font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; }
+    .info-val { font-size: 13px; font-weight: 700; display: block; }
+
+    /* Product Section */
+    .task-main { display: flex; flex-direction: column; gap: 12px; }
+    .product-core { display: flex; gap: 12px; align-items: center; }
+
+    .task-photo-wrap {
+      width: 110px; height: 110px;
+      border-radius: 10px; overflow: hidden;
+      background: #f9fafb; border: 1px solid #e5e7eb;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .task-photo { width: 100%; height: 100%; object-fit: contain; }
+    .task-photo-placeholder {
+      font-size: 10px; color: #9ca3af; text-align: center; font-weight: 700; text-transform: uppercase;
+    }
+
+    .product-meta { flex: 1; }
+    .task-info-title { font-size: 16px; font-weight: 800; line-height: 1.2; margin-bottom: 6px; color: var(--text-main); }
+    .item-barcode-tsd { font-size: 14px; font-family: monospace; font-weight: 700; background: #f1f5f9; padding: 2px 4px; border-radius: 4px; }
+
+    .qty-badge-large {
+      display: flex; align-items: center; justify-content: center;
+      background: #dcfce7; color: #166534;
+      padding: 10px; border-radius: 10px;
+      font-size: 18px; font-weight: 900;
+      border: 1px solid #bbf7d0;
+      margin-top: 10px;
+    }
+
+    /* Step Badge */
+    .step-card {
+      background: #ede9fe; color: #6d28d9;
+      padding: 8px; border-radius: 8px;
+      text-align: center; font-weight: 800;
+      font-size: 13px; margin-bottom: 12px;
+      border: 1px solid #ddd6fe;
+      text-transform: uppercase;
+    }
+
+    /* Scanning Block */
+    .scan-block { margin-top: 5px; }
+    .scan-label { font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--primary); }
+    .scan-input {
+      width: 100%; height: 56px;
+      padding: 0 12px; font-size: 20px; font-weight: 700;
+      border-radius: 10px; border: 3px solid var(--primary);
+      background: #fff; color: #000;
+    }
+    .scan-input:focus { outline: none; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2); }
+
+    .btn-row { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-top: 12px; }
+    .btn { height: 54px; border-radius: 12px; border: none; font-size: 15px; font-weight: 700; }
+    .btn-primary { background: var(--success); color: white; box-shadow: 0 4px 6px rgba(22, 163, 74, 0.2); }
+    .btn-secondary { background: var(--warning); color: #000; }
+    .btn-outline {
+      grid-column: 1 / -1;
+      background: #fff; border: 1px solid #d1d5db; color: #374151; height: 44px; margin-top: 4px;
+    }
+
+    /* Closing Mode Styling */
+    .closing-mode-active { border: 3px solid var(--danger) !important; background: #fff1f2 !important; }
+    .closing-mode-title { color: var(--danger) !important; font-weight: 900 !important; }
+
+    /* Status & Debug */
+    .status { padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 700; margin-top: 10px; text-align: center; }
+    .status-ok { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .status-err { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+    .status-info { background: #f1f5f9; color: #4b5563; }
+
+    .debug-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .debug { font-size: 11px; background: #111827; color: #10b981; padding: 10px; border-radius: 8px; max-height: 120px; }
+
+    @media (max-width: 340px) {
+      .location-code { font-size: 22px; }
+      .task-photo-wrap { width: 80px; height: 80px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-row">
+      <div class="topbar-title">BFC24 WMS — Сборка</div>
+      <div class="topbar-btns">
+        <button class="btn-top" id="btnEnableSound">🔊</button>
+        <button class="btn-top" id="btnEnableNotif">🔔</button>
+        <button class="btn-top" onclick="window.location.href='/menu.html'">МЕНЮ</button>
+      </div>
+    </div>
+    <div class="topbar-sub" id="userInfo">Пользователь...</div>
+  </div>
+
+  <div class="page">
+
+    <div class="wave" id="waveBox">
+      <div class="wave-title" id="waveTitle">Волна: —</div>
+      <div class="wave-sub" id="waveSub">Загрузка...</div>
+      <div class="wave-row">
+        <button class="btn-wave btn-take" id="btnTakeWave">ВЗЯТЬ ВОЛНУ</button>
+        <button class="btn-wave btn-print" id="btnPrintWave" disabled>ПЕЧАТЬ</button>
+        <button class="btn-wave btn-reset" id="btnResetWave" disabled>СБРОСИТЬ</button>
+        <button class="btn-wave btn-close" id="btnCloseWave" disabled>ЗАКРЫТЬ</button>
+      </div>
+    </div>
+
+    <div class="card" id="taskCard">
+      <div id="closingModeAlert" style="display:none; color: #b91c1c; font-weight: 900; text-align: center; margin-bottom: 10px; font-size: 14px;">
+        ⚠️ РЕЖИМ ЗАКРЫТИЯ ВОЛНЫ
+      </div>
+
+      <div class="task-header-tsd">
+        <div class="location-card">
+          <span class="location-label">Ячейка (МХ)</span>
+          <span class="location-code" id="locationCode">—</span>
+        </div>
+        
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Клиент</span>
+            <span class="info-val" id="clientInfo">—</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Волна</span>
+            <span class="info-val" id="shipmentInfo">—</span>
+          </div>
+          <div class="info-item" style="grid-column: span 2;">
+            <span class="info-label">Сборщик</span>
+            <span class="info-val" id="pickerInfo">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-card" id="stepBadge">ШАГ: —</div>
+
+      <div class="task-main">
+        <div class="product-core">
+          <div class="task-photo-wrap">
+            <img id="itemPhoto" class="task-photo" src="" alt="" style="display:none;">
+            <div id="itemPhotoPlaceholder" class="task-photo-placeholder">Нет фото</div>
+          </div>
+
+          <div class="product-meta">
+            <div class="task-info-title" id="itemName">Товар не загружен</div>
+            <div class="item-barcode-tsd" id="itemBarcode">—</div>
+          </div>
+        </div>
+
+        <div class="qty-badge-large">
+          К сборке: <span id="itemQty" style="margin: 0 6px;">—</span> | Собрано: <span id="pickedQty" style="margin-left: 6px;">0</span>
+        </div>
+      </div>
+
+      <div class="scan-block">
+        <div class="scan-label" id="scanLabel">Сканируй:</div>
+        <input id="scanInput" class="scan-input" type="text" autocomplete="off" inputmode="none" placeholder="Жду скан..." />
+        
+        <div class="btn-row">
+          <button id="btnAction" class="btn btn-primary" disabled>ПОДТВЕРДИТЬ</button>
+          <button id="btnSkip" class="btn btn-secondary" disabled>ПРОПУСТИТЬ</button>
+          <button id="btnNext" class="btn btn-outline">🔄 ОБНОВИТЬ ДАННЫЕ</button>
+        </div>
+        
+        <div id="taskStatus" class="status status-info">Задание не загружено</div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 8px;">
+      <div class="debug-header">
+        <div style="font-weight:700; font-size:12px; color: var(--text-muted);">DEBUG</div>
+        <button class="btn-top" style="background:#4b5563; border:none;" onclick="clearDebug()">Clear</button>
+      </div>
+      <pre id="debugBox" class="debug">{}</pre>
+    </div>
+
+  </div>
+
+<script>
+let token = null;
+let username = null;
+let role = null;
+let currentTask = null;
+
+let currentWave = null;      
+let waveClosingMode = false; 
+
+let soundEnabled = false;
+let audioCtx = null;
+
+// --- Notifications ---
+let notifEnabled = false;
+async function enableNotifications() {
+  if (!("Notification" in window)) {
+    alert("Уведомления не поддерживаются");
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  notifEnabled = (perm === "granted");
+  if (notifEnabled) new Notification("BFC24 WMS", { body: "Уведомления включены" });
+  else alert("Разрешение не выдано");
+}
+
+function ensureAudio() {
+  if (audioCtx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  audioCtx = new AC();
+}
+function playBeep(type) {
+  try {
+    if (!soundEnabled) return;
+    ensureAudio();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    let freq = 880;
+    if (type === 'new') freq = 1040;
+    if (type === 'ok')  freq = 880;
+    if (type === 'err') freq = 440;
+
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.15);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.15);
+  } catch (e) {}
+}
+
+function clearDebug() { document.getElementById('debugBox').textContent = '{}'; }
+function appendDebug(label, obj) {
+  const box = document.getElementById('debugBox');
+  const prev = box.textContent.trim();
+  const header = `\n\n--- ${label} ---\n`;
+  box.textContent = prev + header + JSON.stringify(obj, null, 2);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setTaskStatus(text, type = 'info') {
+  const el = document.getElementById('taskStatus');
+  el.textContent = text;
+  el.className = 'status ' + (type === 'ok' ? 'status-ok' : type === 'err' ? 'status-err' : 'status-info');
+}
+
+function decodeJwtPayload(t) {
+  try {
+    const parts = String(t || '').split('.');
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g,'+').replace(/_/g,'/');
+    const json = decodeURIComponent(atob(b64).split('').map(
+      c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)
+    ).join(''));
+    return JSON.parse(json);
+  } catch { return null; }
+}
+
+async function apiFetch(url, options = {}) {
+  if (!token) throw new Error('no_token');
+  const opts = Object.assign({}, options);
+  if (!opts.method) opts.method = 'GET';
+  const headers = Object.assign({}, options.headers || {}, {
+    'Authorization': 'Bearer ' + token
+  });
+  const m = opts.method.toUpperCase();
+  if (m !== 'GET' && m !== 'HEAD') headers['Content-Type'] = 'application/json';
+  opts.headers = headers;
+
+  const res = await fetch(url, opts);
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  appendDebug(url, { status: res.status, ok: res.ok, data });
+
+  if (res.status === 401) {
+    localStorage.removeItem('wmsToken');
+    window.location.href = '/menu.html';
+    throw new Error('auth_required');
+  }
+  if (!res.ok) {
+    const errMsg = (data && (data.error || data.message || data.detail || data.details)) || ('HTTP ' + res.status);
+    throw new Error(errMsg);
+  }
+  return data;
+}
+
+function scanStepLabel(step) {
+  if (step === 'await_location') return 'Сканируй Ячейку (МХ)';
+  if (step === 'await_item')     return 'Сканируй ШК Товара';
+  if (step === 'wave_complete')  return 'Сканируй МХ Упаковки';
+  if (step === 'done')           return 'Готово';
+  return 'Сканируй';
+}
+
+function setStepUI(task) {
+  const stepBadge = document.getElementById('stepBadge');
+  const taskCard = document.getElementById('taskCard');
+  const closingAlert = document.getElementById('closingModeAlert');
+
+  if (waveClosingMode) {
+    taskCard.classList.add('closing-mode-active');
+    closingAlert.style.display = 'block';
+    stepBadge.textContent = 'ЗАКРЫТИЕ ВОЛНЫ';
+    stepBadge.style.background = '#dc2626';
+    stepBadge.style.color = '#fff';
+    const scanLabel = document.getElementById('scanLabel');
+    scanLabel.textContent = 'МХ УПАКОВКИ (PAK-) ДЛЯ ' + (currentWave?.shipment_code || '') + ':';
+    const btn = document.getElementById('btnAction');
+    btn.textContent = 'ПОДТВЕРДИТЬ ЗАКРЫТИЕ';
+    return;
+  }
+
+  taskCard.classList.remove('closing-mode-active');
+  closingAlert.style.display = 'none';
+  stepBadge.style.background = '';
+  stepBadge.style.color = '';
+
+  const step = task?.scan_step || 'await_location';
+  const STEP_TEXT = {
+  'await_location': 'Сканируй ячейку (МХ)',
+  'await_item': 'Сканируй товар',
+  'wave_complete': 'Закрытие волны',
+  'done': 'Готово'
+};
+
+stepBadge.textContent = 'ШАГ: ' + (STEP_TEXT[step] || step);
+
+  const scanLabel = document.getElementById('scanLabel');
+  scanLabel.textContent = scanStepLabel(step) + ':';
+
+  const btn = document.getElementById('btnAction');
+  if (!task) { btn.textContent = 'ПОДТВЕРДИТЬ'; return; }
+  if (step === 'await_location') btn.textContent = 'ПОДТВЕРДИТЬ МХ';
+  else if (step === 'await_item') btn.textContent = 'ПОДТВЕРДИТЬ ТОВАР';
+  else btn.textContent = 'ОК';
+}
+
+async function refreshWaveStatus({ silent = false } = {}) {
+  const title    = document.getElementById('waveTitle');
+  const sub      = document.getElementById('waveSub');
+  const btnTake  = document.getElementById('btnTakeWave');
+  const btnClose = document.getElementById('btnCloseWave');
+  const btnPrint = document.getElementById('btnPrintWave');
+  const btnReset = document.getElementById('btnResetWave');
+
+  try {
+    const ws = await apiFetch('/picking/wave/status', { method: 'GET' });
+    const hasWave = !!(ws && ws.has_wave);
+    if (!hasWave) {
+      currentWave = null;
+      title.textContent = 'Активная волна: —';
+      sub.textContent   = 'Нет волны. Нажми "Взять волну".';
+      btnTake.disabled  = false;
+      btnClose.disabled = true;
+      btnPrint.disabled = true;
+      btnReset.disabled = true;
+      return;
+    }
+    const canClose = (ws.can_close !== undefined) ? !!ws.can_close : (ws.wave_status === 'ready');
+    currentWave = { ...ws, can_close: canClose };
+    title.textContent = 'Волна: ' + (ws.shipment_code || '—');
+    sub.textContent   = `Собрано: ${ws.done}/${ws.total} (Осталось: ${ws.remaining})`;
+    btnTake.disabled  = true;
+    btnPrint.disabled = !ws.shipment_code;
+    btnClose.disabled = !canClose;
+    btnReset.disabled = false;
+    if (canClose) {
+      sub.innerHTML = `<span style="color:var(--danger)">✔ СОБРАНА. ЗАКРОЙ ВОЛНУ!</span>`;
+    }
+  } catch (e) {
+    if (!silent) sub.textContent = 'Ошибка статуса: ' + e.message;
+    currentWave = null;
+    btnTake.disabled = false;
+  }
+}
+
+async function takeWave() {
+  const btnTake = document.getElementById('btnTakeWave');
+  btnTake.disabled = true;
+  try {
+    await apiFetch('/picking/wave/take', { method:'POST', body: JSON.stringify({}) });
+    playBeep('new');
+    waveClosingMode = false;
+    await refreshWaveStatus();
+    await loadNextTask({ keepFocus:false });
+  } catch (e) {
+    btnTake.disabled = false;
+    setTaskStatus('Ошибка: ' + e.message, 'err');
+    playBeep('err');
+  }
+}
+
+function enterWaveCloseMode() {
+  if (!currentWave) return;
+  waveClosingMode = true;
+  renderTask(null);
+  const sub = document.getElementById('waveSub');
+  sub.textContent = 'СКАН МХ УПАКОВКИ (Префикс PAK-)';
+  const input = document.getElementById('scanInput');
+  input.value = '';
+  input.focus();
+  const btnAction = document.getElementById('btnAction');
+  btnAction.disabled = false;
+  const btnSkip = document.getElementById('btnSkip');
+  btnSkip.disabled = true;
+  setStepUI(null);
+  setTaskStatus('ЗАКРЫТИЕ ВОЛНЫ. Жду скан МХ упаковки.', 'info');
+}
+
+async function closeWave() { enterWaveCloseMode(); }
+
+async function resetWave() {
+  if (!confirm('Сбросить активную волну?')) return;
+  const btnReset = document.getElementById('btnResetWave');
+  btnReset.disabled = true;
+  try {
+    await apiFetch('/picking/wave/reset', { method: 'POST', body: JSON.stringify({}) });
+    setTaskStatus('Волна сброшена.', 'ok');
+    waveClosingMode = false;
+    currentWave = null;
+    renderTask(null);
+    await refreshWaveStatus();
+    document.getElementById('scanInput').focus();
+  } catch (e) {
+    setTaskStatus('Ошибка: ' + e.message, 'err');
+    btnReset.disabled = false;
+  }
+}
+
+function printWave() {
+  try {
+    if (!currentWave || !currentWave.shipment_code) { alert('Нет активной волны'); return; }
+    const code = currentWave.shipment_code;
+    const clientName = currentWave.client_name || '';
+    const total = currentWave.total ?? 0;
+    const pickerName = username || '';
+    const barcodeValue = code;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Блокировка окон!'); return; }
+    w.document.write(`
+      <!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page { size: 58mm 40mm; margin: 0; } body { margin: 0; padding: 2mm; font-family: sans-serif; } .wave-card { width: 54mm; height: 36mm; border: 1px solid #000; padding: 1mm; } .title { font-size: 8pt; font-weight: 600; } .code { font-size: 10pt; font-weight: 800; } .row { font-size: 7pt; } #waveBarcode { width: 100%; height: 14mm; }</style><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body><div class="wave-card"><div class="title">Волна (Короб)</div><div class="code">${code}</div><div class="row">Клиент: ${clientName}</div><div class="row">Позиций: ${total}</div><div class="row">Сборщик: ${pickerName}</div><div style="text-align:center;margin-top:1mm"><svg id="waveBarcode"></svg></div></div><script>window.onload=function(){JsBarcode("#waveBarcode","${barcodeValue}",{format:"CODE128",width:2,height:50,displayValue:true,fontSize:8});window.print();window.close();};<\/script></body></html>
+    `);
+    w.document.close();
+  } catch (e) { alert('Ошибка печати: ' + e.message); }
+}
+
+function renderTask(task) {
+  currentTask = task || null;
+  const fields = {
+    clientInfo: 'client_name',
+    shipmentInfo: 'shipment_code',
+    locationCode: 'location_code',
+    itemName: 'item_name',
+    itemBarcode: 'barcode',
+    itemQty: 'qty',
+    pickedQty: 'picked_qty'
+  };
+  
+  Object.keys(fields).forEach(id => {
+    const el = document.getElementById(id);
+    if (!task) {
+      // Улучшенное пустое состояние
+      if (id === 'clientInfo') el.textContent = 'Нет задания';
+      else if (id === 'pickedQty') el.textContent = '0';
+      else if (id === 'itemName') el.textContent = 'Задание не загружено';
+      else el.textContent = '—';
+    } else {
+      const val = task[fields[id]];
+      el.textContent = (val !== null && val !== undefined && val !== '—') ? val : (id === 'pickedQty' ? '0' : '—');
+    }
+  });
+
+  const photoEl = document.getElementById('itemPhoto');
+  const photoPhEl = document.getElementById('itemPhotoPlaceholder');
+  if (task && task.preview_url) {
+    photoEl.src = task.preview_url;
+    photoEl.style.display = 'block';
+    photoPhEl.style.display = 'none';
+  } else {
+    photoEl.style.display = 'none';
+    photoPhEl.style.display = 'block';
+  }
+
+  const btnAction = document.getElementById('btnAction');
+  const btnSkip = document.getElementById('btnSkip');
+  if (!task && !waveClosingMode) {
+    btnAction.disabled = true; btnSkip.disabled = true; setTaskStatus('Жду волну...', 'info');
+  } else {
+    btnAction.disabled = false; btnSkip.disabled = waveClosingMode;
+  }
+  setStepUI(task);
+}
+
+async function loadNextTask({ keepFocus = false, silent = false } = {}) {
+  if (waveClosingMode) return;
+  const input = document.getElementById('scanInput');
+  if (!keepFocus) { input.value = ''; input.focus(); }
+  if (!silent) setTaskStatus('Загрузка...', 'info');
+  try {
+    const task = await apiFetch('/picking/next', { method: 'GET' });
+    const hasData = task && Object.keys(task).length > 0;
+    renderTask(hasData ? task : null);
+    if (hasData) {
+        input.focus();
+    }
+  } catch (err) {
+    setTaskStatus('Ошибка: ' + err.message, 'err');
+    playBeep('err');
+    renderTask(null);
+    input.focus();
+  }
+}
+
+async function actionByStep() {
+  const btnAction = document.getElementById('btnAction');
+  const btnSkip = document.getElementById('btnSkip');
+  const input = document.getElementById('scanInput');
+  const scanned = input.value.trim();
+  if (!scanned) { setTaskStatus('Пустой скан!', 'err'); playBeep('err'); input.focus(); return; }
+  btnAction.disabled = true; btnSkip.disabled = true;
+
+  if (waveClosingMode) {
+    if (!scanned.toUpperCase().startsWith('PAK-')) {
+      setTaskStatus('Нужен префикс PAK-!', 'err');
+      playBeep('err'); btnAction.disabled = false; return;
+    }
+    try {
+      const r = await apiFetch('/picking/wave/complete', { method: 'POST', body: JSON.stringify({ location_code: scanned }) });
+      playBeep('ok'); waveClosingMode = false; currentWave = null; input.value = '';
+      await refreshWaveStatus(); renderTask(null);
+      setTaskStatus('Волна закрыта на ' + (r.buffer_location_code || scanned), 'ok');
+      input.focus();
+    } catch (err) {
+      setTaskStatus('Ошибка: ' + err.message, 'err');
+      playBeep('err'); btnAction.disabled = false;
+    }
+    return;
+  }
+
+  if (!currentTask) { setTaskStatus('Нет задачи!', 'err'); btnAction.disabled = false; return; }
+  const step = currentTask.scan_step || 'await_location';
+  try {
+    if (step === 'await_location') {
+      await apiFetch('/picking/scan/location', { method: 'POST', body: JSON.stringify({ picking_task_id: currentTask.id, scanned_location_code: scanned }) });
+      setTaskStatus('МХ ок. Теперь ШК товара.', 'ok');
+    } else if (step === 'await_item') {
+      await apiFetch('/picking/scan/item', { method: 'POST', body: JSON.stringify({ picking_task_id: currentTask.id, scanned_barcode: scanned }) });
+      setTaskStatus('Товар собран!', 'ok');
+    }
+    playBeep('ok'); input.value = ''; input.focus();
+    await loadNextTask({ keepFocus: false });
+    await refreshWaveStatus({silent:true});
+  } catch (err) {
+    setTaskStatus(err.message, 'err'); playBeep('err'); btnAction.disabled = false; btnSkip.disabled = false;
+  }
+}
+
+async function skipTask() {
+  if (!currentTask || waveClosingMode) return;
+  const btnAction = document.getElementById('btnAction');
+  const btnSkip = document.getElementById('btnSkip');
+  btnAction.disabled = true; btnSkip.disabled = true;
+  try {
+    await apiFetch('/picking/skip', { method: 'POST', body: JSON.stringify({ picking_task_id: currentTask.id, reason: 'picker_not_found', comment: 'Пропуск на ТСД' }) });
+    setTaskStatus('Пропущено.', 'ok'); playBeep('ok');
+    await loadNextTask({ keepFocus: false });
+    await refreshWaveStatus({silent:true});
+    document.getElementById('scanInput').focus();
+  } catch (err) {
+    setTaskStatus(err.message, 'err'); playBeep('err'); btnAction.disabled = false; btnSkip.disabled = false;
+  }
+}
+
+(function init() {
+  const t = localStorage.getItem('wmsToken');
+  if (!t) { window.location.href = '/menu.html'; return; }
+  token = t;
+  const payload = decodeJwtPayload(token) || {};
+  username = payload.username || payload.login || String(payload.id || 'unknown');
+  document.getElementById('userInfo').textContent = username + ' (' + (payload.role || '-') + ')';
+  document.getElementById('pickerInfo').textContent = username;
+  document.getElementById('btnEnableSound').onclick = () => { soundEnabled = true; ensureAudio(); playBeep('ok'); };
+  document.getElementById('btnEnableNotif').onclick = enableNotifications;
+  document.getElementById('btnTakeWave').onclick = takeWave;
+  document.getElementById('btnCloseWave').onclick = closeWave;
+  document.getElementById('btnPrintWave').onclick = printWave;
+  document.getElementById('btnResetWave').onclick = resetWave;
+  document.getElementById('btnAction').onclick = actionByStep;
+  document.getElementById('btnSkip').onclick = skipTask;
+  document.getElementById('btnNext').onclick = async () => { await refreshWaveStatus({silent:true}); await loadNextTask({ keepFocus: false }); };
+  document.getElementById('scanInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); actionByStep(); } });
+  refreshWaveStatus();
+  loadNextTask({ keepFocus: false });
+})();
+</script>
+</body>
+</html>

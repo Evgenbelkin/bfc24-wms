@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Остатки</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    .topbar {
+      background: #111827;
+      color: #fff;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .topbar-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .topbar-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #374151;
+    }
+    .chip.ok      { background: #16a34a; }
+    .chip.offline { background: #b91c1c; }
+    .btn-top {
+      border-radius: 999px;
+      border: 1px solid #6b7280;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .page { padding: 10px; }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    h2 {
+      font-size: 14px;
+      margin: 0;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    input, select {
+      width: 100%;
+      padding: 6px;
+      margin-top: 2px;
+      font-size: 13px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37,99,235,0.2);
+    }
+    button {
+      margin-top: 8px;
+      padding: 8px;
+      font-size: 14px;
+      width: 100%;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+    .status {
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .status.ok    { color: #059669; }
+    .status.error { color: #dc2626; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 4px 3px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    th {
+      background: #f9fafb;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .tbl-scroll {
+      max-height: 360px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title">BFC24 WMS — Остатки</div>
+      <div id="userInfo" class="topbar-sub">Не авторизован</div>
+    </div>
+    <div class="topbar-actions">
+      <span id="onlineChip" class="chip offline">offline</span>
+      <button id="btnMenu" class="btn-top" type="button">Меню</button>
+    </div>
+  </div>
+
+  <div class="page">
+    <!-- Форма поиска -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Поиск по штрихкоду</h2>
+      </div>
+
+      <label>
+        Клиент:
+        <select id="clientId"></select>
+      </label>
+
+      <label>
+        Штрихкод (barcode)
+        <input type="text" id="barcode" />
+      </label>
+
+      <button id="btnSearch" class="btn-primary" type="button">Показать остатки</button>
+      <div id="statusBox" class="status"></div>
+    </div>
+
+    <!-- Таблица остатков -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Результат</h2>
+      </div>
+      <div class="tbl-scroll">
+        <table id="tblStock">
+          <thead>
+            <tr>
+              <th>client_id</th>
+              <th>location</th>
+              <th>qty</th>
+              <th>barcode</th>
+              <th>item_name</th>
+              <th>vendor_code</th>
+              <th>wb_vendor_code</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let token = null;
+
+    function setStatus(text, ok) {
+      const el = document.getElementById('statusBox');
+      el.textContent = text || '';
+      if (!text) {
+        el.className = 'status';
+      } else {
+        el.className = 'status ' + (ok ? 'ok' : 'error');
+      }
+
+      const chip = document.getElementById('onlineChip');
+      chip.textContent = token ? 'online' : 'offline';
+      chip.className = 'chip ' + (token ? 'ok' : 'offline');
+    }
+
+    function setUserInfo(text) {
+      document.getElementById('userInfo').textContent = text;
+    }
+
+    function apiHeaders(extra) {
+      const headers = extra ? { ...extra } : {};
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return headers;
+    }
+
+    async function apiGetJson(url) {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: apiHeaders(),
+      });
+
+      let data = {};
+      try { data = await res.json(); } catch (e) { data = {}; }
+
+      if (!res.ok) {
+        const parts = [];
+        if (data.error) parts.push(data.error);
+        if (data.detail) parts.push(data.detail);
+        const msg = parts.length ? parts.join(': ') : ('HTTP ' + res.status);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function renderStock(rows) {
+      const tbody = document.querySelector('#tblStock tbody');
+      tbody.innerHTML = '';
+
+      if (!rows || !rows.length) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 7;
+        td.textContent = 'Нет данных';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+
+        const tdClient = document.createElement('td');
+        tdClient.textContent = r.client_id ?? '';
+        tr.appendChild(tdClient);
+
+        const tdLoc = document.createElement('td');
+        tdLoc.textContent = r.location ?? '';
+        tr.appendChild(tdLoc);
+
+        const tdQty = document.createElement('td');
+        tdQty.textContent = r.qty ?? '';
+        tr.appendChild(tdQty);
+
+        const tdBc = document.createElement('td');
+        tdBc.textContent = r.barcode ?? '';
+        tr.appendChild(tdBc);
+
+        const tdName = document.createElement('td');
+        tdName.textContent = r.item_name ?? '';
+        tr.appendChild(tdName);
+
+        const tdVend = document.createElement('td');
+        tdVend.textContent = r.vendor_code ?? '';
+        tr.appendChild(tdVend);
+
+        const tdWb = document.createElement('td');
+        tdWb.textContent = r.wb_vendor_code ?? '';
+        tr.appendChild(tdWb);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadClientsForFilter() {
+      const select = document.getElementById('clientId');
+      select.innerHTML = '';
+
+      if (!token) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '— нет токена —';
+        select.appendChild(opt);
+        return;
+      }
+
+      try {
+        const data = await apiGetJson('/clients-short');
+        const clients = data.clients || [];
+
+        const optAll = document.createElement('option');
+        optAll.value = '';
+        optAll.textContent = '— все клиенты —';
+        select.appendChild(optAll);
+
+        clients.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = String(c.id);
+          opt.textContent = `${c.id} — ${c.client_name || ''}`;
+          select.appendChild(opt);
+        });
+
+        const storedId = localStorage.getItem('wmsClientId');
+        if (storedId && clients.some(c => String(c.id) === storedId)) {
+          select.value = storedId;
+        } else {
+          select.value = '';
+        }
+
+        select.addEventListener('change', (e) => {
+          const val = e.target.value;
+          if (val) localStorage.setItem('wmsClientId', val);
+          else localStorage.removeItem('wmsClientId');
+        });
+      } catch (err) {
+        console.error('Ошибка загрузки клиентов:', err);
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '— ошибка загрузки клиентов —';
+        select.appendChild(opt);
+      }
+    }
+
+    async function loadStock() {
+      if (!token) {
+        setStatus('Нет токена. Зайдите через меню и выполните вход.', false);
+        return;
+      }
+
+      const clientId = document.getElementById('clientId').value;
+      const barcode  = document.getElementById('barcode').value.trim();
+
+      if (!barcode) {
+        setStatus('Введите штрихкод.', false);
+        return;
+      }
+
+      setStatus('Загрузка...', false);
+
+      const params = new URLSearchParams();
+      params.set('barcode', barcode);
+      if (clientId) {
+        params.set('client_id', clientId);
+      }
+
+      try {
+        const res = await fetch('/stock/by-barcode?' + params.toString(), {
+          headers: apiHeaders(),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          console.error('Stock error:', data);
+          setStatus('Ошибка загрузки: ' + (data.error || res.status), false);
+          renderStock([]);
+          return;
+        }
+
+        const rows = data.stock || [];
+        renderStock(rows);
+        setStatus('Найдено строк: ' + rows.length, true);
+      } catch (e) {
+        console.error(e);
+        setStatus('Ошибка запроса: ' + e.message, false);
+        renderStock([]);
+      }
+    }
+
+    (function init() {
+      token = localStorage.getItem('wmsToken') || null;
+      const savedUser = localStorage.getItem('wmsUser');
+
+      if (token) {
+        setStatus('Токен найден, можно смотреть остатки.', true);
+        if (savedUser) setUserInfo('Пользователь: ' + savedUser);
+      } else {
+        setStatus('Нет токена. Зайдите через меню и выполните вход.', false);
+        setUserInfo('Не авторизован');
+      }
+
+      loadClientsForFilter();
+
+      document.getElementById('btnSearch').addEventListener('click', loadStock);
+      document.getElementById('btnMenu').addEventListener('click', () => {
+        window.location.href = '/menu.html';
+      });
+    })();
+  </script>
+</body>
+</html>

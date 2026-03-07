@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Упаковка (TSD)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --bg-main: #f3f4f6;
+      --card-bg: #ffffff;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.4;
+    }
+
+    header {
+      background: #111827;
+      color: #f9fafb;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    header .title { font-size: 16px; font-weight: 700; }
+    header .right { text-align: right; }
+    header a { color: #9ca3af; text-decoration: none; font-size: 11px; font-weight: 600; display: block; }
+    header #user-info { font-size: 10px; color: #6b7280; }
+
+    main { padding: 8px; max-width: 600px; margin: 0 auto 100px; }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 12px;
+      border: 1px solid #e5e7eb;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Статусы */
+    .status-chip {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .status-none { background: #e5e7eb; color: #4b5563; }
+    .status-working { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .status-done { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+
+    /* Поля задания */
+    .task-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .task-item {
+      background: #f8fafc;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #f1f5f9;
+    }
+    .task-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+    .task-value { font-size: 14px; font-weight: 700; color: var(--text-main); }
+
+    /* Кнопки ТСД */
+    .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+    button {
+      flex: 1;
+      height: 48px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.1s;
+    }
+    button:active { transform: scale(0.97); filter: brightness(0.9); }
+    .btn-primary { background: var(--primary); color: white; box-shadow: 0 2px 4px rgba(37,99,235,0.3); }
+    .btn-secondary { background: #e5e7eb; color: #111827; }
+    .btn-confirm-big { background: var(--success); color: white; height: 60px; font-size: 16px; width: 100%; box-shadow: 0 4px 6px rgba(22,163,74,0.3); }
+    button:disabled { background: #d1d5db !important; color: #9ca3af !important; box-shadow: none !important; }
+
+    /* Сканирование */
+    .scan-box { margin: 10px 0; }
+    input[type="text"] {
+      width: 100%;
+      height: 56px;
+      padding: 0 16px;
+      font-size: 18px;
+      font-weight: 700;
+      border: 2px solid #d1d5db;
+      border-radius: 10px;
+      background: #fff;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus { border-color: var(--primary); outline: none; }
+    input[type="text"]:disabled { background: #f3f4f6; border-color: #e5e7eb; }
+
+    /* Медиа блоки */
+    .media-wrap { display: flex; gap: 10px; margin-bottom: 10px; }
+    .media-item { flex: 1; text-align: center; }
+    .img-placeholder {
+      width: 100%;
+      aspect-ratio: 1/1;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #9ca3af;
+      font-weight: 600;
+    }
+    .media-item img {
+      width: 100%;
+      aspect-ratio: 1/1;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      background: #fff;
+    }
+    .media-label { font-size: 10px; font-weight: 700; margin-top: 4px; color: var(--text-muted); }
+
+    /* Состав отгрузки карточками (для ТСД) */
+    .item-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 8px;
+      background: #fff;
+    }
+    .item-card.row-ok, tr.row-ok { background: #f0fdf4 !important; }
+    .item-card.row-ok { border-color: #bbf7d0; }
+    
+    .item-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; display: block; }
+    .item-details { display: flex; justify-content: space-between; font-size: 11px; }
+    .item-barcode { color: var(--text-muted); font-family: monospace; }
+    .item-qty-tag { font-weight: 800; color: var(--primary); font-size: 14px; }
+    .status-ok-text { color: var(--success); }
+
+    /* Сообщения */
+    .msg { padding: 12px; border-radius: 8px; font-size: 13px; font-weight: 600; margin: 8px 0; display: none; }
+    .error { display: block; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+    .success { display: block; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+
+    .empty-text { font-size: 13px; color: #9ca3af; margin-top: 4px; }
+
+    /* Desktop Таблица */
+    #shipment-lines-wrapper table { width: 100%; border-collapse: collapse; display: none; margin-top: 10px; }
+    th, td { padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: left; font-size: 12px; }
+    th { background: #f9fafb; color: var(--text-muted); }
+
+    @media (min-width: 601px) {
+      #shipment-lines-wrapper table { display: table; }
+      #mobile-lines-wrapper { display: none; }
+      main { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="title">BFC24 WMS — УПАКОВКА</div>
+    </div>
+    <div class="right">
+      <a href="/menu.html">В МЕНЮ</a>
+      <span id="user-info"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="card-title">
+        Текущее задание
+        <span id="task-status" class="status-chip status-none">нет задания</span>
+      </div>
+      <div id="task-info">
+        <div style="text-align: center; color: var(--text-muted); padding: 10px; font-size: 13px;">Ожидание задания...</div>
+      </div>
+      <div class="btn-row">
+        <button id="btn-take-task" class="btn-primary">ВЗЯТЬ ЗАДАНИЕ</button>
+        <button id="btn-refresh-task" class="btn-secondary">ОБНОВИТЬ</button>
+      </div>
+      <div id="task-message"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Проверка товара</div>
+      <div class="media-wrap">
+        <div class="media-item">
+          <div id="photo-box">
+             <div class="img-placeholder">НЕТ ФОТО</div>
+          </div>
+          <div class="media-label">ТОВАР (WB)</div>
+        </div>
+        <div class="media-item">
+          <div id="sticker-box">
+             <div class="img-placeholder">НЕТ СТИКЕРА</div>
+          </div>
+          <div class="media-label">СТИКЕР (WB)</div>
+        </div>
+      </div>
+      <button id="btn-print-sticker" class="btn-secondary" style="width: 100%" disabled>ПЕЧАТЬ СТИКЕРА</button>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Сканирование товара</div>
+      <div class="scan-box">
+        <input id="scan-input" type="text" placeholder="ШТРИХКОД ТОВАРА" autocomplete="off" />
+      </div>
+      <div id="scan-message"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Состав отгрузки</div>
+      <div id="shipment-lines-wrapper">
+        <div id="mobile-lines-wrapper"></div>
+        <table>
+          <thead>
+            <tr>
+              <th>ШК</th>
+              <th>Наименование</th>
+              <th>WB Код</th>
+              <th>План/Факт</th>
+            </tr>
+          </thead>
+          <tbody id="desktop-lines-body"></tbody>
+        </table>
+        <div id="empty-lines-text" class="empty-text" style="text-align:center; padding: 20px;">Задание не получено</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Завершение</div>
+      <div class="card-subtitle" style="font-size: 11px; margin-bottom: 8px;">Сканируйте МХ стола упаковки (Зона "Упаковка")</div>
+      <div class="scan-box">
+        <input id="scan-location-input" type="text" placeholder="МХ СТОЛА" autocomplete="off" disabled />
+      </div>
+      <button id="btn-confirm" class="btn-confirm-big" disabled>ПОДТВЕРДИТЬ УПАКОВКУ</button>
+      <div id="confirm-message"></div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = '';
+    let currentShipment = null;
+    let currentStickerBase64 = null;
+    let currentPreviewUrl = null;
+    let currentLines = [];
+    let locationScanned = false;
+    let currentLocationCode = null;
+
+    function getToken() {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const value = localStorage.getItem(key);
+        if (typeof value === 'string' && value.split('.').length === 3) return value;
+      }
+      return null;
+    }
+
+    function setStatusNone() {
+      const chip = document.getElementById('task-status');
+      chip.textContent = 'нет задания';
+      chip.className = 'status-chip status-none';
+      document.getElementById('btn-take-task').disabled = false;
+    }
+
+    function setStatusWorking() {
+      const chip = document.getElementById('task-status');
+      chip.textContent = 'в работе';
+      chip.className = 'status-chip status-working';
+      document.getElementById('btn-take-task').disabled = true;
+    }
+
+    function allLinesScanned() {
+      if (!currentLines.length) return false;
+      return currentLines.every(l => {
+        const qty = Number(l.qty || 0);
+        const packed = Number(l.packed_qty || 0);
+        return qty > 0 ? packed >= qty : true;
+      });
+    }
+
+    function updateConfirmButtonState() {
+      const btn = document.getElementById('btn-confirm');
+      const locInput = document.getElementById('scan-location-input');
+      const canScanLocation = !!(currentShipment && currentLines.length);
+      locInput.disabled = !canScanLocation;
+      btn.disabled = !(currentShipment && allLinesScanned() && locationScanned);
+    }
+
+    function renderTaskInfo(shipment) {
+      const el = document.getElementById('task-info');
+      if (!shipment) {
+        el.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 10px; font-size: 13px;">Нажмите “Взять задание”</div>';
+        setStatusNone();
+        locationScanned = false;
+        currentLocationCode = null;
+        updateConfirmButtonState();
+        return;
+      }
+
+      el.innerHTML = `
+        <div class="task-grid">
+          <div class="task-item"><div class="task-label">Клиент</div><div class="task-value">${shipment.client_id ?? '—'}</div></div>
+          <div class="task-item"><div class="task-label">ID Отгрузки</div><div class="task-value">${shipment.external_id || '—'}</div></div>
+          <div class="task-item" style="grid-column: span 2;"><div class="task-label">Статус системы</div><div class="task-value">${shipment.status || '—'}</div></div>
+        </div>
+      `;
+      setStatusWorking();
+      updateConfirmButtonState();
+    }
+
+    function renderMediaFromLines() {
+      const photoBox = document.getElementById('photo-box');
+      const stickerBox = document.getElementById('sticker-box');
+      const btnPrint = document.getElementById('btn-print-sticker');
+
+      const lines = currentLines;
+      if (!lines || !lines.length) {
+        photoBox.innerHTML = '<div class="img-placeholder">НЕТ ФОТО</div>';
+        stickerBox.innerHTML = '<div class="img-placeholder">НЕТ СТИКЕРА</div>';
+        btnPrint.disabled = true;
+        return;
+      }
+
+      const activeRow = lines.find(l => {
+        const qty = Number(l.qty || 0);
+        const packed = Number(l.packed_qty || 0);
+        return qty > 0 && packed < qty;
+      }) || lines[0];
+
+      const photoUrl = currentPreviewUrl || activeRow.preview_url;
+      if (photoUrl) {
+        currentPreviewUrl = photoUrl;
+        photoBox.innerHTML = `<img src="${photoUrl}" alt="Товар">`;
+      } else {
+        photoBox.innerHTML = '<div class="img-placeholder">НЕТ ФОТО</div>';
+      }
+
+      const stickerB64 = currentStickerBase64 || activeRow.wb_sticker;
+      if (stickerB64) {
+        currentStickerBase64 = stickerB64;
+        stickerBox.innerHTML = `<img src="data:image/svg+xml;base64,${stickerB64}" alt="Стикер">`;
+        btnPrint.disabled = false;
+      } else {
+        stickerBox.innerHTML = '<div class="img-placeholder">НЕТ СТИКЕРА</div>';
+        btnPrint.disabled = true;
+      }
+    }
+
+    function renderLines() {
+      const desktopBody = document.getElementById('desktop-lines-body');
+      const mobileWrapper = document.getElementById('mobile-lines-wrapper');
+      const emptyText = document.getElementById('empty-lines-text');
+      const lines = currentLines;
+
+      if (!lines || !lines.length) {
+        desktopBody.innerHTML = '';
+        mobileWrapper.innerHTML = '';
+        emptyText.style.display = 'block';
+        renderMediaFromLines();
+        updateConfirmButtonState();
+        return;
+      }
+
+      emptyText.style.display = 'none';
+      let desktopHtml = '';
+      let mobileHtml = '';
+
+      lines.forEach(row => {
+        const qty = Number(row.qty || 0);
+        const packed = Number(row.packed_qty || 0);
+        const isOk = qty > 0 && packed >= qty;
+        const statusText = `${packed} / ${qty}`;
+
+        desktopHtml += `
+          <tr class="${isOk ? 'row-ok' : ''}">
+            <td>${row.barcode || ''}</td>
+            <td>${row.item_name || ''}</td>
+            <td>${row.wb_sticker_code || ''}</td>
+            <td class="${isOk ? 'status-ok-text' : ''}" style="font-weight:700;">${statusText}</td>
+          </tr>
+        `;
+
+        mobileHtml += `
+          <div class="item-card ${isOk ? 'row-ok' : ''}">
+            <span class="item-name">${row.item_name || 'Без названия'}</span>
+            <div class="item-details">
+               <div>
+                  <div class="item-barcode">ШК: ${row.barcode || '—'}</div>
+                  <div class="item-barcode">WB: ${row.wb_sticker_code || '—'}</div>
+               </div>
+               <div class="item-qty-tag ${isOk ? 'status-ok-text' : ''}">${statusText}</div>
+            </div>
+          </div>
+        `;
+      });
+
+      desktopBody.innerHTML = desktopHtml;
+      mobileWrapper.innerHTML = mobileHtml;
+
+      renderMediaFromLines();
+      updateConfirmButtonState();
+    }
+
+    async function apiRequest(path, options = {}) {
+      const token = getToken();
+      if (!token) throw new Error('Авторизация не найдена');
+      const headers = options.headers || {};
+      headers['Authorization'] = 'Bearer ' + token;
+      if (!headers['Content-Type'] && options.body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(API_BASE + path, { ...options, headers });
+      let data = {};
+      try { data = await res.json(); } catch (_) {}
+      if (!res.ok) throw new Error(data.message || data.error || 'Ошибка запроса');
+      return data;
+    }
+
+    async function loadCurrentTask() {
+      const msgEl = document.getElementById('task-message');
+      msgEl.textContent = ''; msgEl.className = 'msg';
+      try {
+        const data = await apiRequest('/packing/current', { method: 'GET' });
+        currentShipment = data.shipment || null;
+        currentLines = (data.lines || []).map(l => ({
+          ...l, qty: Number(l.qty || l.planned_qty || 0), packed_qty: Number(l.packed_qty || 0)
+        }));
+        locationScanned = false;
+        currentLocationCode = null;
+        currentStickerBase64 = null;
+        currentPreviewUrl = null;
+        renderTaskInfo(currentShipment);
+        renderLines();
+        if (currentShipment) {
+           document.getElementById('scan-input').focus();
+        }
+      } catch (err) {
+        currentShipment = null; 
+        currentLines = []; 
+        locationScanned = false;
+        currentLocationCode = null;
+        currentStickerBase64 = null;
+        currentPreviewUrl = null;
+        renderTaskInfo(null); 
+        renderLines();
+        msgEl.textContent = err.message; msgEl.className = 'msg error';
+      }
+    }
+
+    async function takeTask() {
+      const btn = document.getElementById('btn-take-task');
+      const msgEl = document.getElementById('task-message');
+      btn.disabled = true;
+      msgEl.textContent = ''; msgEl.className = 'msg';
+      try {
+        const data = await apiRequest('/packing/next', { method: 'POST' });
+        currentShipment = data.shipment || null;
+        currentLines = (data.lines || []).map(l => ({
+          ...l, qty: Number(l.qty || l.planned_qty || 0), packed_qty: Number(l.packed_qty || 0)
+        }));
+        locationScanned = false; currentLocationCode = null;
+        currentStickerBase64 = null; currentPreviewUrl = null;
+        renderTaskInfo(currentShipment); renderLines();
+        msgEl.textContent = 'Задание получено'; msgEl.className = 'msg success';
+        document.getElementById('scan-input').focus();
+      } catch (err) {
+        msgEl.textContent = err.message; msgEl.className = 'msg error';
+      } finally {
+        if (!currentShipment) btn.disabled = false;
+      }
+    }
+
+    async function handleScan(barcode) {
+      const scanMsgEl = document.getElementById('scan-message');
+      const scanInput = document.getElementById('scan-input');
+      scanMsgEl.textContent = ''; scanMsgEl.className = 'msg';
+
+      if (!barcode || !currentShipment) return;
+      barcode = barcode.trim();
+
+      try {
+        const data = await apiRequest('/packing/scan-item', {
+          method: 'POST',
+          body: JSON.stringify({
+            shipment_code: currentShipment.external_id,
+            scan_code: barcode,
+            scan_type: 'barcode',
+          }),
+        });
+
+        if (data.shipment) currentShipment = data.shipment;
+        const respLine = data.line || {};
+        const respBarcode = String(respLine.barcode || barcode);
+
+        // Пошаговый поиск строки
+        let row = null;
+        if (respLine.id) {
+          row = currentLines.find(l => String(l.id) === String(respLine.id));
+        }
+        if (!row && respLine.wb_order_id) {
+          row = currentLines.find(l => String(l.wb_order_id) === String(respLine.wb_order_id));
+        }
+        if (!row) {
+          row = currentLines.find(l => String(l.barcode) === respBarcode && Number(l.packed_qty || 0) < Number(l.qty || 0));
+        }
+        if (!row) {
+          row = currentLines.find(l => String(l.barcode) === respBarcode);
+        }
+
+        if (row) {
+          row.packed_qty = respLine.packed_qty != null ? Number(respLine.packed_qty) : Math.min(Number(row.qty || 0), Number(row.packed_qty || 0) + 1);
+          if (respLine.wb_sticker_code) row.wb_sticker_code = respLine.wb_sticker_code;
+          if (respLine.wb_sticker) row.wb_sticker = respLine.wb_sticker;
+          if (respLine.preview_url) row.preview_url = respLine.preview_url;
+        }
+
+        if (respLine.preview_url) currentPreviewUrl = respLine.preview_url;
+        if (respLine.wb_sticker) currentStickerBase64 = respLine.wb_sticker;
+
+        renderLines();
+        scanMsgEl.textContent = 'Скан принят'; scanMsgEl.className = 'msg success';
+
+        if (respLine.wb_sticker) openStickerWindowAndPrint();
+        
+        if (allLinesScanned()) {
+           document.getElementById('scan-location-input').focus();
+        } else {
+           scanInput.focus();
+        }
+      } catch (err) {
+        scanMsgEl.textContent = err.message; scanMsgEl.className = 'msg error';
+        scanInput.focus();
+      }
+    }
+
+    async function handleLocationScan(code) {
+      const msgEl = document.getElementById('confirm-message');
+      msgEl.textContent = ''; msgEl.className = 'msg';
+      if (!code) return;
+      code = code.trim();
+
+      try {
+        const data = await apiRequest('/locations/by-code?code=' + encodeURIComponent(code), { method: 'GET' });
+        if (!data || !data.location) throw new Error('МХ не найдена');
+        if (!data.is_packing_zone) throw new Error('МХ не из зоны Упаковка');
+
+        const loc = data.location;
+        currentLocationCode = loc.code || loc.location_code || code;
+        locationScanned = true;
+        msgEl.textContent = `МХ ${currentLocationCode} принята`; msgEl.className = 'msg success';
+        updateConfirmButtonState();
+        document.getElementById('btn-confirm').focus();
+      } catch (err) {
+        msgEl.textContent = err.message; msgEl.className = 'msg error';
+        locationScanned = false;
+        updateConfirmButtonState();
+      }
+    }
+
+    async function confirmPacking() {
+      const btn = document.getElementById('btn-confirm');
+      const msgEl = document.getElementById('confirm-message');
+      
+      msgEl.textContent = ''; msgEl.className = 'msg';
+
+      if (!currentShipment) {
+        msgEl.textContent = 'Нет активного задания'; msgEl.className = 'msg error';
+        return;
+      }
+      if (!allLinesScanned()) {
+        msgEl.textContent = 'Не все товары упакованы'; msgEl.className = 'msg error';
+        return;
+      }
+      if (!locationScanned) {
+        msgEl.textContent = 'Не отсканировано МХ стола'; msgEl.className = 'msg error';
+        return;
+      }
+
+      btn.disabled = true;
+
+      try {
+        await apiRequest('/packing/confirm', {
+          method: 'POST',
+          body: JSON.stringify({
+            shipment_id: currentShipment.id,
+            location_code: currentLocationCode,
+          }),
+        });
+
+        msgEl.textContent = 'Задание завершено успешно'; msgEl.className = 'msg success';
+        currentShipment = null; 
+        currentLines = []; 
+        locationScanned = false;
+        currentLocationCode = null; 
+        currentStickerBase64 = null; 
+        currentPreviewUrl = null;
+        renderTaskInfo(null); 
+        renderLines();
+        updateConfirmButtonState();
+      } catch (err) {
+        msgEl.textContent = err.message; msgEl.className = 'msg error';
+        btn.disabled = false;
+      }
+    }
+
+    function openStickerWindowAndPrint() {
+      if (!currentStickerBase64) return;
+      const src = 'data:image/svg+xml;base64,' + currentStickerBase64;
+      const printWindow = window.open('', '_blank', 'width=400,height=400');
+      if (!printWindow) { alert('Разрешите всплывающие окна'); return; }
+      const doc = printWindow.document;
+      doc.open();
+      doc.write(`<html><body style="margin:0;display:flex;align-items:center;justify-content:center;"><img id="st" src="${src}" style="max-width:100%;"><script>const i=document.getElementById('st');i.onload=()=>{setTimeout(()=>{window.print();window.close();},100);};<\/script></body></html>`);
+      doc.close();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('btn-take-task').onclick = takeTask;
+      document.getElementById('btn-refresh-task').onclick = loadCurrentTask;
+      document.getElementById('btn-confirm').onclick = confirmPacking;
+      document.getElementById('btn-print-sticker').onclick = openStickerWindowAndPrint;
+
+      const scanInput = document.getElementById('scan-input');
+      scanInput.onkeydown = (e) => { if (e.key === 'Enter') { handleScan(e.target.value); e.target.value = ''; } };
+
+      const locInput = document.getElementById('scan-location-input');
+      locInput.onkeydown = (e) => { if (e.key === 'Enter') { handleLocationScan(e.target.value); e.target.value = ''; } };
+
+      // Парсинг инфо пользователя из токена
+      const token = getToken();
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          document.getElementById('user-info').textContent = `${payload.username || ''} | ${payload.role || ''}`;
+        } catch(e) {}
+      }
+
+      loadCurrentTask();
+    });
+  </script>
+</body>
+</html>

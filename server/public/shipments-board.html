@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Табло отгрузок</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    header {
+      background: #111827;
+      color: #f9fafb;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    header .left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    header .title {
+      font-size: 18px;
+      font-weight: 700;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    header .subtitle {
+      font-size: 12px;
+      opacity: .85;
+    }
+
+    header .actions {
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    main { padding: 12px 16px 24px; }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: flex-end;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .filters label {
+      display: flex;
+      flex-direction: column;
+      font-size: 12px;
+      color: #4b5563;
+    }
+    .filters input,
+    .filters select {
+      padding: 6px 10px;
+      font-size: 13px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      min-width: 140px;
+      outline: none;
+    }
+    .filters input:focus,
+    .filters select:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.18);
+    }
+
+    .btn {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .btn-primary   { background: #2563eb; color: #f9fafb; }
+    .btn-secondary { background: #e5e7eb; color: #111827; }
+    .btn-refresh   { background: #16a34a; color: #f9fafb; }
+    .btn-menu      { background: #374151; color: #f9fafb; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      font-size: 13px;
+    }
+    thead { background: #f9fafb; }
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    tbody tr:hover {
+      background: #f3f4f6;
+      cursor: pointer;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-status-new           { background: #e5e7eb; color: #111827; }
+    .badge-status-picking       { background: #dbeafe; color: #1d4ed8; }
+    .badge-status-packing       { background: #fef3c7; color: #92400e; }
+    .badge-status-ready_to_ship { background: #dcfce7; color: #166534; }
+    .badge-status-ready         { background: #dcfce7; color: #166534; }
+    .badge-status-shipping      { background: #e0f2fe; color: #0369a1; }
+    .badge-status-in_transit    { background: #e0e7ff; color: #3730a3; }
+    .badge-status-done          { background: #bbf7d0; color: #166534; }
+    .badge-status-cancelled     { background: #fee2e2; color: #b91c1c; }
+    .badge-status-cancelled_test{ background: #fef9c3; color: #92400e; }
+    .badge-status-unknown       { background: #e5e7eb; color: #111827; }
+
+    .progress-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+      min-width: 110px;
+    }
+    .progress-head {
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size: 11px;
+      color: #6b7280;
+    }
+    .progress-bar {
+      position: relative;
+      width: 110px;
+      height: 7px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      border-radius: 999px;
+      background: #2563eb;
+    }
+    .mono { font-variant-numeric: tabular-nums; }
+
+    .hint {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 6px 2px 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="left">
+      <div class="title">📦 BFC24 WMS — Табло отгрузок</div>
+      <div class="subtitle">Клик по строке → состав отгрузки</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-menu" id="btnMenu">🏠 В меню</button>
+      <button class="btn btn-refresh" id="btnRefresh">🔄 Обновить</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="filters">
+      <label>
+        Клиент ID
+        <input type="number" id="filterClientId" />
+      </label>
+
+      <label>
+        Статус
+        <select id="filterStatus">
+          <option value="">Все</option>
+          <option value="new">Создано</option>
+          <option value="picking">Сборка</option>
+          <option value="packing">Упаковка</option>
+          <option value="ready_to_ship">Готово к отгрузке</option>
+          <option value="shipping">Отгрузка</option>
+          <option value="in_transit">В пути</option>
+          <option value="done">Завершено</option>
+          <option value="cancelled">Отменено</option>
+          <option value="cancelled_test">Отменено (тест)</option>
+        </select>
+      </label>
+
+      <label>
+        Marketplace
+        <input type="text" id="filterMarketplace" placeholder="WB / OZON..." />
+      </label>
+
+      <label>
+        Дата от
+        <input type="date" id="filterFrom" />
+      </label>
+
+      <label>
+        Дата до
+        <input type="date" id="filterTo" />
+      </label>
+
+      <button class="btn btn-primary" id="btnApply">✅ Применить</button>
+      <button class="btn btn-secondary" id="btnToday">📅 Только сегодня</button>
+    </section>
+
+    <div class="hint">Подсказка: статусы и прогрессы считаются бэком. Тут только визуал + провал в деталку.</div>
+
+    <section>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Отгрузка</th>
+            <th>Клиент</th>
+            <th>Marketplace</th>
+            <th>Статус</th>
+            <th>План. дата</th>
+            <th>Строк</th>
+            <th>Сборка</th>
+            <th>Упаковка</th>
+            <th>Отгрузка</th>
+            <th>Создано</th>
+          </tr>
+        </thead>
+        <tbody id="shipmentsBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    let token = null;
+
+    const STATUS_LABELS = {
+      new:            'Создано',
+      picking:        'Сборка',
+      packing:        'Упаковка',
+      ready_to_ship:  'Готово к отгрузке',
+      ready:          'Готово к отгрузке',
+      shipping:       'Отгрузка',
+      in_transit:     'В пути',
+      done:           'Завершено',
+      cancelled:      'Отменено',
+      cancelled_test: 'Отменено (тест)',
+      unknown:        '—',
+    };
+
+    const STATUS_ICONS = {
+      new:            '🆕',
+      picking:        '🧩',
+      packing:        '📦',
+      ready_to_ship:  '✅',
+      ready:          '✅',
+      shipping:       '🚚',
+      in_transit:     '🛰️',
+      done:           '🏁',
+      cancelled:      '⛔',
+      cancelled_test: '🧪',
+      unknown:        '❓',
+    };
+
+    function normalizeStatus(raw) {
+      const s = String(raw || '').trim();
+      if (!s) return 'unknown';
+      return s;
+    }
+
+    async function apiFetch(url, options = {}) {
+      if (!token) throw new Error('no_token');
+
+      const opts = Object.assign({}, options);
+      if (!opts.method) opts.method = 'GET';
+
+      const headers = Object.assign({}, options.headers || {}, {
+        'Authorization': 'Bearer ' + token,
+      });
+
+      const method = opts.method.toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD') {
+        if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      }
+      opts.headers = headers;
+
+      const res = await fetch(url, opts);
+      let data = null;
+      try { data = await res.json(); } catch { data = null; }
+
+      if (res.status === 401) {
+        localStorage.removeItem('wmsToken');
+        window.location.href = '/menu.html';
+        throw new Error('auth_required');
+      }
+
+      if (!res.ok) {
+        const msg =
+          (data && (data.error || data.message || data.detail || data.details)) ||
+          ('HTTP ' + res.status);
+        throw new Error(msg);
+      }
+
+      return data;
+    }
+
+    async function loadShipments() {
+      const params = new URLSearchParams();
+
+      const clientId = document.getElementById('filterClientId').value.trim();
+      const status = document.getElementById('filterStatus').value;
+      const marketplace = document.getElementById('filterMarketplace').value.trim();
+      const dateFrom = document.getElementById('filterFrom').value;
+      const dateTo = document.getElementById('filterTo').value;
+
+      if (clientId) params.append('client_id', clientId);
+      if (status) params.append('status', status);
+      if (marketplace) params.append('marketplace', marketplace);
+      if (dateFrom) params.append('date_from', dateFrom);
+      if (dateTo) params.append('date_to', dateTo);
+
+      try {
+        const data = await apiFetch('/shipments/board?' + params.toString(), {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        });
+        renderShipments(data.shipments || []);
+      } catch (e) {
+        alert('Ошибка загрузки табло отгрузок: ' + e.message);
+      }
+    }
+
+    function renderShipments(list) {
+      const tbody = document.getElementById('shipmentsBody');
+      tbody.innerHTML = '';
+
+      list.forEach((s) => {
+        const tr = document.createElement('tr');
+
+        const created = s.created_at ? new Date(s.created_at) : null;
+        const planned = s.planned_ship_date ? new Date(s.planned_ship_date) : null;
+
+        // ✅ КЛЮЧ: всегда идём по shipment_code/external_id (это то, что умеет /shipments/:id)
+        const shipCode = String(s.shipment_code || s.external_id || '').trim();
+
+        const tdId = document.createElement('td');
+        tdId.textContent = (s.id === null || s.id === undefined) ? '' : String(s.id);
+
+        const tdCode = document.createElement('td');
+        tdCode.textContent = shipCode;
+
+        const tdClient = document.createElement('td');
+        tdClient.textContent = s.client_name
+          ? `${s.client_name} (#${s.client_id})`
+          : `#${s.client_id}`;
+
+        const tdMp = document.createElement('td');
+        tdMp.textContent = s.marketplace || '';
+
+        const tdStatus = document.createElement('td');
+        const badge = document.createElement('span');
+
+        const rawStatus = normalizeStatus(s.status);
+        const cls = (rawStatus && /^[a-z0-9_]+$/i.test(rawStatus)) ? rawStatus : 'unknown';
+        const icon = STATUS_ICONS[rawStatus] || STATUS_ICONS.unknown;
+        const human = STATUS_LABELS[rawStatus] || rawStatus || '—';
+
+        badge.className = 'badge badge-status-' + cls;
+        badge.textContent = icon + ' ' + human;
+        tdStatus.appendChild(badge);
+
+        const tdPlanned = document.createElement('td');
+        tdPlanned.textContent = planned ? planned.toLocaleDateString() : '';
+
+        const tdLines = document.createElement('td');
+        tdLines.textContent = s.lines_count || 0;
+
+        const tdPick = document.createElement('td');
+        tdPick.appendChild(makeProgressBlock('🧩', s.picking_progress));
+
+        const tdPack = document.createElement('td');
+        tdPack.appendChild(makeProgressBlock('📦', s.packing_progress));
+
+        const tdShip = document.createElement('td');
+        tdShip.appendChild(makeProgressBlock('🚚', s.shipping_progress));
+
+        const tdCreated = document.createElement('td');
+        tdCreated.textContent = created ? created.toLocaleString() : '';
+
+        tr.appendChild(tdId);
+        tr.appendChild(tdCode);
+        tr.appendChild(tdClient);
+        tr.appendChild(tdMp);
+        tr.appendChild(tdStatus);
+        tr.appendChild(tdPlanned);
+        tr.appendChild(tdLines);
+        tr.appendChild(tdPick);
+        tr.appendChild(tdPack);
+        tr.appendChild(tdShip);
+        tr.appendChild(tdCreated);
+
+        // ✅ ПРОВАЛ: только по shipment_code
+        tr.addEventListener('click', () => {
+          if (!shipCode) {
+            alert('Нет shipment_code для перехода в детали');
+            return;
+          }
+          window.location.href = '/shipment-details.html?shipment_code=' + encodeURIComponent(shipCode);
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="11">Нет данных по фильтрам</td></tr>';
+      }
+    }
+
+    function makeProgressBlock(icon, pct) {
+      const val = Number.isFinite(pct) ? pct : 0;
+
+      const wrap = document.createElement('div');
+      wrap.className = 'progress-wrap';
+
+      const head = document.createElement('div');
+      head.className = 'progress-head';
+      head.innerHTML = `<span>${icon}</span><span class="mono">${val}%</span>`;
+
+      const bar = document.createElement('div');
+      bar.className = 'progress-bar';
+
+      const fill = document.createElement('div');
+      fill.className = 'progress-bar-fill';
+      fill.style.width = val + '%';
+
+      bar.appendChild(fill);
+      wrap.appendChild(head);
+      wrap.appendChild(bar);
+
+      return wrap;
+    }
+
+    (function init() {
+      const t = localStorage.getItem('wmsToken');
+      if (!t) {
+        window.location.href = '/menu.html';
+        return;
+      }
+      token = t;
+
+      document.getElementById('btnMenu').addEventListener('click', () => {
+        window.location.href = '/menu.html';
+      });
+
+      document.getElementById('btnApply').addEventListener('click', loadShipments);
+      document.getElementById('btnToday').addEventListener('click', () => {
+        const today = new Date().toISOString().slice(0, 10);
+        document.getElementById('filterFrom').value = today;
+        document.getElementById('filterTo').value = today;
+        loadShipments();
+      });
+      document.getElementById('btnRefresh').addEventListener('click', loadShipments);
+
+      loadShipments();
+    })();
+  </script>
+</body>
+</html>

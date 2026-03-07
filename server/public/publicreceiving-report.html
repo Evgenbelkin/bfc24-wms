@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Журнал приёмки</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: #fff;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .topbar-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .topbar-sub {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .topbar-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .btn-top {
+      border-radius: 999px;
+      border: 1px solid #6b7280;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+    .chip {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #374151;
+    }
+    .chip.ok { background: #16a34a; }
+    .chip.offline { background: #b91c1c; }
+
+    .page { padding: 10px; }
+
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    h2 {
+      font-size: 14px;
+      margin: 0;
+    }
+
+    label {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    input, select {
+      width: 100%;
+      padding: 6px;
+      font-size: 13px;
+      margin-top: 3px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+    }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    button {
+      margin-top: 8px;
+      padding: 9px;
+      font-size: 14px;
+      width: 100%;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+    .btn-primary:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    .status.ok { color: #059669; }
+    .status.error { color: #dc2626; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    th, td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 4px 3px;
+      text-align: left;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+    th {
+      background: #f9fafb;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .table-wrapper {
+      max-height: 380px;
+      overflow: auto;
+    }
+
+    .badge-movement {
+      display: inline-block;
+      padding: 1px 4px;
+      border-radius: 999px;
+      font-size: 10px;
+      background: #d1fae5;
+      color: #047857;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-row">
+      <div>
+        <div class="topbar-title">BFC24 WMS — Журнал приёмки</div>
+        <div class="topbar-sub" id="userInfo">Не авторизован</div>
+      </div>
+      <div class="topbar-actions">
+        <span id="onlineChip" class="chip offline">offline</span>
+        <button id="btnGoMenu" class="btn-top" type="button">Меню</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page">
+    <!-- ФИЛЬТРЫ -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Фильтры по приёмке</h2>
+      </div>
+      <div class="filters-grid">
+        <div>
+          <label>
+            Клиент (client_id):
+            <input type="number" id="filterClientId" value="1" />
+          </label>
+        </div>
+        <div>
+          <label>
+            Штрихкод (barcode):
+            <input type="text" id="filterBarcode" autocomplete="off" />
+          </label>
+        </div>
+        <div>
+          <label>
+            Ячейка (location_code):
+            <input type="text" id="filterLocation" autocomplete="off" />
+          </label>
+        </div>
+        <div>
+          <label>
+            Дата с (date_from):
+            <input type="date" id="filterDateFrom" />
+          </label>
+        </div>
+        <div>
+          <label>
+            Дата по (date_to):
+            <input type="date" id="filterDateTo" />
+          </label>
+        </div>
+        <div>
+          <label>
+            Лимит:
+            <input type="number" id="filterLimit" value="200" min="1" max="5000" />
+          </label>
+        </div>
+      </div>
+      <button id="btnLoad" class="btn-primary" type="button">Загрузить</button>
+      <div id="filtersStatus" class="status"></div>
+    </div>
+
+    <!-- РЕЗУЛЬТАТЫ -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Движения (incoming)</h2>
+        <span class="status" id="rowsInfo"></span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Дата/время</th>
+              <th>client_id</th>
+              <th>barcode</th>
+              <th>qty</th>
+              <th>ячейка</th>
+              <th>from</th>
+              <th>user_id</th>
+              <th>ref</th>
+              <th>коммент</th>
+            </tr>
+          </thead>
+          <tbody id="rowsBody">
+            <!-- сюда рендерим строки -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let token = null;
+
+    function setUserInfo(text) {
+      document.getElementById('userInfo').textContent = text;
+    }
+    function setOnline(ok) {
+      const chip = document.getElementById('onlineChip');
+      chip.textContent = ok ? 'online' : 'offline';
+      chip.className = 'chip ' + (ok ? 'ok' : 'offline');
+    }
+    function setFiltersStatus(text, ok) {
+      const el = document.getElementById('filtersStatus');
+      el.textContent = text || '';
+      el.className = 'status ' + (ok ? 'ok' : 'error');
+    }
+    function setRowsInfo(text) {
+      document.getElementById('rowsInfo').textContent = text || '';
+    }
+
+    // Инициализация: токен + пользователь
+    (function init() {
+      const saved = localStorage.getItem('wmsToken');
+      const savedUser = localStorage.getItem('wmsUser');
+      if (saved) {
+        token = saved;
+        setOnline(true);
+        if (savedUser) setUserInfo('Пользователь: ' + savedUser);
+      } else {
+        setOnline(false);
+        setFiltersStatus('Нет токена — зайдите через меню.', false);
+      }
+      // По умолчанию — сегодняшняя дата
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2, '0');
+      const d = String(today.getDate()).padStart(2, '0');
+      const ymd = `${y}-${m}-${d}`;
+      document.getElementById('filterDateFrom').value = ymd;
+      document.getElementById('filterDateTo').value = ymd;
+    })();
+
+    document.getElementById('btnGoMenu').addEventListener('click', () => {
+      window.location.href = '/menu.html';
+    });
+
+    function buildQuery(params) {
+      const q = [];
+      for (const [k, v] of Object.entries(params)) {
+        if (v === undefined || v === null || v === '') continue;
+        q.push(encodeURIComponent(k) + '=' + encodeURIComponent(v));
+      }
+      return q.length ? '?' + q.join('&') : '';
+    }
+
+    function renderRows(rows) {
+      const tbody = document.getElementById('rowsBody');
+      tbody.innerHTML = '';
+
+      if (!rows || rows.length === 0) {
+        setRowsInfo('Нет данных.');
+        return;
+      }
+
+      for (const m of rows) {
+        const tr = document.createElement('tr');
+
+        const dt = new Date(m.created_at);
+        const dtStr =
+          dt.getFullYear() + '-' +
+          String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+          String(dt.getDate()).padStart(2, '0') + ' ' +
+          String(dt.getHours()).padStart(2, '0') + ':' +
+          String(dt.getMinutes()).padStart(2, '0');
+
+        const toLoc = m.to_location || '';
+        const fromLoc = m.from_location || '';
+
+        tr.innerHTML = `
+          <td>${dtStr}</td>
+          <td>${m.client_id ?? ''}</td>
+          <td>${m.barcode ?? ''}</td>
+          <td>${m.qty ?? ''}</td>
+          <td>${toLoc}</td>
+          <td>${fromLoc}</td>
+          <td>${m.user_id ?? ''}</td>
+          <td>${(m.ref_type || '')}${m.ref_id ? ' #' + m.ref_id : ''}</td>
+          <td>${m.comment || ''}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      setRowsInfo('Строк: ' + rows.length);
+    }
+
+    document.getElementById('btnLoad').addEventListener('click', async () => {
+      if (!token) {
+        setFiltersStatus('Нет токена. Зайдите через меню.', false);
+        return;
+      }
+
+      const clientId = document.getElementById('filterClientId').value;
+      const barcode = document.getElementById('filterBarcode').value.trim();
+      const loc = document.getElementById('filterLocation').value.trim();
+      const dateFrom = document.getElementById('filterDateFrom').value;
+      const dateTo = document.getElementById('filterDateTo').value;
+      const limit = document.getElementById('filterLimit').value;
+
+      setFiltersStatus('Загрузка...', false);
+      setRowsInfo('');
+
+      const params = {
+        movement_type: 'incoming',
+        limit
+      };
+      if (clientId) params.client_id = clientId;
+      if (barcode) params.barcode = barcode;
+      if (loc) params.location_code = loc;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+
+      const qs = buildQuery(params);
+
+      try {
+        const res = await fetch('/movements' + qs, {
+          method: 'GET',
+          headers: {
+            'Authorization': 'Bearer ' + token
+          }
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          setFiltersStatus('Ошибка загрузки: ' + (data.error || res.status), false);
+          renderRows([]);
+          return;
+        }
+        setFiltersStatus('Успех: данные загружены.', true);
+        renderRows(data.rows || []);
+      } catch (err) {
+        console.error(err);
+        setFiltersStatus('Ошибка запроса: ' + err.message, false);
+        renderRows([]);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Справочник WB</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .topbar {
+      background: #111827;
+      color: white;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .page { padding: 10px; }
+
+    .card {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .controls label {
+      display: flex;
+      flex-direction: column;
+      font-size: 12px;
+    }
+
+    .controls input,
+    .controls select {
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+      min-width: 70px;
+    }
+
+    .btn {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .btn-primary { background: #2563eb; color: #ffffff; }
+    .btn-primary:disabled { opacity: 0.6; cursor: default; }
+    .btn-secondary { background: #e5e7eb; color: #111827; }
+
+    .status { margin-top: 6px; font-size: 12px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    th, td {
+      border: 1px solid #e5e7eb;
+      padding: 4px 6px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      background: #f9fafb;
+      font-weight: 600;
+    }
+
+    .img-box {
+      width: 60px;
+      height: 60px;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      font-size: 10px;
+      color: #6b7280;
+    }
+
+    .img-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    pre {
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 8px;
+      border-radius: 6px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div>
+      <div style="font-weight:600;">Справочник WB</div>
+      <div id="topInfo" style="font-size:11px; opacity:0.8;">Аккаунт: не выбран</div>
+    </div>
+    <button class="btn btn-secondary" onclick="window.location.href='/menu.html'">Меню</button>
+  </div>
+
+  <div class="page">
+    <div class="card">
+      <div class="controls">
+        <label>
+          WB аккаунт
+          <select id="accountSelect">
+            <option value="">— не выбран —</option>
+          </select>
+        </label>
+        <label>
+          limit
+          <input id="limitInput" type="number" value="20" />
+        </label>
+        <label>
+          offset
+          <input id="offsetInput" type="number" value="0" />
+        </label>
+
+        <button id="btnLoad" class="btn btn-primary">Загрузить</button>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div><strong>Товары WB + остатки</strong></div>
+        <div id="summary" style="font-size:12px; opacity:0.8;"></div>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table id="itemsTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>nm_id</th>
+              <th>Фото</th>
+              <th>chrt_id</th>
+              <th>Артикул</th>
+              <th>Бренд</th>
+              <th>Название</th>
+              <th>Штрихкод</th>
+              <th>Остаток</th>
+              <th>Локации</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:13px; margin-bottom:4px;">Отладка</div>
+      <pre id="debugBox">{}</pre>
+    </div>
+  </div>
+
+<script>
+  const statusEl   = document.getElementById('status');
+  const debugBox   = document.getElementById('debugBox');
+  const tableBody  = document.querySelector('#itemsTable tbody');
+  const summaryEl  = document.getElementById('summary');
+  const topInfoEl  = document.getElementById('topInfo');
+
+  const accountSel = document.getElementById('accountSelect');
+  const limitInput = document.getElementById('limitInput');
+  const offsetInput= document.getElementById('offsetInput');
+  const btnLoad    = document.getElementById('btnLoad');
+
+  // ---------- общие утилиты ----------
+
+  function getAuthToken() {
+    // Поддерживаем старый и новый ключи, чтобы "автоматом" всё работало
+    return localStorage.getItem('wmsToken') || localStorage.getItem('token') || '';
+  }
+
+  function setStatus(text, ok = true) {
+    statusEl.textContent = text;
+    statusEl.style.color = ok ? '#059669' : '#dc2626';
+  }
+
+  function setDebug(obj) {
+    debugBox.textContent = JSON.stringify(obj, null, 2);
+  }
+
+  function renderTable(items) {
+    tableBody.innerHTML = '';
+
+    items.forEach((item, idx) => {
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td>${idx + 1}</td>
+        <td>${item.nm_id ?? ''}</td>
+        <td>
+          <div class="img-box">
+            ${
+              item.preview_url
+                ? `<img src="${item.preview_url}" alt="img">`
+                : 'нет фото'
+            }
+          </div>
+        </td>
+        <td>${item.chrt_id ?? ''}</td>
+        <td>${item.vendor_code ?? ''}</td>
+        <td>${item.brand ?? ''}</td>
+        <td>${item.title ?? ''}</td>
+        <td>${item.barcode ?? ''}</td>
+        <td>${item.stock_qty ?? ''}</td>
+        <td>${
+          Array.isArray(item.stock_locations)
+            ? item.stock_locations.join(', ')
+            : (item.stock_locations ?? '')
+        }</td>
+      `;
+
+      tableBody.appendChild(tr);
+    });
+  }
+
+  // ---------- загрузка списка WB-аккаунтов ----------
+
+  async function loadAccounts() {
+    const token = getAuthToken();
+    if (!token) {
+      setStatus('Нет токена. Авторизуйся через /menu.html', false);
+      setDebug({ error: 'NO_TOKEN' });
+      return;
+    }
+
+    try {
+      const res = await fetch('/mp/wb-accounts-short', {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const data = await res.json().catch(() => ({}));
+      setDebug({ step: 'accounts', status: res.status, data });
+
+      if (!res.ok) {
+        setStatus(`Ошибка загрузки аккаунтов: ${res.status}`, false);
+        return;
+      }
+
+      const items = data.accounts || data.items || [];
+      accountSel.innerHTML = '<option value="">— не выбран —</option>';
+
+      items.forEach(acc => {
+        const opt = document.createElement('option');
+        opt.value = acc.id; // id mp_account
+        opt.textContent = acc.label || acc.account_name || `ID ${acc.id}`;
+        accountSel.appendChild(opt);
+      });
+
+      if (items.length > 0) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const fromUrl = urlParams.get('account_id');
+
+        if (fromUrl && items.some(a => String(a.id) === String(fromUrl))) {
+          accountSel.value = fromUrl;
+        } else {
+          accountSel.value = String(items[0].id);
+        }
+
+        const current = items.find(a => String(a.id) === String(accountSel.value));
+        topInfoEl.textContent = current
+          ? `Аккаунт: ${current.label || current.account_name || ('ID ' + current.id)} (id=${current.id})`
+          : 'Аккаунт: не выбран';
+      } else {
+        topInfoEl.textContent = 'Аккаунт: нет доступных WB-аккаунтов';
+      }
+
+      setStatus('Аккаунты загружены');
+    } catch (err) {
+      setStatus('Ошибка загрузки аккаунтов', false);
+      setDebug({ step: 'accounts', error: String(err) });
+    }
+  }
+
+  // ---------- загрузка товаров + остатков ----------
+
+  async function loadItems() {
+    const token = getAuthToken();
+    if (!token) {
+      setStatus('Нет токена. Авторизуйся через /menu.html', false);
+      setDebug({ step: 'items', error: 'NO_TOKEN' });
+      return;
+    }
+
+    const mpAccountId = accountSel.value;
+    if (!mpAccountId) {
+      setStatus('Выбери WB аккаунт', false);
+      return;
+    }
+
+    const limit  = Number(limitInput.value || 20);
+    const offset = Number(offsetInput.value || 0);
+
+    const url =
+      `/mp/wb/items-with-stock?client_mp_account_id=${encodeURIComponent(mpAccountId)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`;
+
+    btnLoad.disabled = true;
+    setStatus('Загрузка товаров...');
+
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const data = await res.json().catch(() => ({}));
+      setDebug({ step: 'items', status: res.status, data });
+
+      if (!res.ok) {
+        setStatus(`Ошибка API: ${res.status}`, false);
+        renderTable([]);
+        return;
+      }
+
+      renderTable(data.items || []);
+
+      summaryEl.textContent =
+        `Показано ${data.items?.length ?? 0} из total=${data.total ?? '?'} (limit=${data.limit}, offset=${data.offset})`;
+
+      setStatus('Готово');
+    } catch (err) {
+      setStatus('Ошибка загрузки товаров', false);
+      setDebug({ step: 'items', error: String(err) });
+    } finally {
+      btnLoad.disabled = false;
+    }
+  }
+
+  // ---------- события ----------
+
+  btnLoad.addEventListener('click', loadItems);
+  accountSel.addEventListener('change', () => {
+    const currentText = accountSel.options[accountSel.selectedIndex]?.textContent || 'не выбран';
+    const currentId   = accountSel.value || '—';
+    topInfoEl.textContent = `Аккаунт: ${currentText} (id=${currentId})`;
+  });
+
+  window.addEventListener('load', async () => {
+    await loadAccounts();
+    await loadItems();
+  });
+</script>
+</body>
+</html>

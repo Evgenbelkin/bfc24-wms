@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Детали отгрузки</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    header {
+      background: #111827;
+      color: #f9fafb;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header .left {
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      min-width: 200px;
+    }
+    header .title {
+      font-size: 16px;
+      font-weight: 800;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    header .subtitle {
+      font-size: 12px;
+      opacity: .85;
+    }
+    header .actions {
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .btn {
+      background:#e5e7eb;
+      border:none;
+      border-radius:10px;
+      padding:8px 12px;
+      cursor:pointer;
+      font-size:13px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      user-select:none;
+      white-space: nowrap;
+    }
+    .btn-green { background:#16a34a; color:#fff; }
+    .btn-dark  { background:#374151; color:#fff; }
+    .btn-blue  { background:#2563eb; color:#fff; }
+
+    main { padding: 12px 16px 24px; }
+
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      margin-bottom: 12px;
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px 12px;
+      font-size: 13px;
+    }
+    .field .label {
+      color: #6b7280;
+      font-size: 11px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .field .value {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .badge {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-new           { background:#e5e7eb; color:#111827; }
+    .badge-picking       { background:#dbeafe; color:#1d4ed8; }
+    .badge-packing       { background:#fef3c7; color:#92400e; }
+    .badge-ready_to_ship { background:#dcfce7; color:#166534; }
+    .badge-shipping      { background:#e0f2fe; color:#0369a1; }
+    .badge-in_transit    { background:#e0e7ff; color:#3730a3; }
+    .badge-done          { background:#bbf7d0; color:#166534; }
+    .badge-cancelled     { background:#fee2e2; color:#b91c1c; }
+    .badge-unknown       { background:#e5e7eb; color:#111827; }
+
+    .totals {
+      display:flex;
+      gap:8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .pill {
+      background:#f9fafb;
+      border:1px solid #e5e7eb;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      font-size: 13px;
+    }
+    thead { background: #f9fafb; }
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    tbody tr:hover { background:#f3f4f6; }
+
+    .chip {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: #e5e7eb;
+      font-weight: 700;
+    }
+    .chip-ok { background:#dcfce7; color:#166534; }
+
+    a.link { color:#2563eb; text-decoration:none; font-weight:600; }
+    a.link:hover { text-decoration:underline; }
+
+    .mono { font-variant-numeric: tabular-nums; }
+
+    .qr-box {
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .qr-actions {
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+    }
+    .qr-preview img {
+      max-width:220px;
+      max-height:220px;
+      border:1px solid #e5e7eb;
+      border-radius:8px;
+      padding:6px;
+      background:#fff;
+    }
+
+    .hidden {
+      display:none !important;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="left">
+      <div class="title" id="pageTitle">📦 Детали отгрузки</div>
+      <div class="subtitle" id="pageSubtitle">Состав, прогресс, стикеры</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-dark" id="btnMenu">🏠 В меню</button>
+      <button class="btn btn-green" id="btnRefresh">🔄 Обновить</button>
+      <button class="btn" id="btnBack">← Назад</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>ℹ️ Информация об отгрузке</h2>
+      <div class="grid" id="shipmentInfo"></div>
+      <div class="totals" id="totalsRow" style="display:none;"></div>
+    </section>
+
+    <section class="card hidden" id="qrSection">
+      <h2>🧾 QR поставки WB</h2>
+      <div class="qr-box">
+        <div class="qr-actions">
+          <button class="btn btn-blue" id="btnOpenQr">Открыть QR</button>
+          <button class="btn btn-green" id="btnPrintQr">Печать QR</button>
+        </div>
+        <div class="qr-preview" id="qrPreview"></div>
+      </div>
+    </section>
+
+    <section>
+      <table>
+        <thead>
+          <tr>
+            <th>WB заказ</th>
+            <th>ШК</th>
+            <th>Товар</th>
+            <th>МХ</th>
+            <th>План</th>
+            <th>Собрано</th>
+            <th>Упаковано</th>
+            <th>Статус</th>
+            <th>Sticker code</th>
+            <th>Фото</th>
+            <th>Стикер</th>
+          </tr>
+        </thead>
+        <tbody id="linesBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    let token = null;
+    let currentShipment = null;
+    let currentUserRole = null;
+
+    const STATUS_LABELS = {
+      new: 'Создано',
+      picking: 'Сборка',
+      packing: 'Упаковка',
+      ready_to_ship: 'Готово к отгрузке',
+      shipping: 'Отгрузка',
+      in_transit: 'В пути',
+      done: 'Завершено',
+      cancelled: 'Отменено',
+      cancelled_test: 'Отменено (тест)',
+      unknown: '—',
+    };
+
+    const STATUS_ICONS = {
+      new: '🆕',
+      picking: '🧩',
+      packing: '📦',
+      ready_to_ship: '✅',
+      shipping: '🚚',
+      in_transit: '🛰️',
+      done: '🏁',
+      cancelled: '⛔',
+      cancelled_test: '🧪',
+      unknown: '❓',
+    };
+
+    function parseJwt(tokenValue) {
+      try {
+        const payloadBase64 = tokenValue.split('.')[1];
+        const normalized = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+        const json = decodeURIComponent(
+          atob(normalized)
+            .split('')
+            .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        return JSON.parse(json);
+      } catch {
+        return null;
+      }
+    }
+
+    function normalizeStatus(raw) {
+      const s = String(raw || '').trim();
+      if (!s) return 'unknown';
+      return s;
+    }
+
+    function fmtDateTime(v) {
+      if (!v) return '—';
+      try {
+        const d = new Date(v);
+        if (Number.isNaN(d.getTime())) return String(v);
+        return d.toLocaleString();
+      } catch {
+        return String(v);
+      }
+    }
+
+    function makeQrSrc(qrBase64) {
+      if (!qrBase64) return null;
+      const clean = String(qrBase64).trim();
+      if (!clean) return null;
+      if (/^data:image\//i.test(clean)) return clean;
+      return 'data:image/png;base64,' + clean;
+    }
+
+    function openQrWindowAndPrint(qrBase64) {
+      const src = makeQrSrc(qrBase64);
+      if (!src) return;
+
+      const printWindow = window.open('', '_blank', 'width=420,height=420');
+      if (!printWindow) {
+        alert('Разрешите всплывающие окна для печати QR.');
+        return;
+      }
+
+      const doc = printWindow.document;
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html lang="ru">
+        <head>
+          <meta charset="UTF-8" />
+          <title>QR поставки</title>
+          <style>
+            html, body {
+              margin: 0;
+              padding: 0;
+              width: 100%;
+              height: 100%;
+              background: #fff;
+            }
+            body {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            img {
+              max-width: 100%;
+              max-height: 100%;
+            }
+          </style>
+        </head>
+        <body>
+          <img id="qrImg" src="${src}" alt="QR поставки" />
+          <script>
+            const img = document.getElementById('qrImg');
+            img.onload = function () {
+              setTimeout(function () {
+                window.print();
+                window.close();
+              }, 100);
+            };
+          <\/script>
+        </body>
+        </html>
+      `);
+      doc.close();
+    }
+
+    function openStickerWindow(stickerValue) {
+      const raw = String(stickerValue || '').trim();
+      if (!raw) {
+        alert('Стикер пустой');
+        return;
+      }
+
+      let src = raw;
+      if (/^data:image\//i.test(raw)) {
+        src = raw;
+      } else {
+        src = 'data:image/svg+xml;base64,' + raw;
+      }
+
+      const win = window.open('', '_blank', 'width=420,height=520');
+      if (!win) {
+        alert('Разрешите всплывающие окна');
+        return;
+      }
+
+      const doc = win.document;
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html lang="ru">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Стикер WB</title>
+          <style>
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #fff;
+              width: 100%;
+              height: 100%;
+            }
+            body {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            img {
+              max-width: 100%;
+              max-height: 100%;
+              object-fit: contain;
+            }
+          </style>
+        </head>
+        <body>
+          <img id="stickerImg" src="${src}" alt="Стикер WB" />
+        </body>
+        </html>
+      `);
+      doc.close();
+    }
+
+    async function apiFetch(url, options = {}) {
+      if (!token) throw new Error('no_token');
+
+      const opts = Object.assign({}, options);
+      if (!opts.method) opts.method = 'GET';
+
+      const headers = Object.assign({}, options.headers || {}, {
+        'Authorization': 'Bearer ' + token,
+      });
+
+      const method = opts.method.toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD') {
+        if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      }
+      opts.headers = headers;
+
+      const res = await fetch(url, opts);
+      let data = null;
+      try { data = await res.json(); } catch { data = null; }
+
+      if (res.status === 401) {
+        localStorage.removeItem('wmsToken');
+        window.location.href = '/menu.html';
+        throw new Error('auth_required');
+      }
+      if (!res.ok) {
+        const msg = (data && (data.error || data.message || data.detail || data.details)) || ('HTTP ' + res.status);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function getParam(name) {
+      const params = new URLSearchParams(window.location.search);
+      return params.get(name);
+    }
+
+    async function loadShipment() {
+      const id = (getParam('id') || '').trim();
+      const shipmentCode = (getParam('shipment_code') || '').trim();
+
+      const key = shipmentCode || id;
+      if (!key) {
+        alert('Не передан id или shipment_code');
+        return;
+      }
+
+      try {
+        const url = '/shipments/' + encodeURIComponent(key);
+        const data = await apiFetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
+        renderShipment(data.shipment, data.lines || []);
+      } catch (e) {
+        alert('Ошибка загрузки отгрузки: ' + e.message);
+      }
+    }
+
+    function makeField(label, value) {
+      const div = document.createElement('div');
+      div.className = 'field';
+
+      const l = document.createElement('div');
+      l.className = 'label';
+      l.textContent = label;
+
+      const v = document.createElement('div');
+      v.className = 'value';
+      v.textContent = (value === null || value === undefined) ? '' : String(value);
+
+      div.appendChild(l);
+      div.appendChild(v);
+      return div;
+    }
+
+    function makeStatusBadge(raw) {
+      const s = normalizeStatus(raw);
+      const badge = document.createElement('span');
+      const cls = 'badge-' + (s && /^[a-z0-9_]+$/i.test(s) ? s : 'unknown');
+      badge.className = 'badge ' + cls;
+      badge.textContent = (STATUS_ICONS[s] || STATUS_ICONS.unknown) + ' ' + (STATUS_LABELS[s] || s);
+      return badge;
+    }
+
+    function renderQrSection(shipment) {
+      const qrSection = document.getElementById('qrSection');
+      const qrPreview = document.getElementById('qrPreview');
+
+      qrSection.classList.add('hidden');
+      qrPreview.innerHTML = '';
+
+      if (currentUserRole === 'picker') return;
+      if (!shipment) return;
+
+      const qrSrc = makeQrSrc(shipment.wb_supply_qr_base64);
+      if (!qrSrc) return;
+
+      qrSection.classList.remove('hidden');
+      qrPreview.innerHTML = `<img src="${qrSrc}" alt="QR поставки WB" />`;
+    }
+
+    function renderShipment(shipment, lines) {
+      if (!shipment) return;
+
+      currentShipment = shipment;
+
+      const code = shipment.external_id || shipment.shipment_code || '';
+      document.getElementById('pageTitle').textContent =
+        `📦 Отгрузка ${code} (#${shipment.id})`;
+
+      const clientText = shipment.client_name
+        ? `${shipment.client_name} (#${shipment.client_id})`
+        : `#${shipment.client_id}`;
+
+      const info = document.getElementById('shipmentInfo');
+      info.innerHTML = '';
+
+      info.appendChild(makeField('Отгрузка', code));
+      info.appendChild(makeField('ID', shipment.id));
+      info.appendChild(makeField('Клиент', clientText));
+      info.appendChild(makeField('Marketplace', shipment.marketplace || 'wb'));
+
+      const statusWrap = document.createElement('div');
+      statusWrap.className = 'field';
+      const l = document.createElement('div');
+      l.className = 'label';
+      l.textContent = 'Статус';
+      const v = document.createElement('div');
+      v.appendChild(makeStatusBadge(shipment.status));
+      statusWrap.appendChild(l);
+      statusWrap.appendChild(v);
+      info.appendChild(statusWrap);
+
+      info.appendChild(makeField('Создано', fmtDateTime(shipment.created_at)));
+      info.appendChild(makeField('Упаковка начата', fmtDateTime(shipment.packing_started_at)));
+      info.appendChild(makeField('Упаковка завершена', fmtDateTime(shipment.packing_finished_at)));
+      info.appendChild(makeField('Отгружено в', fmtDateTime(shipment.shipped_at)));
+
+      let sumPlan = 0, sumPicked = 0, sumPacked = 0;
+      lines.forEach(line => {
+        sumPlan += Number(line.qty ?? line.qty_plan ?? 0) || 0;
+        sumPicked += Number(line.picked_qty ?? 0) || 0;
+        sumPacked += Number(line.packed_qty ?? 0) || 0;
+      });
+
+      const totalsRow = document.getElementById('totalsRow');
+      totalsRow.innerHTML = '';
+      totalsRow.style.display = 'flex';
+
+      const p1 = document.createElement('div');
+      p1.className = 'pill';
+      p1.innerHTML = `🧾 План: <span class="mono"><b>${sumPlan}</b></span>`;
+
+      const p2 = document.createElement('div');
+      p2.className = 'pill';
+      p2.innerHTML = `🧩 Собрано: <span class="mono"><b>${sumPicked}</b></span>`;
+
+      const p3 = document.createElement('div');
+      p3.className = 'pill';
+      p3.innerHTML = `📦 Упаковано: <span class="mono"><b>${sumPacked}</b></span>`;
+
+      totalsRow.appendChild(p1);
+      totalsRow.appendChild(p2);
+      totalsRow.appendChild(p3);
+
+      const tbody = document.getElementById('linesBody');
+      tbody.innerHTML = '';
+
+      lines.forEach((line) => {
+        const tr = document.createElement('tr');
+
+        const tdOrder = document.createElement('td');
+        tdOrder.textContent = line.wb_order_id || line.order_ref || '';
+
+        const tdBarcode = document.createElement('td');
+        tdBarcode.textContent = line.barcode || '';
+
+        const tdName = document.createElement('td');
+        tdName.textContent = line.item_name || '';
+
+        const tdLoc = document.createElement('td');
+        tdLoc.textContent = line.location_code || '';
+
+        const qtyPlan = Number(line.qty ?? line.qty_plan ?? 0) || 0;
+
+        const tdQty = document.createElement('td');
+        tdQty.textContent = qtyPlan;
+
+        const tdPicked = document.createElement('td');
+        tdPicked.textContent = line.picked_qty ?? 0;
+
+        const tdPacked = document.createElement('td');
+        tdPacked.textContent = line.packed_qty ?? 0;
+
+        const tdStatus = document.createElement('td');
+        const ok = (Number(line.packed_qty ?? 0) >= qtyPlan) && qtyPlan > 0;
+        const chip = document.createElement('span');
+        chip.className = 'chip ' + (ok ? 'chip-ok' : '');
+        chip.textContent = ok ? '✅ Упаковано' : '⏳ В работе';
+        tdStatus.appendChild(chip);
+
+        const tdStickerCode = document.createElement('td');
+        tdStickerCode.textContent = line.wb_sticker_code || '';
+
+        const tdPhoto = document.createElement('td');
+        if (line.preview_url) {
+          const a = document.createElement('a');
+          a.className = 'link';
+          a.href = '#';
+          a.textContent = 'Открыть';
+          a.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            window.open(line.preview_url, '_blank', 'noopener,noreferrer');
+          });
+          tdPhoto.appendChild(a);
+        } else {
+          tdPhoto.textContent = '';
+        }
+
+        const tdSticker = document.createElement('td');
+        if (line.wb_sticker) {
+          const a = document.createElement('a');
+          a.className = 'link';
+          a.href = '#';
+          a.textContent = 'Открыть';
+          a.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            openStickerWindow(line.wb_sticker);
+          });
+          tdSticker.appendChild(a);
+        } else {
+          tdSticker.textContent = '';
+        }
+
+        tr.appendChild(tdOrder);
+        tr.appendChild(tdBarcode);
+        tr.appendChild(tdName);
+        tr.appendChild(tdLoc);
+        tr.appendChild(tdQty);
+        tr.appendChild(tdPicked);
+        tr.appendChild(tdPacked);
+        tr.appendChild(tdStatus);
+        tr.appendChild(tdStickerCode);
+        tr.appendChild(tdPhoto);
+        tr.appendChild(tdSticker);
+
+        tbody.appendChild(tr);
+      });
+
+      if (!lines.length) {
+        tbody.innerHTML = '<tr><td colspan="11">Нет строк в отгрузке</td></tr>';
+      }
+
+      renderQrSection(shipment);
+    }
+
+    (function init() {
+      const t = localStorage.getItem('wmsToken');
+      if (!t) {
+        window.location.href = '/menu.html';
+        return;
+      }
+      token = t;
+
+      const payload = parseJwt(t) || {};
+      currentUserRole = String(payload.role || '').trim();
+
+      document.getElementById('btnMenu').addEventListener('click', () => {
+        window.location.href = '/menu.html';
+      });
+      document.getElementById('btnBack').addEventListener('click', () => window.history.back());
+      document.getElementById('btnRefresh').addEventListener('click', loadShipment);
+
+      document.getElementById('btnOpenQr').addEventListener('click', () => {
+        if (!currentShipment || !currentShipment.wb_supply_qr_base64) {
+          alert('QR поставки отсутствует');
+          return;
+        }
+        const src = makeQrSrc(currentShipment.wb_supply_qr_base64);
+        if (!src) {
+          alert('QR поставки отсутствует');
+          return;
+        }
+        window.open(src, '_blank', 'noopener,noreferrer');
+      });
+
+      document.getElementById('btnPrintQr').addEventListener('click', () => {
+        if (!currentShipment || !currentShipment.wb_supply_qr_base64) {
+          alert('QR поставки отсутствует');
+          return;
+        }
+        openQrWindowAndPrint(currentShipment.wb_supply_qr_base64);
+      });
+
+      loadShipment();
+    })();
+  </script>
+</body>
+</html>

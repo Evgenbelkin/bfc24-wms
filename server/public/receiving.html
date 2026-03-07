@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Приёмка (TSD)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+  <style>
+    :root {
+      --primary: #2563eb;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --bg-gray: #f3f4f6;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; padding: 0;
+      background: var(--bg-gray);
+      color: var(--text-main);
+      line-height: 1.4;
+    }
+
+    /* Индикаторы статуса в шапке */
+    .badge-status {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      transition: background 0.3s;
+    }
+    .online { background: #dcfce7; color: #166534; }
+    .offline { background: #fee2e2; color: #991b1b; }
+
+    /* 1. Верхняя панель */
+    .topbar {
+      background: #111827;
+      color: white;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .topbar-title { font-weight: 700; font-size: 16px; }
+    .topbar-info { font-size: 10px; opacity: 0.8; }
+    .btn-top {
+      background: #374151; color: white; border: 1px solid #4b5563;
+      padding: 6px 12px; border-radius: 8px; font-size: 12px; cursor: pointer;
+    }
+
+    .page { padding: 10px; max-width: 500px; margin: 0 auto; }
+
+    /* 4. Блок статуса */
+    .status-card {
+      padding: 15px;
+      border-radius: 12px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 16px;
+      margin-bottom: 12px;
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .status-neutral { background: #dbeafe; color: #1e40af; }
+    .status-ok { background: #dcfce7; color: #166534; border: 2px solid #16a34a; }
+    .status-error { background: #fee2e2; color: #991b1b; border: 2px solid #dc2626; }
+
+    /* 2. Основной рабочий блок */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .field-group { margin-bottom: 15px; }
+    .field-label { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; }
+    
+    input, select {
+      width: 100%;
+      height: 52px;
+      font-size: 18px;
+      font-weight: 600;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 2px solid #d1d5db;
+      background: #fff;
+    }
+    input:focus, select:focus { border-color: var(--primary); outline: none; background: #eff6ff; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+    
+    .btn-main {
+      width: 100%;
+      height: 56px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+    .btn-main:active { filter: brightness(0.9); }
+    .btn-main:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    .btn-clear {
+      width: 100%;
+      height: 44px;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    /* 3. Режим быстрой приёмки */
+    .fast-mode-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #f3f4f6;
+    }
+    .toggle-switch { position: relative; display: inline-block; width: 48px; height: 26px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #ccc; transition: .4s; border-radius: 34px;
+    }
+    .slider:before {
+      position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px;
+      background-color: white; transition: .4s; border-radius: 50%;
+    }
+    input:checked + .slider { background-color: var(--success); }
+    input:checked + .slider:before { transform: translateX(22px); }
+
+    /* 5, 6. История операций */
+    .history-card { padding: 12px; }
+    .history-title { font-size: 13px; font-weight: 800; margin-bottom: 10px; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .history-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px;
+      padding: 8px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13px;
+    }
+    .history-item:last-child { border: none; }
+    .h-time { font-size: 11px; color: var(--text-muted); }
+    .h-barcode { font-weight: 700; color: var(--text-main); }
+    .h-loc { color: var(--primary); font-weight: 600; }
+    .h-qty { font-weight: 800; }
+    .h-meta { font-size: 11px; color: var(--text-muted); font-style: italic; }
+    .status-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 800; text-transform: uppercase; }
+    .tag-ok { background: #dcfce7; color: #166534; }
+    .tag-err { background: #fee2e2; color: #991b1b; }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title">BFC24 WMS — Приёмка</div>
+      <div class="topbar-info">
+        <span id="display-user">Пользователь</span> | <span id="display-role">Роль</span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span id="online-status" class="badge-status online">online</span>
+      <button class="btn-top" onclick="window.location.href='/menu.html'">Меню</button>
+    </div>
+  </div>
+
+  <div class="page">
+    
+    <div id="mainStatus" class="status-card status-neutral">Сканируйте штрихкод</div>
+
+    <div class="card">
+      <div class="field-group">
+        <label class="field-label">Клиент</label>
+        <select id="clientId"></select>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Штрихкод товара</label>
+        <input type="text" id="barcode" autocomplete="off" placeholder="SCAN BARCODE" />
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Ячейка (МХ)</label>
+        <input type="text" id="locationCode" autocomplete="off" placeholder="SCAN LOCATION" />
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Количество</label>
+        <input type="number" id="qty" value="1" min="1" />
+      </div>
+
+      <button id="btnAccept" class="btn-main">ПРИНЯТЬ</button>
+      <button id="btnClear" class="btn-clear">Очистить форму</button>
+
+      <div class="fast-mode-row">
+        <span style="font-size: 14px; font-weight: 700;">Быстрая приёмка (qty=1)</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="fastModeCheckbox">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div id="lastOpCard" class="card hidden" style="background: #fafafa; border-left: 4px solid var(--primary);">
+        <div class="field-label">Последняя операция</div>
+        <div id="lastOpContent" style="font-size: 13px; font-weight: 600;"></div>
+    </div>
+
+    <div class="card history-card">
+      <div class="history-title">
+        ПОСЛЕДНИЕ ОПЕРАЦИИ <span>СЕССИЯ</span>
+      </div>
+      <div id="historyList">
+        <div style="text-align: center; color: #94a3b8; padding: 20px; font-size: 12px;">История пуста</div>
+      </div>
+    </div>
+
+    <details style="margin-top: 20px; font-size: 10px; color: #94a3b8;">
+      <summary>Debug Details</summary>
+      <pre id="serverResponse">{}</pre>
+    </details>
+  </div>
+
+  <script>
+    let token = localStorage.getItem('wmsToken');
+    let user = localStorage.getItem('wmsUser');
+    let role = localStorage.getItem('wmsRole');
+    let isSubmitting = false;
+    let historyData = [];
+
+    function initUI() {
+      document.getElementById('display-user').textContent = user || 'unknown';
+      document.getElementById('display-role').textContent = role || 'guest';
+      
+      const statusBadge = document.getElementById('online-status');
+      const updateOnlineStatus = () => {
+        if (navigator.onLine) {
+          statusBadge.textContent = 'online';
+          statusBadge.className = 'badge-status online';
+        } else {
+          statusBadge.textContent = 'offline';
+          statusBadge.className = 'badge-status offline';
+        }
+      };
+
+      window.addEventListener('online', updateOnlineStatus);
+      window.addEventListener('offline', updateOnlineStatus);
+      updateOnlineStatus();
+
+      // Восстановление Fast Mode (По умолчанию true)
+      const storedFastMode = localStorage.getItem('wmsFastMode');
+      const fastModeCheckbox = document.getElementById('fastModeCheckbox');
+      if (storedFastMode === null) {
+          fastModeCheckbox.checked = true;
+          localStorage.setItem('wmsFastMode', 'true');
+      } else {
+          fastModeCheckbox.checked = storedFastMode === 'true';
+      }
+    }
+
+    function setUIStatus(text, type = 'neutral') {
+      const el = document.getElementById('mainStatus');
+      el.textContent = text;
+      el.className = 'status-card status-' + type;
+    }
+
+    function toggleFormDisabled(state) {
+      const elements = ['clientId', 'barcode', 'locationCode', 'qty', 'btnAccept', 'btnClear'];
+      elements.forEach(id => document.getElementById(id).disabled = state);
+    }
+
+    function updateLastOp(data, isSuccess, resultText) {
+      const card = document.getElementById('lastOpCard');
+      const content = document.getElementById('lastOpContent');
+      const clientSelect = document.getElementById('clientId');
+      const clientName = clientSelect.options[clientSelect.selectedIndex]?.text || 'Unknown';
+      
+      card.classList.remove('hidden');
+      card.style.borderLeftColor = isSuccess ? 'var(--success)' : 'var(--danger)';
+      
+      const time = new Date().toLocaleTimeString();
+      content.innerHTML = `
+        <div style="font-size: 11px; color: var(--text-muted)">${clientName}</div>
+        [${time}] ${data.barcode} -> ${data.location_code} (${data.qty} шт) <br>
+        <span style="color:${isSuccess ? 'var(--success)' : 'var(--danger)'}">${resultText}</span>
+      `;
+      
+      historyData.unshift({
+          time,
+          client: clientName,
+          barcode: data.barcode,
+          loc: data.location_code,
+          qty: data.qty,
+          ok: isSuccess,
+          msg: resultText
+      });
+      if(historyData.length > 10) historyData.pop();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const container = document.getElementById('historyList');
+      if (historyData.length === 0) {
+          container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px; font-size: 12px;">История пуста</div>';
+          return;
+      }
+      
+      container.innerHTML = historyData.map(item => `
+        <div class="history-item">
+          <div>
+            <div class="h-barcode">${item.barcode}</div>
+            <div class="h-time">${item.time} | <span class="h-loc">${item.loc}</span></div>
+            <div class="h-meta">${item.client}</div>
+          </div>
+          <div style="text-align: right">
+            <div class="h-qty">${item.qty} шт</div>
+            <span class="status-tag ${item.ok ? 'tag-ok' : 'tag-err'}">${item.ok ? 'OK' : 'ERR'}</span>
+            <div style="font-size:9px; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space: nowrap;">${item.msg}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadClients() {
+      if (!token) {
+        setUIStatus('ОШИБКА: Нет авторизации', 'error');
+        return;
+      }
+
+      const select = document.getElementById('clientId');
+      try {
+        const res = await fetch('/clients-short', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!res.ok) throw new Error('Ошибка связи с сервером');
+        const data = await res.json();
+        const clients = data.clients || data.rows || [];
+        
+        select.innerHTML = '<option value="">-- Выбор клиента --</option>';
+        clients.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.client_name;
+          select.appendChild(opt);
+        });
+
+        const savedClientId = localStorage.getItem('wmsClientId');
+        if (savedClientId) select.value = savedClientId;
+
+      } catch (e) {
+        setUIStatus('Критическая ошибка: ' + e.message, 'error');
+      }
+    }
+
+    async function sendAccept() {
+      if (isSubmitting) return;
+
+      const clientId = document.getElementById('clientId').value;
+      const barcodeInput = document.getElementById('barcode');
+      const barcode = barcodeInput.value.trim();
+      const locationInput = document.getElementById('locationCode');
+      const location_code = locationInput.value.trim();
+      const qtyInput = document.getElementById('qty');
+      const qty = parseInt(qtyInput.value);
+
+      if (!token) { setUIStatus('Нет авторизации', 'error'); return; }
+      if (!clientId) { setUIStatus('Выберите клиента', 'error'); return; }
+      if (!barcode) { setUIStatus('Сканируйте товар', 'error'); barcodeInput.focus(); return; }
+      if (!location_code) { setUIStatus('Сканируйте ячейку', 'error'); locationInput.focus(); return; }
+      if (isNaN(qty) || qty <= 0) { setUIStatus('Укажите количество', 'error'); qtyInput.focus(); return; }
+
+      isSubmitting = true;
+      toggleFormDisabled(true);
+      const btn = document.getElementById('btnAccept');
+      btn.textContent = 'ОТПРАВКА...';
+      setUIStatus('Выполняю приёмку...', 'neutral');
+
+      const payload = { client_id: parseInt(clientId), barcode, location_code, qty };
+
+      try {
+        const response = await fetch('/receiving/accept', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        let result = {};
+        try {
+            result = await response.json();
+        } catch (e) {
+            result = { detail: "Некорректный ответ от сервера" };
+        }
+        
+        document.getElementById('serverResponse').textContent = JSON.stringify(result, null, 2);
+
+        if (response.ok) {
+          const successMsg = result.message || 'Приёмка выполнена';
+          setUIStatus(successMsg, 'ok');
+          updateLastOp(payload, true, successMsg);
+          
+          barcodeInput.value = '';
+          locationInput.value = '';
+          qtyInput.value = '1';
+          barcodeInput.focus();
+        } else {
+          const errMsg = result.error || result.detail || 'Ошибка сервера';
+          setUIStatus('ОШИБКА: ' + errMsg, 'error');
+          updateLastOp(payload, false, errMsg);
+
+          if (errMsg.toLowerCase().includes('ячейк')) {
+              locationInput.focus();
+          } else if (errMsg.toLowerCase().includes('колич') || errMsg.toLowerCase().includes('qty')) {
+              qtyInput.focus();
+          } else {
+              barcodeInput.focus();
+          }
+        }
+      } catch (err) {
+        const netErr = 'Сетевая ошибка: ' + err.message;
+        setUIStatus(netErr, 'error');
+        updateLastOp(payload, false, netErr);
+        barcodeInput.focus();
+      } finally {
+        isSubmitting = false;
+        toggleFormDisabled(false);
+        btn.textContent = 'ПРИНЯТЬ';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initUI();
+      loadClients();
+
+      const selectClient = document.getElementById('clientId');
+      const inputBarcode = document.getElementById('barcode');
+      const inputLoc = document.getElementById('locationCode');
+      const inputQty = document.getElementById('qty');
+      const checkFastMode = document.getElementById('fastModeCheckbox');
+
+      selectClient.addEventListener('change', () => {
+        localStorage.setItem('wmsClientId', selectClient.value);
+        setUIStatus('Сканируйте штрихкод товара', 'neutral');
+        inputBarcode.focus();
+      });
+
+      checkFastMode.addEventListener('change', () => {
+        localStorage.setItem('wmsFastMode', checkFastMode.checked);
+      });
+
+      inputBarcode.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (inputBarcode.value.trim()) {
+            setUIStatus('Теперь сканируйте ячейку', 'neutral');
+            inputLoc.focus();
+          }
+        }
+      });
+
+      inputLoc.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (!inputLoc.value.trim()) return;
+
+          const isFast = checkFastMode.checked;
+          const isQtyOne = Number(inputQty.value) === 1;
+
+          if (isFast && isQtyOne) {
+            sendAccept();
+          } else {
+            setUIStatus('Подтвердите приёмку', 'neutral');
+            inputQty.focus();
+            inputQty.select();
+          }
+        }
+      });
+
+      inputQty.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          sendAccept();
+        }
+      });
+
+      document.getElementById('btnAccept').addEventListener('click', sendAccept);
+      
+      document.getElementById('btnClear').addEventListener('click', () => {
+        inputBarcode.value = '';
+        inputLoc.value = '';
+        inputQty.value = '1';
+        setUIStatus('Форма очищена. Жду скан ШК.', 'neutral');
+        inputBarcode.focus();
+      });
+
+      inputBarcode.focus();
+    });
+  </script>
+</body>
+</html>

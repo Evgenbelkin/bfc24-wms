@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Пользователи</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #16a34a;
+      --success-soft: #dcfce7;
+      --danger: #dc2626;
+      --danger-soft: #fee2e2;
+      --warning: #f59e0b;
+      --warning-soft: #fef3c7;
+      --bg-main: #f4f7fa;
+      --bg-card: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.12), 0 10px 10px -5px rgb(0 0 0 / 0.08);
+      --shadow-xl: 0 25px 50px -12px rgb(0 0 0 / 0.18);
+      --header-bg: #0f172a;
+      --header-border: rgba(255,255,255,0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-main);
+    }
+
+    body.modal-open {
+      overflow: hidden;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 20px;
+      background: var(--header-bg);
+      color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+      border-bottom: 1px solid var(--header-border);
+    }
+
+    .topbar-left,
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .brand-badge {
+      min-width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 900;
+      font-size: 20px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+    }
+
+    .brand-meta {
+      min-width: 0;
+    }
+
+    .brand-title {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .brand-subtitle {
+      margin-top: 2px;
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+
+    .user-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      background: #1e293b;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .user-meta {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .user-name {
+      font-weight: 800;
+      color: #fff;
+      font-size: 13px;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .user-role {
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .btn {
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 13px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      line-height: 1;
+      transition: .18s ease;
+      user-select: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background: #fff;
+      color: var(--text-main);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: #f8fafc;
+    }
+
+    .btn-dark {
+      background: transparent;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+    }
+
+    .btn-dark:hover {
+      background: #1e293b;
+      color: #fff;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+      border-color: var(--success);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+      border-color: var(--danger);
+    }
+
+    .btn-sm {
+      padding: 8px 10px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+
+    .container {
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 26px 24px 40px;
+    }
+
+    .page-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .page-title {
+      margin: 0;
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .page-subtitle {
+      margin-top: 8px;
+      font-size: 15px;
+      color: var(--text-muted);
+      max-width: 760px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }
+
+    .stat-value {
+      margin-top: 10px;
+      font-size: 30px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .panel-subtitle {
+      margin-top: 6px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .filters {
+      padding: 18px 20px;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr auto;
+      gap: 14px;
+      align-items: end;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .form-label {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    .input,
+    .select,
+    .textarea {
+      width: 100%;
+      padding: 12px 13px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text-main);
+      font-size: 14px;
+      outline: none;
+      transition: .16s ease;
+    }
+
+    .textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    .input:focus,
+    .select:focus,
+    .textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(37,99,235,0.12);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1140px;
+    }
+
+    th {
+      background: #f8fafc;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      font-weight: 900;
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      letter-spacing: 0.03em;
+    }
+
+    td {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    tr:hover td {
+      background: #fcfdff;
+    }
+
+    .user-cell-name {
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .user-cell-login {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+      line-height: 1;
+    }
+
+    .badge-role {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+    }
+
+    .badge-active {
+      background: var(--success-soft);
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .badge-inactive {
+      background: var(--danger-soft);
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .modules-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: 360px;
+    }
+
+    .module-chip {
+      display: inline-flex;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      font-size: 11px;
+      color: #475569;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .module-chip.more {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+      color: #1d4ed8;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .empty-state {
+      padding: 22px 20px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .page-message {
+      display: none;
+      margin-bottom: 18px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 800;
+      border: 1px solid transparent;
+    }
+
+    .page-message.show {
+      display: block;
+    }
+
+    .page-message.success {
+      background: var(--success-soft);
+      color: #166534;
+      border-color: #bbf7d0;
+    }
+
+    .page-message.error {
+      background: var(--danger-soft);
+      color: #991b1b;
+      border-color: #fecaca;
+    }
+
+    .page-message.warning {
+      background: var(--warning-soft);
+      color: #92400e;
+      border-color: #fcd34d;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.55);
+      display: none;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 20px;
+      z-index: 1000;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal {
+      width: min(1100px, 100%);
+      max-height: none;
+      min-height: auto;
+      margin: 0;
+      background: #fff;
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-xl);
+      display: flex;
+      flex-direction: column;
+      overflow: visible;
+    }
+
+    .modal-head {
+      padding: 22px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      background: #fff;
+      z-index: 2;
+    }
+
+    .modal-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .modal-subtitle {
+      margin-top: 6px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .modal-close {
+      background: #fff;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 20px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .modal-body {
+      padding: 22px 24px;
+      overflow: visible;
+    }
+
+    .modal-actions {
+      padding: 18px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      position: sticky;
+      bottom: 0;
+      background: #fff;
+      z-index: 2;
+    }
+
+    .message {
+      display: none;
+      margin-bottom: 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 800;
+      border: 1px solid transparent;
+    }
+
+    .message.show {
+      display: block;
+    }
+
+    .message.success {
+      background: var(--success-soft);
+      color: #166534;
+      border-color: #bbf7d0;
+    }
+
+    .message.error {
+      background: var(--danger-soft);
+      color: #991b1b;
+      border-color: #fecaca;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .field-full {
+      grid-column: 1 / -1;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 2px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      min-height: 48px;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    .toggle-row label {
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .rights-wrap {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .rights-section {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .rights-section-head {
+      padding: 12px 14px;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: #475569;
+      letter-spacing: 0.03em;
+    }
+
+    .rights-list {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+    }
+
+    .check-item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin: 1px 0 0 0;
+      accent-color: var(--primary);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .check-label {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      line-height: 1.2;
+      cursor: pointer;
+    }
+
+    .check-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    .check-code {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .muted {
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 1100px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .filters {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .rights-wrap {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .topbar-right {
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+
+      .container {
+        padding: 18px 14px 28px;
+      }
+
+      .page-title {
+        font-size: 24px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .filters,
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .modal-overlay {
+        padding: 10px;
+        align-items: flex-start;
+      }
+
+      .modal {
+        width: 100%;
+        max-height: none;
+        border-radius: 18px;
+        margin: 0;
+      }
+
+      .modal-head,
+      .modal-body,
+      .modal-actions {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .brand-title,
+      .brand-subtitle,
+      .user-name,
+      .user-role {
+        white-space: normal;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="topbar-left">
+    <div class="brand-badge">B</div>
+    <div class="brand-meta">
+      <div class="brand-title">BFC24 WMS</div>
+      <div class="brand-subtitle">Управление пользователями</div>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <div class="user-box">
+      <div class="user-avatar" id="currentUserAvatar">?</div>
+      <div class="user-meta">
+        <span class="user-name" id="currentUserName">Загрузка...</span>
+        <span class="user-role" id="currentUserRole">---</span>
+      </div>
+    </div>
+    <a class="btn btn-dark" href="/menu.html">← В меню</a>
+    <button class="btn btn-dark" id="btnLogout" type="button">Выйти</button>
+  </div>
+</header>
+
+<main class="container">
+  <div class="page-message" id="pageMessage"></div>
+
+  <section class="page-head">
+    <div>
+      <h1 class="page-title">Управление пользователями</h1>
+      <div class="page-subtitle">
+        Создание сотрудников, назначение ролей и выдача доступа к модулям системы.
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btnCreateUser" type="button">+ Создать пользователя</button>
+  </section>
+
+  <section class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Всего сотрудников</div>
+      <div class="stat-value" id="countTotal">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Активные</div>
+      <div class="stat-value" id="countActive">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Неактивные</div>
+      <div class="stat-value" id="countInactive">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Ролей используется</div>
+      <div class="stat-value" id="countRoles">0</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 class="panel-title">Сотрудники системы</h2>
+        <div class="panel-subtitle">Поиск, фильтрация и редактирование учетных записей</div>
+      </div>
+    </div>
+
+    <div class="filters">
+      <div class="field">
+        <label class="form-label" for="searchInput">Поиск</label>
+        <input class="input" id="searchInput" type="text" placeholder="Логин или имя сотрудника" />
+      </div>
+
+      <div class="field">
+        <label class="form-label" for="roleFilter">Роль</label>
+        <select class="select" id="roleFilter">
+          <option value="all">Все роли</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="form-label" for="statusFilter">Статус</label>
+        <select class="select" id="statusFilter">
+          <option value="all">Все</option>
+          <option value="active">Активные</option>
+          <option value="inactive">Неактивные</option>
+        </select>
+      </div>
+
+      <button class="btn btn-secondary" id="btnResetFilters" type="button">Сбросить фильтры</button>
+    </div>
+
+    <div class="table-wrap">
+      <table id="usersTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Логин / Имя</th>
+            <th>Роль</th>
+            <th>Статус</th>
+            <th>Доступные модули</th>
+            <th>Создан</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div id="emptyState" class="empty-state hidden">
+        По текущим фильтрам пользователи не найдены.
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-overlay" id="userModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h2 class="modal-title" id="modalTitle">Создание пользователя</h2>
+        <div class="modal-subtitle" id="modalSubtitle">Новая учетная запись сотрудника с назначением роли и доступов</div>
+      </div>
+      <button class="modal-close" id="btnCloseModal" type="button">×</button>
+    </div>
+
+    <form id="userForm">
+      <div class="modal-body">
+        <div class="message" id="formMessage"></div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label class="form-label" for="username">Логин</label>
+            <input class="input" id="username" placeholder="Например: ivanov" required />
+          </div>
+
+          <div class="field">
+            <label class="form-label" for="fullName">Имя сотрудника</label>
+            <input class="input" id="fullName" placeholder="Например: Иван Иванов" required />
+          </div>
+
+          <div class="field">
+            <label class="form-label" for="role">Роль</label>
+            <select class="select" id="role" required></select>
+          </div>
+
+          <div class="field">
+            <label class="form-label" for="password">Пароль</label>
+            <input class="input" id="password" type="password" placeholder="Для нового пользователя обязателен" />
+            <div class="muted" id="passwordHint">Для нового пользователя пароль обязателен.</div>
+          </div>
+
+          <div class="field field-full">
+            <div class="toggle-row">
+              <input type="checkbox" id="isActive" checked />
+              <label for="isActive">Пользователь активен</label>
+            </div>
+          </div>
+
+          <div class="field field-full">
+            <label class="form-label">Доступные модули</label>
+            <div id="rightsSections" class="rights-wrap"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <div class="muted" id="modalModeText">Режим: создание пользователя</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" id="btnCancelModal">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="btnSaveUser">Сохранить</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const API_BASE = window.location.origin;
+
+  const FALLBACK_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGUiOiJvd25lciIsImlhdCI6MTc3Mjg2OTc0MCwiZXhwIjoxNzcyOTEyOTQwfQ.ug1QGy9q2LcKF3R9YXEq_BKCpwht73PeYVBdzpXINbM';
+
+  const KNOWN_ROLES = ['owner', 'admin', 'picker', 'packer', 'receiver', 'manager'];
+
+  let users = [];
+  let modules = [];
+  let editingUserId = null;
+
+  function getToken() {
+    const fromStorage =
+      localStorage.getItem('token') ||
+      localStorage.getItem('authToken') ||
+      sessionStorage.getItem('token') ||
+      sessionStorage.getItem('authToken');
+
+    return fromStorage || FALLBACK_TOKEN;
+  }
+
+  function authHeaders(extra = {}) {
+    return {
+      ...extra,
+      Authorization: `Bearer ${getToken()}`
+    };
+  }
+
+  function showPageMessage(text, type = 'success') {
+    const box = document.getElementById('pageMessage');
+    box.textContent = text;
+    box.className = `page-message show ${type}`;
+  }
+
+  function hidePageMessage() {
+    const box = document.getElementById('pageMessage');
+    box.textContent = '';
+    box.className = 'page-message';
+  }
+
+  function showFormMessage(text, type = 'error') {
+    const box = document.getElementById('formMessage');
+    box.textContent = text;
+    box.className = `message show ${type}`;
+  }
+
+  function hideFormMessage() {
+    const box = document.getElementById('formMessage');
+    box.textContent = '';
+    box.className = 'message';
+  }
+
+  async function apiFetch(path, options = {}) {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: authHeaders(options.headers || {})
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const msg =
+        data?.error ||
+        data?.message ||
+        `Ошибка запроса ${res.status} ${res.statusText}`;
+
+      throw new Error(msg);
+    }
+
+    return data;
+  }
+
+  function decodeJwtPayload(token) {
+    try {
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+      const json = decodeURIComponent(
+        atob(padded)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
+
+  function fillCurrentUser() {
+    const payload = decodeJwtPayload(getToken()) || {};
+    const username = payload.username || 'admin';
+    const role = (payload.role || 'owner').toUpperCase();
+
+    document.getElementById('currentUserName').textContent = username;
+    document.getElementById('currentUserRole').textContent = role;
+    document.getElementById('currentUserAvatar').textContent = String(username).slice(0, 1).toUpperCase();
+  }
+
+  async function loadModules() {
+    const data = await apiFetch('/admin/modules');
+    modules = Array.isArray(data.modules) ? data.modules : [];
+  }
+
+  async function loadUsers() {
+    const data = await apiFetch('/admin/users');
+    users = Array.isArray(data.users) ? data.users : [];
+  }
+
+  function fillRoleOptions() {
+    const roleFilter = document.getElementById('roleFilter');
+    const roleSelect = document.getElementById('role');
+
+    const apiRoles = users.map(u => String(u.role || '').trim()).filter(Boolean);
+    const roles = [...new Set([...KNOWN_ROLES, ...apiRoles])];
+
+    roleFilter.innerHTML =
+      `<option value="all">Все роли</option>` +
+      roles.map(role => `<option value="${role}">${role}</option>`).join('');
+
+    roleSelect.innerHTML =
+      roles.map(role => `<option value="${role}">${role}</option>`).join('');
+  }
+
+  function groupModulesBySection() {
+    const groups = {};
+
+    for (const mod of modules) {
+      const section = mod.section || 'other';
+      if (!groups[section]) groups[section] = [];
+      groups[section].push(mod);
+    }
+
+    return groups;
+  }
+
+  function renderRightsSections(selectedModules = []) {
+    const box = document.getElementById('rightsSections');
+    const groups = groupModulesBySection();
+
+    const sectionNames = {
+      admin: 'Администрирование',
+      operations: 'Операции',
+      directories: 'Справочники',
+      analytics: 'Аналитика',
+      marketplaces: 'Маркетплейсы',
+      other: 'Прочее'
+    };
+
+    const order = ['admin', 'operations', 'directories', 'analytics', 'marketplaces', 'other'];
+
+    const html = order
+      .filter(section => groups[section]?.length)
+      .map(section => {
+        const items = groups[section]
+          .map(mod => {
+            const checked = selectedModules.includes(mod.code) ? 'checked' : '';
+            return `
+              <label class="check-item">
+                <input type="checkbox" name="module_access" value="${mod.code}" ${checked} />
+                <span class="check-label">
+                  <span class="check-title">${escapeHtml(mod.name || mod.code)}</span>
+                  <span class="check-code">${escapeHtml(mod.code)}</span>
+                </span>
+              </label>
+            `;
+          })
+          .join('');
+
+        return `
+          <div class="rights-section">
+            <div class="rights-section-head">${sectionNames[section] || section}</div>
+            <div class="rights-list">${items}</div>
+          </div>
+        `;
+      })
+      .join('');
+
+    box.innerHTML = html || `<div class="muted">Модули не загружены.</div>`;
+  }
+
+  function renderModulesPreview(list = []) {
+    const visible = list.slice(0, 3);
+    const rest = list.length - visible.length;
+
+    const chips = visible.map(code => {
+      const mod = modules.find(m => m.code === code);
+      return `<span class="module-chip">${escapeHtml(mod?.name || code)}</span>`;
+    });
+
+    if (rest > 0) {
+      chips.push(`<span class="module-chip more">+${rest}</span>`);
+    }
+
+    if (!chips.length) {
+      chips.push(`<span class="module-chip">Нет модулей</span>`);
+    }
+
+    return `<div class="modules-list">${chips.join('')}</div>`;
+  }
+
+  function renderStats() {
+    document.getElementById('countTotal').textContent = users.length;
+    document.getElementById('countActive').textContent = users.filter(u => !!u.active).length;
+    document.getElementById('countInactive').textContent = users.filter(u => !u.active).length;
+    document.getElementById('countRoles').textContent = new Set(users.map(u => u.role).filter(Boolean)).size;
+  }
+
+  function formatDate(value) {
+    if (!value) return '—';
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return '—';
+    return dt.toLocaleString('ru-RU');
+  }
+
+  function getFilteredUsers() {
+    const search = String(document.getElementById('searchInput').value || '').trim().toLowerCase();
+    const roleFilter = document.getElementById('roleFilter').value;
+    const statusFilter = document.getElementById('statusFilter').value;
+
+    return users.filter(u => {
+      const username = String(u.username || '').toLowerCase();
+      const fullName = String(u.full_name || '').toLowerCase();
+      const role = String(u.role || '');
+      const active = !!u.active;
+
+      const bySearch = !search || username.includes(search) || fullName.includes(search);
+      const byRole = roleFilter === 'all' || role === roleFilter;
+      const byStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'active' && active) ||
+        (statusFilter === 'inactive' && !active);
+
+      return bySearch && byRole && byStatus;
+    });
+  }
+
+  function renderTable() {
+    const tbody = document.querySelector('#usersTable tbody');
+    const empty = document.getElementById('emptyState');
+
+    const filtered = getFilteredUsers();
+
+    if (!filtered.length) {
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+      renderStats();
+      return;
+    }
+
+    empty.classList.add('hidden');
+
+    tbody.innerHTML = filtered.map(u => `
+      <tr>
+        <td>${u.id}</td>
+        <td>
+          <div class="user-cell-name">${escapeHtml(u.full_name || '—')}</div>
+          <div class="user-cell-login">${escapeHtml(u.username || '—')}</div>
+        </td>
+        <td>
+          <span class="badge badge-role">${escapeHtml(u.role || '—')}</span>
+        </td>
+        <td>
+          <span class="badge ${u.active ? 'badge-active' : 'badge-inactive'}">
+            ${u.active ? 'Активен' : 'Отключен'}
+          </span>
+        </td>
+        <td>${renderModulesPreview(Array.isArray(u.modules) ? u.modules : [])}</td>
+        <td>${formatDate(u.created_at)}</td>
+        <td>
+          <div class="actions">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="editUser(${u.id})">✏️ Редактировать</button>
+            <button class="btn ${u.active ? 'btn-danger' : 'btn-success'} btn-sm" type="button" onclick="toggleUserStatus(${u.id})">
+              ${u.active ? '⛔ Отключить' : '✅ Включить'}
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+
+    renderStats();
+  }
+
+  function resetForm() {
+    editingUserId = null;
+    hideFormMessage();
+
+    document.getElementById('modalTitle').textContent = 'Создание пользователя';
+    document.getElementById('modalSubtitle').textContent = 'Новая учетная запись сотрудника с назначением роли и доступов';
+    document.getElementById('modalModeText').textContent = 'Режим: создание пользователя';
+    document.getElementById('passwordHint').textContent = 'Для нового пользователя пароль обязателен.';
+    document.getElementById('btnSaveUser').textContent = 'Сохранить';
+
+    document.getElementById('username').value = '';
+    document.getElementById('fullName').value = '';
+    document.getElementById('password').value = '';
+    document.getElementById('isActive').checked = true;
+
+    const roleSelect = document.getElementById('role');
+    if (roleSelect.options.length) {
+      roleSelect.value = 'picker';
+      if (![...roleSelect.options].some(opt => opt.value === 'picker')) {
+        roleSelect.selectedIndex = 0;
+      }
+    }
+
+    renderRightsSections([]);
+
+    const overlay = document.getElementById('userModal');
+    overlay.scrollTop = 0;
+  }
+
+  function openModal() {
+    document.getElementById('userModal').classList.add('open');
+    document.body.classList.add('modal-open');
+    document.getElementById('userModal').scrollTop = 0;
+  }
+
+  function closeModal() {
+    document.getElementById('userModal').classList.remove('open');
+    document.body.classList.remove('modal-open');
+    hideFormMessage();
+  }
+
+  function fillForm(user) {
+    editingUserId = user.id;
+    hideFormMessage();
+
+    document.getElementById('modalTitle').textContent = 'Редактирование пользователя';
+    document.getElementById('modalSubtitle').textContent = `Изменение данных сотрудника #${user.id}`;
+    document.getElementById('modalModeText').textContent = `Режим: редактирование пользователя #${user.id}`;
+    document.getElementById('passwordHint').textContent = 'Оставь пустым, если пароль менять не нужно.';
+    document.getElementById('btnSaveUser').textContent = 'Сохранить изменения';
+
+    document.getElementById('username').value = user.username || '';
+    document.getElementById('fullName').value = user.full_name || '';
+    document.getElementById('role').value = user.role || 'picker';
+    document.getElementById('password').value = '';
+    document.getElementById('isActive').checked = !!user.active;
+
+    renderRightsSections(Array.isArray(user.modules) ? user.modules : []);
+    openModal();
+  }
+
+  function getFormPayload() {
+    const username = String(document.getElementById('username').value || '').trim();
+    const full_name = String(document.getElementById('fullName').value || '').trim();
+    const role = String(document.getElementById('role').value || '').trim();
+    const password = String(document.getElementById('password').value || '');
+    const active = !!document.getElementById('isActive').checked;
+    const modulesSelected = [...document.querySelectorAll('input[name="module_access"]:checked')].map(cb => cb.value);
+
+    return {
+      username,
+      full_name,
+      role,
+      password,
+      active,
+      modules: modulesSelected
+    };
+  }
+
+  function validatePayload(payload, isEdit = false) {
+    if (!payload.username) return 'Укажи логин.';
+    if (!payload.full_name) return 'Укажи имя сотрудника.';
+    if (!payload.role) return 'Выбери роль.';
+    if (!isEdit && !payload.password) return 'Для нового пользователя пароль обязателен.';
+    return '';
+  }
+
+  async function createUserAPI(payload) {
+    return await apiFetch('/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async function updateUserAPI(id, payload) {
+    return await apiFetch(`/admin/users/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async function toggleUserStatus(id) {
+    const user = users.find(u => u.id === id);
+    if (!user) {
+      showPageMessage('Пользователь не найден в текущем списке.', 'error');
+      return;
+    }
+
+    const nextActive = !user.active;
+    const confirmText = nextActive
+      ? `Включить пользователя "${user.username}"?`
+      : `Отключить пользователя "${user.username}"?`;
+
+    if (!confirm(confirmText)) return;
+
+    try {
+      hidePageMessage();
+
+      await updateUserAPI(id, { active: nextActive });
+
+      await refreshAll();
+
+      showPageMessage(
+        nextActive
+          ? `Пользователь "${user.username}" успешно включён.`
+          : `Пользователь "${user.username}" успешно отключён.`,
+        'success'
+      );
+    } catch (err) {
+      showPageMessage(`Не удалось изменить статус: ${err.message}`, 'error');
+    }
+  }
+
+  async function editUser(id) {
+    const user = users.find(u => u.id === id);
+    if (!user) {
+      showPageMessage('Пользователь не найден.', 'error');
+      return;
+    }
+
+    fillForm(user);
+  }
+
+  async function refreshAll() {
+    await loadModules();
+    await loadUsers();
+    fillRoleOptions();
+    renderTable();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function bindEvents() {
+    document.getElementById('searchInput').addEventListener('input', renderTable);
+    document.getElementById('roleFilter').addEventListener('change', renderTable);
+    document.getElementById('statusFilter').addEventListener('change', renderTable);
+
+    document.getElementById('btnResetFilters').addEventListener('click', () => {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('roleFilter').value = 'all';
+      document.getElementById('statusFilter').value = 'all';
+      renderTable();
+    });
+
+    document.getElementById('btnCreateUser').addEventListener('click', () => {
+      resetForm();
+      openModal();
+    });
+
+    document.getElementById('btnCloseModal').addEventListener('click', closeModal);
+    document.getElementById('btnCancelModal').addEventListener('click', closeModal);
+
+    document.getElementById('userModal').addEventListener('click', (e) => {
+      if (e.target.id === 'userModal') {
+        closeModal();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('userModal').classList.contains('open')) {
+        closeModal();
+      }
+    });
+
+    document.getElementById('btnLogout').addEventListener('click', () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('authToken');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('authToken');
+      window.location.href = '/';
+    });
+
+    document.getElementById('userForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideFormMessage();
+      hidePageMessage();
+
+      const btn = document.getElementById('btnSaveUser');
+      const originalText = btn.textContent;
+
+      try {
+        const payload = getFormPayload();
+        const isEdit = editingUserId !== null;
+
+        const validationError = validatePayload(payload, isEdit);
+        if (validationError) {
+          showFormMessage(validationError, 'error');
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = isEdit ? 'Сохраняем...' : 'Создаём...';
+
+        if (isEdit) {
+          const updatePayload = {
+            username: payload.username,
+            full_name: payload.full_name,
+            role: payload.role,
+            active: payload.active,
+            modules: payload.modules
+          };
+
+          if (payload.password) {
+            updatePayload.password = payload.password;
+          }
+
+          await updateUserAPI(editingUserId, updatePayload);
+          showPageMessage('Пользователь успешно обновлён.', 'success');
+        } else {
+          await createUserAPI(payload);
+          showPageMessage('Пользователь успешно создан.', 'success');
+        }
+
+        closeModal();
+        await refreshAll();
+      } catch (err) {
+        showFormMessage(err.message || 'Ошибка сохранения пользователя.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    });
+  }
+
+  async function initPage() {
+    try {
+      fillCurrentUser();
+      bindEvents();
+      await refreshAll();
+    } catch (err) {
+      console.error('admin-users init error:', err);
+      showPageMessage(`Ошибка загрузки страницы: ${err.message}`, 'error');
+    }
+  }
+
+  window.editUser = editUser;
+  window.toggleUserStatus = toggleUserStatus;
+
+  document.addEventListener('DOMContentLoaded', initPage);
+</script>
+
+</body>
+</html>
