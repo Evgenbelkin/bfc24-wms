@@ -157,7 +157,7 @@
       <label>
         Аккаунт WB:
         <select id="accountId" style="min-width: 200px;">
-          <!-- заполним из /mp/accounts -->
+          <option value="">Загрузка...</option>
         </select>
       </label>
 
@@ -194,11 +194,10 @@
         <input type="number" id="fetchLimit" min="1" max="1000" value="200" style="width:110px;">
       </label>
 
-<label>
-  Лимит волны:
-  <input type="number" id="waveLimit" min="1" max="100" value="500" style="width:70px;">
-</label>
-
+      <label>
+        Лимит волны:
+        <input type="number" id="waveLimit" min="1" max="500" value="500" style="width:70px;">
+      </label>
 
       <button class="btn-main btn-fetch" id="btnFetch">Загрузить заказы в БД</button>
       <button class="btn-main" id="btnLoad">Обновить список</button>
@@ -228,11 +227,9 @@
           <th>Склад WB</th>
           <th>Статус</th>
           <th>Создан</th>
-          <!-- длинное поле wb_sticker НЕ показываем в таблице -->
         </tr>
         </thead>
-        <tbody id="ordersBody">
-        </tbody>
+        <tbody id="ordersBody"></tbody>
       </table>
     </div>
   </div>
@@ -247,16 +244,18 @@ let token = null;
 let role = null;
 let username = null;
 
-// словарь аккаунтов WB: { [id]: { id, label, ... } }
+// словарь аккаунтов WB: { [id]: { id, label, client_name, ... } }
 const mpAccountsById = {};
 
 // =========================
 //  АВТОРИЗАЦИЯ
 // =========================
 function initAuth() {
-  token    = localStorage.getItem('wmsToken');
-  role     = localStorage.getItem('wmsRole');
-  username = localStorage.getItem('wmsUser');
+  token = localStorage.getItem('wmsToken');
+  role = localStorage.getItem('wmsRole');
+
+  const rawUser = localStorage.getItem('wmsUser');
+  username = rawUser;
 
   if (!token) {
     alert('Нет токена авторизации. Залогинься в меню.');
@@ -264,11 +263,19 @@ function initAuth() {
     return false;
   }
 
-  let displayUser = username || '?';
+  let displayUser = '?';
+
   try {
-    const parsed = JSON.parse(username);
-    if (parsed && parsed.username) displayUser = parsed.username;
-  } catch (e) {}
+    const parsed = JSON.parse(rawUser);
+    if (parsed && typeof parsed === 'object') {
+      displayUser = parsed.username || parsed.full_name || parsed.name || '?';
+      if (!role && parsed.role) role = parsed.role;
+    } else {
+      displayUser = rawUser || '?';
+    }
+  } catch (e) {
+    displayUser = rawUser || '?';
+  }
 
   document.getElementById('userInfo').textContent =
     'Пользователь: ' + displayUser + ' (role: ' + (role || '?') + ')';
@@ -303,7 +310,16 @@ function formatDateInput(date) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-// WB-статус (fbs/new) можно просто показывать как есть
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// WB-статус
 function wbStatusRu(wbStatus) {
   if (!wbStatus) return '';
   if (wbStatus === 'fbs') return 'FBS';
@@ -336,26 +352,65 @@ function pickingStatusClass(pickingStatus) {
 //  ПОДТЯГИВАЕМ СПИСОК WB-АККАУНТОВ
 // =========================
 async function loadMpAccounts() {
+  const select = document.getElementById('accountId');
+  if (!select) return;
+
   try {
     const res = await fetch('/mp/accounts?marketplace=wb', {
       headers: { 'Authorization': 'Bearer ' + token }
     });
-    if (!res.ok) return;
 
-    const data = await res.json(); // массив
-    const select = document.getElementById('accountId');
-    if (!select) return;
+    let raw = null;
+    try {
+      raw = await res.json();
+    } catch (e) {
+      console.error('loadMpAccounts: JSON parse error', e);
+      select.innerHTML = '<option value="">Ошибка загрузки</option>';
+      setStatus('Ошибка чтения списка WB-аккаунтов', true);
+      return;
+    }
 
-    // очищаем и добавляем пункт "Все аккаунты"
+    if (!res.ok) {
+      console.error('loadMpAccounts: backend error', raw);
+      select.innerHTML = '<option value="">Ошибка загрузки</option>';
+      setStatus(
+        'Ошибка загрузки WB-аккаунтов: ' +
+        (raw && (raw.error || raw.details) ? (raw.error || raw.details) : res.status),
+        true
+      );
+      return;
+    }
+
+    const data = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw.rows)
+        ? raw.rows
+        : Array.isArray(raw.accounts)
+          ? raw.accounts
+          : [];
+
+    console.log('loadMpAccounts raw =', raw);
+    console.log('loadMpAccounts normalized =', data);
+
     select.innerHTML = '';
+
     const optAll = document.createElement('option');
     optAll.value = '';
     optAll.textContent = 'Все аккаунты';
     select.appendChild(optAll);
 
+    Object.keys(mpAccountsById).forEach(key => delete mpAccountsById[key]);
+
+    if (!data.length) {
+      select.innerHTML = '<option value="">Нет аккаунтов</option>';
+      setStatus('WB-аккаунты не найдены', true);
+      return;
+    }
+
     data.forEach(acc => {
       const idNum = Number(acc.id);
-      if (Number.isNaN(idNum)) return;
+      if (!Number.isFinite(idNum)) return;
+
       mpAccountsById[idNum] = acc;
 
       const opt = document.createElement('option');
@@ -364,15 +419,19 @@ async function loadMpAccounts() {
       select.appendChild(opt);
     });
 
-    // сразу ставим активный — твой "Мой кабинет ВБ", если он есть
-    Object.values(mpAccountsById).forEach(acc => {
-      if (acc.label === 'Мой кабинет ВБ') {
-        select.value = String(acc.id);
-      }
-    });
+    const preferred = Object.values(mpAccountsById).find(acc => acc.label === 'Мой кабинет ВБ');
+    if (preferred) {
+      select.value = String(preferred.id);
+    } else if (data.length === 1) {
+      select.value = String(data[0].id);
+    }
+
+    setStatus('WB-аккаунты загружены.');
 
   } catch (e) {
-    console.warn('loadMpAccounts error', e);
+    console.error('loadMpAccounts error', e);
+    select.innerHTML = '<option value="">Ошибка загрузки</option>';
+    setStatus('Ошибка загрузки WB-аккаунтов: ' + e.message, true);
   }
 }
 
@@ -405,7 +464,6 @@ async function fetchOrdersToDB() {
       limit: fetchLimit
     };
 
-    // используем рабочий эндпоинт (как в curl)
     const res = await fetch('/mp/wb/test-fetch-orders', {
       method: 'POST',
       headers: {
@@ -420,12 +478,16 @@ async function fetchOrdersToDB() {
 
     if (!res.ok) {
       console.error('/mp/wb/test-fetch-orders error', data);
-      setStatus('Ошибка загрузки WB->БД: ' + (data && (data.details || data.error) ? (data.details || data.error) : res.status), true);
+      setStatus(
+        'Ошибка загрузки WB->БД: ' +
+        (data && (data.details || data.error) ? (data.details || data.error) : res.status),
+        true
+      );
       return;
     }
 
-    const fetched = data.fetched ?? '';
-    const stored  = data.stored ?? '';
+    const fetched = data?.fetched ?? '';
+    const stored  = data?.stored ?? '';
     setStatus(`Загрузка WB->БД завершена. fetched=${fetched} stored=${stored}`);
     await loadFromDB();
 
@@ -453,56 +515,63 @@ async function loadFromDB() {
   setStatus('Загружаю заказы из БД...');
   setSummary('');
 
-  const res = await fetch('/mp/wb/orders?' + params.toString(), {
-    headers: { 'Authorization': 'Bearer ' + token }
-  });
-
-  let data = null;
   try {
-    data = await res.json();
-  } catch (e) {
-    console.error('/mp/wb/orders JSON parse error', e);
-  }
+    const res = await fetch('/mp/wb/orders?' + params.toString(), {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
 
-  if (!res.ok) {
-    console.error('/mp/wb/orders error', data);
-    setStatus('Ошибка загрузки из БД: ' +
-      (data && data.error ? data.error : res.status), true);
-    return;
-  }
-
-  let rows = [];
-  if (Array.isArray(data.rows)) rows = data.rows;
-  else if (Array.isArray(data)) rows = data;
-
-  renderTable(rows);
-
-  // summary
-  const total = data.count ?? rows.length;
-  const byPicking = rows.reduce((acc, r) => {
-    const st = r.picking_status || 'none';
-    acc[st] = (acc[st] || 0) + 1;
-    return acc;
-  }, {});
-
-  const parts = [`Всего: ${total}`];
-  if (byPicking.none)        parts.push(`Без задания: ${byPicking.none}`);
-  if (byPicking.new)         parts.push(`Новые: ${byPicking.new}`);
-  if (byPicking.in_progress) parts.push(`В работе: ${byPicking.in_progress}`);
-  if (byPicking.done)        parts.push(`Собрано: ${byPicking.done}`);
-
-  setStatus('Загрузка из БД завершена.');
-  setSummary(parts.join(' • '));
-
-  // подпись "Клиент / Аккаунт"
-  const infoEl = document.getElementById('accountInfo');
-  if (infoEl) {
-    if (accountId && mpAccountsById[Number(accountId)]) {
-      const label = mpAccountsById[Number(accountId)].label || ('Аккаунт ' + accountId);
-      infoEl.textContent = 'Клиент: ' + label + ' / Аккаунт: ' + label;
-    } else {
-      infoEl.textContent = 'Клиент: все / Аккаунт: все';
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (e) {
+      console.error('/mp/wb/orders JSON parse error', e);
     }
+
+    if (!res.ok) {
+      console.error('/mp/wb/orders error', data);
+      setStatus(
+        'Ошибка загрузки из БД: ' + (data && data.error ? data.error : res.status),
+        true
+      );
+      return;
+    }
+
+    let rows = [];
+    if (Array.isArray(data?.rows)) rows = data.rows;
+    else if (Array.isArray(data)) rows = data;
+
+    renderTable(rows);
+
+    const total = data?.count ?? rows.length;
+    const byPicking = rows.reduce((acc, r) => {
+      const st = r.picking_status || 'none';
+      acc[st] = (acc[st] || 0) + 1;
+      return acc;
+    }, {});
+
+    const parts = [`Всего: ${total}`];
+    if (byPicking.none)        parts.push(`Без задания: ${byPicking.none}`);
+    if (byPicking.new)         parts.push(`Новые: ${byPicking.new}`);
+    if (byPicking.in_progress) parts.push(`В работе: ${byPicking.in_progress}`);
+    if (byPicking.done)        parts.push(`Собрано: ${byPicking.done}`);
+
+    setStatus('Загрузка из БД завершена.');
+    setSummary(parts.join(' • '));
+
+    const infoEl = document.getElementById('accountInfo');
+    if (infoEl) {
+      if (accountId && mpAccountsById[Number(accountId)]) {
+        const acc = mpAccountsById[Number(accountId)];
+        const accountLabel = acc.label || ('Аккаунт ' + accountId);
+        const clientName = acc.client_name || '—';
+        infoEl.textContent = 'Клиент: ' + clientName + ' / Аккаунт: ' + accountLabel;
+      } else {
+        infoEl.textContent = 'Клиент: все / Аккаунт: все';
+      }
+    }
+  } catch (e) {
+    console.error('loadFromDB error', e);
+    setStatus('Ошибка загрузки из БД: ' + e.message, true);
   }
 }
 
@@ -525,51 +594,54 @@ function renderTable(rows) {
     const pickingText  = pickingStatusRu(row.picking_status);
 
     const accId = Number(row.client_mp_account_id || row.mp_account_id || row.account_id || 0);
+
     const accLabel = accId && mpAccountsById[accId]
       ? (mpAccountsById[accId].label || ('Аккаунт ' + accId))
-      : (accId ? ('Аккаунт ' + accId) : '');
+      : (row.mp_account_label || (accId ? ('Аккаунт ' + accId) : ''));
 
-    const clientName  = accLabel;
-    const accountName = accLabel;
+    const clientName =
+      row.client_name ||
+      (accId && mpAccountsById[accId] ? (mpAccountsById[accId].client_name || '') : '') ||
+      '—';
+
+    const accountName = accLabel || '—';
 
     const wbSupply = row.wb_supply_id || '';
     const wbStickerCode = row.wb_sticker_code || '';
 
-    // SVG-кнопка: если есть wb_sticker (длинный svg/base64) — покажем кнопку, а не строку
     const hasSticker = !!row.wb_sticker;
-    const svgBtn = hasSticker ? '<button type="button" class="btn-main" style="padding:2px 6px;font-size:11px;" onclick="downloadStickerSvg(' + (row.wb_order_id ?? '0') + ')">SVG</button>' : '—';
+    const safeOrderId = Number(row.wb_order_id || 0);
+    const svgBtn = hasSticker
+      ? `<button type="button" class="btn-main" style="padding:2px 6px;font-size:11px;" onclick="downloadStickerSvg(${safeOrderId})">SVG</button>`
+      : '—';
 
     tr.innerHTML = `
       <td>${idx + 1}</td>
-      <td>${clientName}</td>
-      <td>${accountName}</td>
-      <td>${row.wb_order_id ?? ''}</td>
-      <td>${wbSupply}</td>
-      <td>${wbStickerCode}</td>
+      <td>${escapeHtml(clientName)}</td>
+      <td>${escapeHtml(accountName)}</td>
+      <td>${escapeHtml(row.wb_order_id ?? '')}</td>
+      <td>${escapeHtml(wbSupply)}</td>
+      <td>${escapeHtml(wbStickerCode)}</td>
       <td>${svgBtn}</td>
-      <td>${row.nm_id ?? ''}</td>
-      <td>${row.chrt_id ?? ''}</td>
-      <td>${row.article ?? ''}</td>
-      <td>${row.barcode ?? ''}</td>
-      <td>${row.warehouse_name ?? ''}</td>
+      <td>${escapeHtml(row.nm_id ?? '')}</td>
+      <td>${escapeHtml(row.chrt_id ?? '')}</td>
+      <td>${escapeHtml(row.article ?? '')}</td>
+      <td>${escapeHtml(row.barcode ?? '')}</td>
+      <td>${escapeHtml(row.warehouse_name ?? '')}</td>
       <td>
-        <div>${wbStatusRu(row.wb_status)}</div>
-        <div><span class="${pickingClass}">${pickingText}</span></div>
+        <div>${escapeHtml(wbStatusRu(row.wb_status))}</div>
+        <div><span class="${pickingClass}">${escapeHtml(pickingText)}</span></div>
       </td>
-      <td>${created}</td>
+      <td>${escapeHtml(created)}</td>
     `;
     tbody.appendChild(tr);
   });
 }
 
 // =========================
-//  СКАЧАТЬ SVG СТИКЕР (если бэк отдаёт wb_sticker в /mp/wb/orders)
-//  Если вдруг у тебя /mp/wb/orders wb_sticker не отдаёт — кнопка будет работать только после добавления.
+//  СКАЧАТЬ SVG СТИКЕР
 // =========================
 function downloadStickerSvg(orderId) {
-  // ВАЖНО: это заглушка “на будущее”.
-  // Сейчас мы не тянем wb_sticker по отдельному API-методу.
-  // Если хочешь — добавим эндпоинт: GET /mp/wb/orders/:id/sticker (возвращает svg)
   alert('Нужно добавить эндпоинт на бэкенде для выдачи SVG по заказу. Сейчас кнопка-заглушка.');
 }
 
@@ -579,15 +651,15 @@ function downloadStickerSvg(orderId) {
 async function createWave() {
   try {
     const accountId = document.getElementById('accountId').value;
-    const waveLimit = Number(document.getElementById('waveLimit').value || '20');
+    const waveLimit = Number(document.getElementById('waveLimit').value || '500');
 
     if (!accountId) {
       alert('Выбери WB аккаунт (ID) перед формированием волны');
       return;
     }
 
-    if (!Number.isInteger(waveLimit) || waveLimit <= 0 || waveLimit > 100) {
-      alert('Лимит волны должен быть числом от 1 до 100');
+    if (!Number.isInteger(waveLimit) || waveLimit <= 0 || waveLimit > 500) {
+      alert('Лимит волны должен быть числом от 1 до 500');
       return;
     }
 
@@ -612,13 +684,16 @@ async function createWave() {
 
     if (!res.ok) {
       console.error('/picking/generate-from-wb error', data);
-      setStatus('Ошибка формирования волны: ' +
-        (data && data.details ? data.details : res.status), true);
+      setStatus(
+        'Ошибка формирования волны: ' +
+        (data && data.details ? data.details : res.status),
+        true
+      );
       return;
     }
 
-    setStatus(data.message || 'Волна сформирована.');
-    if (data.summary) setSummary(data.summary);
+    setStatus(data?.message || 'Волна сформирована.');
+    if (data?.summary) setSummary(data.summary);
 
     await loadFromDB();
   } catch (e) {
@@ -626,7 +701,6 @@ async function createWave() {
     setStatus('Ошибка: ' + e.message, true);
   }
 }
-
 
 // =========================
 //  ИНИЦИАЛИЗАЦИЯ

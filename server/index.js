@@ -215,7 +215,7 @@ app.post('/mp/wb/import-stocks', authRequired, requireRole('owner'), async (req,
  * 🔹 Список MP-аккаунтов
  * GET /mp/accounts?marketplace=wb
  */
-app.get('/mp/accounts', authRequired, requireRole('owner'), async (req, res) => {
+app.get('/mp/accounts', authRequired, requireRole(['owner', 'admin']), async (req, res) => {
   const marketplace = req.query.marketplace || 'wb';
 
   try {
