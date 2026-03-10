@@ -1,4 +1,4 @@
-// --- ВЕРХ ФАЙЛА ОСТАВЬ В ТАКОМ ВИДЕ ---
+// --- ВЕРХ ФАЙЛА ОСТАВЬ В ТАКОМ ВИДЕ --- 
 
 require('dotenv').config();
 console.log('=== BFC24 WMS: index.js LOADED ===', __filename);
@@ -18,7 +18,6 @@ const { authRequired, requireRole } = require('./authMiddleware');
 console.log('[index.js] resolved wbService =', require.resolve('./wbService'));
 const wbService = require('./wbService');
 const { fetchOrders, WB_ORDERS_URL } = wbService;
-
 const { fetchWbItems, extractCardBarcodes } = require('./wbItemsService');
 
 // ⬇️ WB API для складов/остатков
@@ -30,6 +29,14 @@ const {
 
 const app = express();
 
+// ===== 🔥 ОБЯЗАТЕЛЬНО: middleware для JSON ПЕРЕД ЛЮБЫМИ РОУТАМИ =====
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cors());
+
+// ===== подключение роутов =====
+const printersRouter = require('./routes/printers');
+app.use('/printers', printersRouter);
 
 // -------------------------------------------------------
 // ГЛОБАЛЬНЫЙ ЛОГГЕР — должен идти первым
@@ -38,6 +45,8 @@ app.use((req, res, next) => {
   console.log('INCOMING:', req.method, req.url);
   next();
 });
+
+// ... дальше твои роуты, статические файлы, /ping-root и т.д.
 
 // ==============================
 // DEBUG: список зарегистрированных роутов
