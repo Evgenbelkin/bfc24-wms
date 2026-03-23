@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -980,9 +980,6 @@
 
 <script>
   const API_BASE = window.location.origin;
-
-  const FALLBACK_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGUiOiJvd25lciIsImlhdCI6MTc3Mjg2OTc0MCwiZXhwIjoxNzcyOTEyOTQwfQ.ug1QGy9q2LcKF3R9YXEq_BKCpwht73PeYVBdzpXINbM';
-
   const KNOWN_ROLES = ['owner', 'admin', 'picker', 'packer', 'receiver', 'manager'];
 
   let users = [];
@@ -990,20 +987,13 @@
   let editingUserId = null;
 
   function getToken() {
-    const fromStorage =
+    return (
       localStorage.getItem('token') ||
       localStorage.getItem('authToken') ||
       sessionStorage.getItem('token') ||
-      sessionStorage.getItem('authToken');
-
-    return fromStorage || FALLBACK_TOKEN;
-  }
-
-  function authHeaders(extra = {}) {
-    return {
-      ...extra,
-      Authorization: `Bearer ${getToken()}`
-    };
+      sessionStorage.getItem('authToken') ||
+      ''
+    );
   }
 
   function showPageMessage(text, type = 'success') {
@@ -1031,12 +1021,25 @@
   }
 
   async function apiFetch(path, options = {}) {
+    const token = getToken();
+
+    if (!token) {
+      throw new Error('Токен не найден. Выполни вход заново.');
+    }
+
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
-      headers: authHeaders(options.headers || {})
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`
+      }
     });
 
     const data = await res.json().catch(() => ({}));
+
+    if (res.status === 401) {
+      throw new Error(data?.error || 'Сессия истекла. Выполни вход заново.');
+    }
 
     if (!res.ok) {
       const msg =
@@ -1071,9 +1074,10 @@
   }
 
   function fillCurrentUser() {
-    const payload = decodeJwtPayload(getToken()) || {};
-    const username = payload.username || 'admin';
-    const role = (payload.role || 'owner').toUpperCase();
+    const token = getToken();
+    const payload = token ? (decodeJwtPayload(token) || {}) : {};
+    const username = payload.username || 'Не авторизован';
+    const role = (payload.role || '---').toUpperCase();
 
     document.getElementById('currentUserName').textContent = username;
     document.getElementById('currentUserRole').textContent = role;

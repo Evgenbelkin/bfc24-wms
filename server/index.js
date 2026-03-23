@@ -1,4 +1,4 @@
-// --- ВЕРХ ФАЙЛА ОСТАВЬ В ТАКОМ ВИДЕ --- 
+// --- ВЕРХ ФАЙЛА ОСТАВЬ В ТАКОМ ВИДЕ ---
 
 require('dotenv').config();
 console.log('=== BFC24 WMS: index.js LOADED ===', __filename);
@@ -18,7 +18,17 @@ const { authRequired, requireRole } = require('./authMiddleware');
 console.log('[index.js] resolved wbService =', require.resolve('./wbService'));
 const wbService = require('./wbService');
 const { fetchOrders, WB_ORDERS_URL } = wbService;
+
 const { fetchWbItems, extractCardBarcodes } = require('./wbItemsService');
+
+const wbSellerWarehousesRoutes = require('./routes/wbSellerWarehouses');
+const wbStockDistributionRoutes = require('./routes/wbStockDistribution');
+const wbStockDistributionFromStockRoutes = require('./routes/wbStockDistributionFromStock');
+const sellerCabinetRoutes = require('./routes/sellerCabinet');
+const sellersRoutes = require('./routes/sellers');
+const sellerItemSettingsRouter = require('./routes/sellerItemSettings');
+const siteLeadsRouter = require('./routes/siteLeads');
+const leadsRouter = require('./routes/leads');
 
 // ⬇️ WB API для складов/остатков
 const {
@@ -27,16 +37,11 @@ const {
   fetchWbFboStocks,
 } = require('./serviceswbApi');
 
-const app = express();
-
-// ===== 🔥 ОБЯЗАТЕЛЬНО: middleware для JSON ПЕРЕД ЛЮБЫМИ РОУТАМИ =====
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cors());
-
-// ===== подключение роутов =====
 const printersRouter = require('./routes/printers');
-app.use('/printers', printersRouter);
+const printerRoutesRouter = require('./routes/printerRoutes');
+const printJobsRouter = require('./routes/printJobs');
+
+const app = express();
 
 // -------------------------------------------------------
 // ГЛОБАЛЬНЫЙ ЛОГГЕР — должен идти первым
@@ -46,8 +51,49 @@ app.use((req, res, next) => {
   next();
 });
 
-// ... дальше твои роуты, статические файлы, /ping-root и т.д.
 
+// -------------------------------------------------------
+// BODY PARSERS — ОБЯЗАТЕЛЬНО ДО РОУТОВ
+// -------------------------------------------------------
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// -------------------------------------------------------
+// ВРЕМЕННЫЙ DEBUG ДЛЯ /printers
+// -------------------------------------------------------
+app.use((req, res, next) => {
+  if (req.path.startsWith('/printers')) {
+    console.log('[PRINTERS DEBUG]');
+    console.log('method:', req.method);
+    console.log('path:', req.path);
+    console.log('content-type:', req.headers['content-type']);
+    console.log('body:', req.body);
+  }
+  next();
+});
+
+app.use('/api', wbSellerWarehousesRoutes);
+app.use('/api', wbStockDistributionRoutes);
+app.use('/api', wbStockDistributionFromStockRoutes);
+app.use('/seller-cabinet', sellerCabinetRoutes);
+app.use('/sellers', sellersRoutes);
+app.use('/seller-item-settings', sellerItemSettingsRouter);
+app.use(siteLeadsRouter);
+app.use(leadsRouter);
+
+// -------------------------------------------------------
+// ДАЛЕЕ ИДУТ ОСТАЛЬНЫЕ app.use(...), ROUTES И Т.Д.
+// -------------------------------------------------------
+
+// Роут printers подключай ИМЕННО ПОСЛЕ express.json()
+app.use('/printers', printersRouter);
+
+// либо если решишь защищать модуль целиком на уровне index.js:
+// app.use('/printers', authRequired, printersRouter);
+
+app.use('/printer-routes', printerRoutesRouter);
+
+app.use('/print-jobs', printJobsRouter);
 // ==============================
 // DEBUG: список зарегистрированных роутов
 // GET /debug/routes
@@ -564,7 +610,6 @@ app.get('/test-db', async (req, res) => {
   }
 });
 
-
 // ---------------- AUTH: /login, /me ----------------
 
 app.post('/login', async (req, res) => {
@@ -575,25 +620,31 @@ app.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'username и password обязательны' });
     }
 
-    const q = `
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ error: 'JWT_SECRET не задан' });
+    }
+
+    const sql = `
       SELECT
         id,
         username,
-        full_name,
+        NULL::varchar AS full_name,
         password_hash,
         role,
-        active
-      FROM public.admin_users
+        is_active AS active,
+        client_id
+      FROM auth.users
       WHERE username = $1
       LIMIT 1
     `;
-    const r = await pool.query(q, [username]);
 
-    if (r.rowCount === 0) {
+    const result = await pool.query(sql, [username]);
+
+    if (result.rowCount === 0) {
       return res.status(401).json({ error: 'Неверный логин или пароль' });
     }
 
-    const user = r.rows[0];
+    const user = result.rows[0];
 
     if (!user.active) {
       return res.status(403).json({ error: 'Пользователь отключен' });
@@ -604,15 +655,22 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Неверный логин или пароль' });
     }
 
-    if (!process.env.JWT_SECRET) {
-      return res.status(500).json({ error: 'JWT_SECRET не задан' });
-    }
-
     const payload = {
+      id: Number(user.id),
+      username: user.username,
+      role: user.role,
+      client_id: user.client_id || null
+    };
+
+    console.log('[LOGIN] user row =', {
       id: user.id,
       username: user.username,
-      role: user.role
-    };
+      role: user.role,
+      client_id: user.client_id || null,
+      active: user.active
+    });
+
+    console.log('[LOGIN] payload =', payload);
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRES || '12h',
@@ -622,11 +680,13 @@ app.post('/login', async (req, res) => {
       status: 'ok',
       token,
       user: {
-        id: user.id,
+        id: Number(user.id),
         username: user.username,
         full_name: user.full_name,
         role: user.role,
-        active: user.active
+        active: user.active,
+        client_id: user.client_id || null,
+        source: 'auth.users'
       },
     });
   } catch (err) {
@@ -2612,53 +2672,42 @@ app.get(
 
 
 // =========================
-// ADMIN USERS API
+// ADMIN USERS API (переведено на auth.users)
 // =========================
 
-// GET /admin/users - список пользователей с модулями
+// GET /admin/users - список пользователей
 app.get(
   '/admin/users',
   authRequired,
   requireRole(['owner', 'admin']),
   async (req, res) => {
-    const client = await pool.connect();
     try {
-      const usersRes = await client.query(`
+      const usersRes = await pool.query(`
         SELECT
           id,
           username,
-          full_name,
+          NULL::varchar AS full_name,
           role,
-          active,
+          is_active AS active,
           created_at,
-          updated_at
-        FROM admin_users
+          NULL::timestamp AS updated_at,
+          client_id
+        FROM auth.users
         ORDER BY id ASC
       `);
 
-      const modulesRes = await client.query(`
-        SELECT user_id, module_code
-        FROM admin_user_modules
-        ORDER BY user_id, module_code
-      `);
-
-      const modulesMap = {};
-      for (const row of modulesRes.rows) {
-        if (!modulesMap[row.user_id]) modulesMap[row.user_id] = [];
-        modulesMap[row.user_id].push(row.module_code);
-      }
-
       const users = usersRes.rows.map(u => ({
         ...u,
-        modules: modulesMap[u.id] || []
+        modules: []
       }));
 
-      return res.json({ users });
+      return res.json({
+        status: 'ok',
+        users
+      });
     } catch (err) {
       console.error('GET /admin/users error:', err);
       return res.status(500).json({ error: 'Ошибка получения пользователей' });
-    } finally {
-      client.release();
     }
   }
 );
@@ -2698,19 +2747,16 @@ app.post(
     try {
       const {
         username,
-        full_name,
+        full_name, // оставляем для совместимости с фронтом, но в БД не пишем
         password,
         role,
         active,
-        modules
+        modules,   // пока не используем
+        client_id
       } = req.body || {};
 
       if (!username || !String(username).trim()) {
         return res.status(400).json({ error: 'Не заполнен username' });
-      }
-
-      if (!full_name || !String(full_name).trim()) {
-        return res.status(400).json({ error: 'Не заполнен full_name' });
       }
 
       if (!password || String(password).length < 8) {
@@ -2721,13 +2767,23 @@ app.post(
         return res.status(400).json({ error: 'Не заполнена роль' });
       }
 
-      const safeModules = Array.isArray(modules) ? modules : [];
+      const usernameSafe = String(username).trim();
+      const roleSafe = String(role).trim();
+      const isActiveSafe = typeof active === 'boolean' ? active : true;
+      const clientIdSafe =
+        client_id === undefined || client_id === null || client_id === ''
+          ? null
+          : Number(client_id);
+
+      if (clientIdSafe !== null && (!Number.isInteger(clientIdSafe) || clientIdSafe <= 0)) {
+        return res.status(400).json({ error: 'client_id должен быть положительным числом или null' });
+      }
 
       await client.query('BEGIN');
 
       const existsRes = await client.query(
-        `SELECT id FROM admin_users WHERE LOWER(username) = LOWER($1) LIMIT 1`,
-        [String(username).trim()]
+        `SELECT id FROM auth.users WHERE LOWER(username) = LOWER($1) LIMIT 1`,
+        [usernameSafe]
       );
 
       if (existsRes.rows.length > 0) {
@@ -2739,39 +2795,34 @@ app.post(
 
       const insertUserRes = await client.query(
         `
-        INSERT INTO admin_users (
+        INSERT INTO auth.users (
           username,
-          full_name,
           password_hash,
           role,
-          active
+          is_active,
+          client_id
         )
         VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, username, full_name, role, active, created_at, updated_at
+        RETURNING
+          id,
+          username,
+          NULL::varchar AS full_name,
+          role,
+          is_active AS active,
+          created_at,
+          NULL::timestamp AS updated_at,
+          client_id
         `,
         [
-          String(username).trim(),
-          String(full_name).trim(),
+          usernameSafe,
           password_hash,
-          String(role).trim(),
-          typeof active === 'boolean' ? active : true
+          roleSafe,
+          isActiveSafe,
+          clientIdSafe
         ]
       );
 
       const user = insertUserRes.rows[0];
-
-      if (safeModules.length > 0) {
-        for (const moduleCode of safeModules) {
-          await client.query(
-            `
-            INSERT INTO admin_user_modules (user_id, module_code)
-            VALUES ($1, $2)
-            ON CONFLICT (user_id, module_code) DO NOTHING
-            `,
-            [user.id, moduleCode]
-          );
-        }
-      }
 
       await client.query('COMMIT');
 
@@ -2779,11 +2830,12 @@ app.post(
         message: 'Пользователь создан',
         user: {
           ...user,
-          modules: safeModules
+          full_name: full_name ? String(full_name).trim() : null,
+          modules: Array.isArray(modules) ? modules : []
         }
       });
     } catch (err) {
-      await client.query('ROLLBACK');
+      try { await client.query('ROLLBACK'); } catch (_) {}
       console.error('POST /admin/users error:', err);
       return res.status(500).json({ error: 'Ошибка создания пользователя' });
     } finally {
@@ -2808,17 +2860,18 @@ app.patch(
 
       const {
         username,
-        full_name,
+        full_name, // для совместимости, в БД не пишем
         password,
         role,
         active,
-        modules
+        modules,   // пока не используем
+        client_id
       } = req.body || {};
 
       await client.query('BEGIN');
 
       const currentRes = await client.query(
-        `SELECT * FROM admin_users WHERE id = $1 LIMIT 1`,
+        `SELECT * FROM auth.users WHERE id = $1 LIMIT 1`,
         [userId]
       );
 
@@ -2827,11 +2880,11 @@ app.patch(
         return res.status(404).json({ error: 'Пользователь не найден' });
       }
 
-      if (username && String(username).trim()) {
+      if (username !== undefined && String(username).trim()) {
         const dupRes = await client.query(
           `
           SELECT id
-          FROM admin_users
+          FROM auth.users
           WHERE LOWER(username) = LOWER($1)
             AND id <> $2
           LIMIT 1
@@ -2850,23 +2903,43 @@ app.patch(
       let idx = 1;
 
       if (username !== undefined) {
+        const usernameSafe = String(username).trim();
+        if (!usernameSafe) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'username не может быть пустым' });
+        }
         fields.push(`username = $${idx++}`);
-        values.push(String(username).trim());
-      }
-
-      if (full_name !== undefined) {
-        fields.push(`full_name = $${idx++}`);
-        values.push(String(full_name).trim());
+        values.push(usernameSafe);
       }
 
       if (role !== undefined) {
+        const roleSafe = String(role).trim();
+        if (!roleSafe) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'role не может быть пустой' });
+        }
         fields.push(`role = $${idx++}`);
-        values.push(String(role).trim());
+        values.push(roleSafe);
       }
 
       if (typeof active === 'boolean') {
-        fields.push(`active = $${idx++}`);
+        fields.push(`is_active = $${idx++}`);
         values.push(active);
+      }
+
+      if (client_id !== undefined) {
+        const clientIdSafe =
+          client_id === null || client_id === ''
+            ? null
+            : Number(client_id);
+
+        if (clientIdSafe !== null && (!Number.isInteger(clientIdSafe) || clientIdSafe <= 0)) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'client_id должен быть положительным числом или null' });
+        }
+
+        fields.push(`client_id = $${idx++}`);
+        values.push(clientIdSafe);
       }
 
       if (password !== undefined && String(password).trim() !== '') {
@@ -2880,54 +2953,40 @@ app.patch(
         values.push(password_hash);
       }
 
-      fields.push(`updated_at = NOW()`);
-
       if (fields.length > 0) {
         values.push(userId);
 
         const updateSql = `
-          UPDATE admin_users
+          UPDATE auth.users
           SET ${fields.join(', ')}
           WHERE id = $${idx}
-          RETURNING id, username, full_name, role, active, created_at, updated_at
+          RETURNING
+            id,
+            username,
+            NULL::varchar AS full_name,
+            role,
+            is_active AS active,
+            created_at,
+            NULL::timestamp AS updated_at,
+            client_id
         `;
 
         await client.query(updateSql, values);
       }
 
-      if (Array.isArray(modules)) {
-        await client.query(
-          `DELETE FROM admin_user_modules WHERE user_id = $1`,
-          [userId]
-        );
-
-        for (const moduleCode of modules) {
-          await client.query(
-            `
-            INSERT INTO admin_user_modules (user_id, module_code)
-            VALUES ($1, $2)
-            ON CONFLICT (user_id, module_code) DO NOTHING
-            `,
-            [userId, moduleCode]
-          );
-        }
-      }
-
       const finalUserRes = await client.query(
         `
-        SELECT id, username, full_name, role, active, created_at, updated_at
-        FROM admin_users
+        SELECT
+          id,
+          username,
+          NULL::varchar AS full_name,
+          role,
+          is_active AS active,
+          created_at,
+          NULL::timestamp AS updated_at,
+          client_id
+        FROM auth.users
         WHERE id = $1
-        `,
-        [userId]
-      );
-
-      const finalModulesRes = await client.query(
-        `
-        SELECT module_code
-        FROM admin_user_modules
-        WHERE user_id = $1
-        ORDER BY module_code
         `,
         [userId]
       );
@@ -2938,11 +2997,12 @@ app.patch(
         message: 'Пользователь обновлён',
         user: {
           ...finalUserRes.rows[0],
-          modules: finalModulesRes.rows.map(r => r.module_code)
+          full_name: full_name !== undefined ? String(full_name || '').trim() || null : null,
+          modules: Array.isArray(modules) ? modules : []
         }
       });
     } catch (err) {
-      await client.query('ROLLBACK');
+      try { await client.query('ROLLBACK'); } catch (_) {}
       console.error('PATCH /admin/users/:id error:', err);
       return res.status(500).json({ error: 'Ошибка обновления пользователя' });
     } finally {
@@ -2973,11 +3033,18 @@ app.patch(
 
       const result = await client.query(
         `
-        UPDATE admin_users
-        SET active = $1,
-            updated_at = NOW()
+        UPDATE auth.users
+        SET is_active = $1
         WHERE id = $2
-        RETURNING id, username, full_name, role, active, created_at, updated_at
+        RETURNING
+          id,
+          username,
+          NULL::varchar AS full_name,
+          role,
+          is_active AS active,
+          created_at,
+          NULL::timestamp AS updated_at,
+          client_id
         `,
         [active, userId]
       );
@@ -2988,7 +3055,10 @@ app.patch(
 
       return res.json({
         message: 'Статус пользователя обновлён',
-        user: result.rows[0]
+        user: {
+          ...result.rows[0],
+          modules: []
+        }
       });
     } catch (err) {
       console.error('PATCH /admin/users/:id/status error:', err);
@@ -3005,33 +3075,28 @@ app.get(
   authRequired,
   requireRole(['owner', 'admin']),
   async (req, res) => {
-    const client = await pool.connect();
-
     try {
       const userId = Number(req.params.id);
       if (!Number.isInteger(userId) || userId <= 0) {
         return res.status(400).json({ error: 'Некорректный ID пользователя' });
       }
 
-      const result = await client.query(
-        `
-        SELECT module_code
-        FROM admin_user_modules
-        WHERE user_id = $1
-        ORDER BY module_code
-        `,
+      const userRes = await pool.query(
+        `SELECT id FROM auth.users WHERE id = $1 LIMIT 1`,
         [userId]
       );
 
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
+      }
+
       return res.json({
         user_id: userId,
-        modules: result.rows.map(r => r.module_code)
+        modules: []
       });
     } catch (err) {
       console.error('GET /admin/users/:id/modules error:', err);
       return res.status(500).json({ error: 'Ошибка получения прав пользователя' });
-    } finally {
-      client.release();
     }
   }
 );
@@ -3042,8 +3107,6 @@ app.put(
   authRequired,
   requireRole(['owner', 'admin']),
   async (req, res) => {
-    const client = await pool.connect();
-
     try {
       const userId = Number(req.params.id);
       if (!Number.isInteger(userId) || userId <= 0) {
@@ -3056,37 +3119,23 @@ app.put(
         return res.status(400).json({ error: 'modules должен быть массивом' });
       }
 
-      await client.query('BEGIN');
-
-      await client.query(
-        `DELETE FROM admin_user_modules WHERE user_id = $1`,
+      const userRes = await pool.query(
+        `SELECT id FROM auth.users WHERE id = $1 LIMIT 1`,
         [userId]
       );
 
-      for (const moduleCode of modules) {
-        await client.query(
-          `
-          INSERT INTO admin_user_modules (user_id, module_code)
-          VALUES ($1, $2)
-          ON CONFLICT (user_id, module_code) DO NOTHING
-          `,
-          [userId, moduleCode]
-        );
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
       }
 
-      await client.query('COMMIT');
-
       return res.json({
-        message: 'Права пользователя обновлены',
+        message: 'Права пользователя временно не используются в auth.users',
         user_id: userId,
-        modules
+        modules: []
       });
     } catch (err) {
-      await client.query('ROLLBACK');
       console.error('PUT /admin/users/:id/modules error:', err);
       return res.status(500).json({ error: 'Ошибка сохранения прав пользователя' });
-    } finally {
-      client.release();
     }
   }
 );
@@ -8959,6 +9008,7 @@ app.get(
 // POST /packing/scan-item
 // Скан ШК на упаковке: проверка плана, дублей и запись движения
 // + обновление totals в wms.shipments (planned/picked/packed) в реальном времени
+// + автоматическая постановка print_job на 1 wb sticker по каждому успешному скану
 // -------------------------
 app.post(
   '/packing/scan-item',
@@ -9022,7 +9072,7 @@ app.post(
         return res.status(400).json({ error: 'Для этого ШК нет плана на упаковку' });
       }
 
-      // 3) Уже упаковано (из wms.movements) — под блокировку той же транзакции
+      // 3) Уже упаковано (из wms.movements)
       const packedRes = await db.query(
         `
         SELECT COALESCE(SUM(m.qty), 0)::int AS packed_qty
@@ -9059,7 +9109,7 @@ app.post(
 
       const newPackedQty = alreadyPacked + 1;
 
-      // 5) Пересчитываем totals по отгрузке (planned/picked из picking_tasks, packed из movements)
+      // 5) Пересчитываем totals по отгрузке
       const totalsRes = await db.query(
         `
         WITH p AS (
@@ -9092,7 +9142,7 @@ app.post(
       const totalPicked = Number(totalsRes.rows[0]?.total_picked_qty || 0);
       const totalPacked = Number(totalsRes.rows[0]?.total_packed_qty || 0);
 
-      // 6) Пишем totals в shipments (это нужно для табло/прогресса)
+      // 6) Пишем totals в shipments
       await db.query(
         `
         UPDATE wms.shipments
@@ -9110,6 +9160,95 @@ app.post(
       const metaLines = await loadShipmentLinesForPackingOrShipping(pool, shipment.external_id);
       const meta = metaLines.find((l) => String(l.barcode) === String(barcode)) || {};
 
+      // 8) Ищем активный маршрут печати для wb_sticker
+      const routeRes = await db.query(
+        `
+        SELECT
+          pr.id,
+          pr.route_code,
+          pr.printer_id,
+          p.printer_code,
+          p.printer_name
+        FROM wms.printer_routes pr
+        INNER JOIN wms.printers p
+          ON p.id = pr.printer_id
+        WHERE pr.is_active = true
+          AND p.is_active = true
+          AND pr.doc_type = 'wb_sticker'
+          AND (pr.zone_code = 'PACK' OR pr.zone_code IS NULL)
+          AND (pr.client_id = $1 OR pr.client_id IS NULL)
+        ORDER BY
+          CASE WHEN pr.client_id = $1 THEN 0 ELSE 1 END,
+          CASE WHEN pr.zone_code = 'PACK' THEN 0 ELSE 1 END,
+          CASE WHEN pr.is_default = true THEN 0 ELSE 1 END,
+          pr.id
+        LIMIT 1
+        `,
+        [shipment.client_id]
+      );
+
+      if (routeRes.rowCount === 0) {
+        await db.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Не найден активный printer_route для wb_sticker (zone=PACK)',
+          shipment_id: shipment.id,
+          client_id: shipment.client_id,
+          barcode
+        });
+      }
+
+      const printRoute = routeRes.rows[0];
+
+      // 9) Создаём print_job = 1 стикер на 1 успешный скан
+      // Защита от дублей уже есть выше на уровне packing_item.
+      const printJobCode = `PKSCAN-${shipment.id}-${barcode}-${Date.now()}`;
+
+      const payloadJson = {
+        source: 'packing_scan_item',
+        shipment_id: shipment.id,
+        shipment_code: shipment.external_id,
+        client_id: shipment.client_id,
+        barcode,
+        planned_qty: plannedQty,
+        packed_qty: newPackedQty,
+        item_name: meta.item_name || null,
+        wb_sticker_code: meta.wb_sticker_code || null,
+        wb_sticker: meta.wb_sticker || null,
+        preview_url: meta.preview_url || null,
+        packing_location_code: shipment.packing_location_code || null
+      };
+
+      const printJobRes = await db.query(
+        `
+        INSERT INTO wms.print_jobs (
+          job_code,
+          printer_id,
+          doc_type,
+          entity_type,
+          entity_id,
+          copies,
+          payload_json,
+          status,
+          error_text,
+          created_by,
+          created_at
+        )
+        VALUES (
+          $1, $2, 'wb_sticker', 'shipment', $3, 1, $4::jsonb, 'new', NULL, $5, NOW()
+        )
+        RETURNING *
+        `,
+        [
+          printJobCode,
+          Number(printRoute.printer_id),
+          shipment.id,
+          JSON.stringify(payloadJson),
+          userId
+        ]
+      );
+
+      const printJob = printJobRes.rows[0];
+
       await db.query('COMMIT');
 
       return res.json({
@@ -9121,7 +9260,6 @@ app.post(
           packing_location_code: shipment.packing_location_code,
           wb_supply_qr_base64: shipment.wb_supply_qr_base64 || null,
 
-          // <<< ВАЖНО: отдаём totals прямо отсюда (табло/фронт может их использовать)
           total_planned_qty: totalPlan,
           total_picked_qty: totalPicked,
           total_packed_qty: totalPacked,
@@ -9136,6 +9274,19 @@ app.post(
           wb_sticker: meta.wb_sticker || null,
           preview_url: meta.preview_url || null,
         },
+        print_job: {
+          id: printJob.id,
+          job_code: printJob.job_code,
+          printer_id: printJob.printer_id,
+          status: printJob.status
+        },
+        print_route: {
+          id: printRoute.id,
+          route_code: printRoute.route_code,
+          printer_id: printRoute.printer_id,
+          printer_code: printRoute.printer_code,
+          printer_name: printRoute.printer_name
+        }
       });
     } catch (err) {
       await db.query('ROLLBACK').catch(() => {});
@@ -9943,7 +10094,9 @@ app.post(
 // + movement shipping
 // + shipped_at / shipped_by
 // + total_shipped_qty = total_planned_qty
-// + подтверждение в WB и сохранение QR
+// + подтверждение в WB
+// + сохранение QR
+// + постановка QR в wms.print_jobs -> printer-agent
 // -------------------------
 app.post(
   '/shipping/confirm',
@@ -9963,6 +10116,8 @@ app.post(
       await client.query('BEGIN');
 
       let shipment = null;
+      let printJobId = null;
+      let printRouteInfo = null;
 
       // 1) Находим shipment
       if (shipment_id) {
@@ -10108,6 +10263,141 @@ app.post(
         console.error('[shipping/confirm] WB confirm shipment error:', e);
       }
 
+      // 6) Создание print_job для QR отгрузки
+      if (qrBase64) {
+        try {
+          const routeRes = await client.query(
+            `
+            SELECT
+              pr.*,
+              p.printer_code,
+              p.printer_name
+            FROM wms.printer_routes pr
+            INNER JOIN wms.printers p
+              ON p.id = pr.printer_id
+            WHERE pr.is_active = true
+              AND p.is_active = true
+              AND pr.doc_type = $1
+              AND (pr.warehouse_code = $2 OR pr.warehouse_code IS NULL)
+              AND (pr.zone_code = $3 OR pr.zone_code IS NULL)
+              AND (pr.client_id = $4 OR pr.client_id IS NULL)
+            ORDER BY
+              CASE WHEN pr.client_id = $4 THEN 0 ELSE 1 END,
+              CASE WHEN pr.zone_code = $3 THEN 0 ELSE 1 END,
+              CASE WHEN pr.warehouse_code = $2 THEN 0 ELSE 1 END,
+              CASE WHEN pr.is_default = true THEN 0 ELSE 1 END,
+              pr.id
+            LIMIT 1
+            `,
+            [
+              'shipping_qr',
+              null,
+              'shipping',
+              shipment.client_id || null
+            ]
+          );
+
+          if (!routeRes.rows.length) {
+            console.warn('[shipping/confirm] printer_route not found for doc_type=shipping_qr');
+          } else {
+            const route = routeRes.rows[0];
+
+            const payloadJson = {
+              template: 'shipping-qr',
+              qr_base64: qrBase64,
+              qr_src: qrBase64.startsWith('data:image/')
+                ? qrBase64
+                : `data:image/png;base64,${qrBase64}`,
+              shipment_id: shipment.id,
+              shipment_code: shipment.external_id || wg,
+              client_id: shipment.client_id || null,
+              copies: 1,
+              page: {
+                width_mm: 58,
+                height_mm: 40
+              }
+            };
+
+            const jobCode = `SHIPQR-${shipment.id}-${Date.now()}`;
+
+            const colsRes = await client.query(
+              `
+              SELECT column_name
+              FROM information_schema.columns
+              WHERE table_schema = 'wms'
+                AND table_name = 'print_jobs'
+              ORDER BY ordinal_position
+              `
+            );
+
+            const columns = colsRes.rows.map(r => r.column_name);
+            const hasCol = (name) => columns.includes(name);
+            const qident = (name) => `"${String(name).replace(/"/g, '""')}"`;
+
+            const body = {};
+
+            if (hasCol('job_code')) body.job_code = jobCode;
+            if (hasCol('doc_type')) body.doc_type = 'shipping_qr';
+            if (hasCol('status')) body.status = 'new';
+            if (hasCol('printer_id')) body.printer_id = route.printer_id;
+            if (hasCol('route_id')) body.route_id = route.id;
+            if (hasCol('client_id')) body.client_id = shipment.client_id || null;
+            if (hasCol('warehouse_code')) body.warehouse_code = null;
+            if (hasCol('zone_code')) body.zone_code = 'shipping';
+            if (hasCol('copies')) body.copies = 1;
+            if (hasCol('entity_type')) body.entity_type = 'shipment';
+            if (hasCol('entity_id')) body.entity_id = shipment.id;
+            if (hasCol('ref_type')) body.ref_type = 'shipment';
+            if (hasCol('ref_code')) body.ref_code = shipment.external_id || wg;
+            if (hasCol('notes')) body.notes = `QR отгрузки ${shipment.external_id || wg}`;
+            if (hasCol('created_by')) body.created_by = userId;
+
+            if (hasCol('payload_json')) {
+              body.payload_json = JSON.stringify(payloadJson);
+            } else if (hasCol('payload')) {
+              body.payload = JSON.stringify(payloadJson);
+            }
+
+            const keys = Object.keys(body).filter(k => columns.includes(k));
+            const values = keys.map(k => body[k]);
+
+            if (!keys.length) {
+              console.warn('[shipping/confirm] no writable columns found in wms.print_jobs');
+            } else {
+              const insertSql = `
+                INSERT INTO wms.print_jobs (
+                  ${keys.map(qident).join(', ')}
+                )
+                VALUES (
+                  ${keys.map((_, i) => `$${i + 1}`).join(', ')}
+                )
+                RETURNING *
+              `;
+
+              const insertJobRes = await client.query(insertSql, values);
+
+              printJobId = insertJobRes.rows[0]?.id || null;
+              printRouteInfo = {
+                route_id: route.id,
+                route_code: route.route_code,
+                printer_id: route.printer_id,
+                printer_code: route.printer_code,
+                printer_name: route.printer_name
+              };
+
+              console.log('[shipping/confirm] print_job created:', {
+                printJobId,
+                shipmentId: shipment.id,
+                routeCode: route.route_code,
+                printerCode: route.printer_code
+              });
+            }
+          }
+        } catch (printErr) {
+          console.error('[shipping/confirm] print_job create error:', printErr);
+        }
+      }
+
       await client.query('COMMIT');
 
       return res.json({
@@ -10116,6 +10406,8 @@ app.post(
         status: newStatus,
         shipment_id: shipment.id,
         shipped_at: new Date().toISOString(),
+        print_job_id: printJobId,
+        print_route: printRouteInfo
       });
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
@@ -10126,7 +10418,6 @@ app.post(
     }
   }
 );
-
 
 // ------------------------- 
 // GET /picking/next

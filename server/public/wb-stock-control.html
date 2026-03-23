@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — WB FBS остатки</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #dbe3ef;
+      --primary: #2563eb;
+      --primary-2: #1d4ed8;
+      --success: #16a34a;
+      --success-bg: #dcfce7;
+      --danger: #dc2626;
+      --danger-bg: #fee2e2;
+      --warning: #f59e0b;
+      --warning-bg: #fef3c7;
+      --chip-bg: #eff6ff;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .topbar {
+      background: linear-gradient(135deg, #0f1f4a 0%, #162a67 100%);
+      color: #fff;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.12);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .topbar-left h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .topbar-left .sub {
+      margin-top: 4px;
+      color: rgba(255,255,255,.8);
+      font-size: 13px;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: .18s ease;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover { background: var(--primary-2); }
+
+    .btn-light {
+      background: #fff;
+      color: #0f172a;
+      border: 1px solid var(--line);
+    }
+
+    .btn-light:hover { background: #f8fafc; }
+
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+    }
+
+    .btn-success:hover { filter: brightness(.95); }
+
+    .btn-warning {
+      background: var(--warning);
+      color: #fff;
+    }
+
+    .btn-warning:hover { filter: brightness(.95); }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .btn-danger:hover { filter: brightness(.95); }
+
+    .btn[disabled] {
+      opacity: .65;
+      cursor: not-allowed;
+    }
+
+    .page {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .grid-top {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .label {
+      display: block;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .input, .select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 14px;
+      min-height: 48px;
+      padding: 0 14px;
+      font-size: 15px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .input:focus, .select:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+    }
+
+    .chips {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      border-radius: 14px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 800;
+      background: var(--chip-bg);
+      color: var(--primary);
+      border: 1px solid #bfd5ff;
+    }
+
+    .chip.success {
+      color: #166534;
+      background: #dcfce7;
+      border-color: #86efac;
+    }
+
+    .chip.error {
+      color: #991b1b;
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+
+    .chip.warning {
+      color: #92400e;
+      background: #fef3c7;
+      border-color: #fcd34d;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 14px 16px;
+      min-height: 84px;
+    }
+
+    .stat-title {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      margin-top: 0;
+      font-size: 24px;
+      font-weight: 900;
+      color: #0b2457;
+      line-height: 1.1;
+    }
+
+    .block-title {
+      margin: 0 0 14px;
+      font-size: 22px;
+      line-height: 1.15;
+      font-weight: 900;
+    }
+
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      overflow: auto;
+      background: #fff;
+      max-width: 100%;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      min-width: 1100px;
+    }
+
+    thead th {
+      background: #f8fafc;
+      color: #5b6f91;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+      text-align: left;
+      padding: 14px 14px;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    tbody td {
+      padding: 14px 14px;
+      border-bottom: 1px solid #edf2f7;
+      vertical-align: top;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    tbody tr:hover td {
+      background: #fbfdff;
+    }
+
+    .item-title {
+      font-weight: 800;
+      line-height: 1.35;
+      white-space: normal;
+      min-width: 220px;
+      color: #0f172a;
+    }
+
+    .empty-box {
+      padding: 28px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .hidden { display: none !important; }
+
+    .ok { color: #166534; font-weight: 800; }
+    .bad { color: #991b1b; font-weight: 800; }
+
+    @media (max-width: 1280px) {
+      .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .grid-top { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 860px) {
+      .stats { grid-template-columns: 1fr; }
+      .grid-top { grid-template-columns: 1fr; }
+      .actions { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>WB FBS остатки</h1>
+      <div class="sub">Служебный модуль для owner/admin: синхронизация складов, пересчёт и публикация остатков в WB</div>
+    </div>
+
+    <div class="topbar-right">
+      <button class="btn btn-light" id="backBtn">Назад в меню</button>
+      <button class="btn btn-primary" id="refreshBtn">Обновить</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="card">
+      <div class="grid-top">
+        <div>
+          <label class="label" for="clientSelect">Клиент</label>
+          <select id="clientSelect" class="select"></select>
+        </div>
+        <div>
+          <label class="label" for="accountSelect">MP аккаунт WB</label>
+          <select id="accountSelect" class="select"></select>
+        </div>
+        <div>
+          <label class="label">Статус</label>
+          <div class="chips">
+            <div class="chip" id="statusChip">Ожидание</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-warning" id="syncBtn">Загрузить склады WB</button>
+          <button class="btn btn-success" id="recalcBtn">Пересчитать распределение</button>
+          <button class="btn btn-light" id="dryRunBtn">Dry-run WB</button>
+          <button class="btn btn-danger" id="publishBtn">Отправить в WB</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat-card">
+        <div class="stat-title">Складов WB</div>
+        <div class="stat-value" id="statWarehouses">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Активных весов</div>
+        <div class="stat-value" id="statEnabled">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Сумма весов</div>
+        <div class="stat-value" id="statWeights">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Факт WMS</div>
+        <div class="stat-value" id="statFact">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Распределено</div>
+        <div class="stat-value" id="statDist">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Разница</div>
+        <div class="stat-value" id="statDiff">0</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="block-title">Распределение по складам WB</h2>
+      <div class="table-wrap">
+        <table>
+          <thead id="tableHead"></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+        <div class="empty-box hidden" id="emptyBox">Нет данных для отображения.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="block-title">Последний результат dry-run / publish</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Склад</th>
+              <th>warehouse_id</th>
+              <th>Позиций</th>
+              <th>Статус</th>
+            </tr>
+          </thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+        <div class="empty-box" id="resultEmpty">Пока ничего не запускалось.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = '';
+
+    const state = {
+      token: '',
+      role: '',
+      clients: [],
+      accounts: [],
+      currentClientId: null,
+      currentMpAccountId: null,
+      cabinetData: null,
+      lastActionData: null
+    };
+
+    function getToken() {
+      return (
+        localStorage.getItem('wmsToken') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('authToken') ||
+        sessionStorage.getItem('token') ||
+        sessionStorage.getItem('authToken') ||
+        ''
+      );
+    }
+
+    function parseJwt(token) {
+      try {
+        const parts = String(token || '').split('.');
+        if (parts.length < 2) return null;
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+        return JSON.parse(atob(padded));
+      } catch {
+        return null;
+      }
+    }
+
+    function setStatus(text, type = '') {
+      const el = document.getElementById('statusChip');
+      el.textContent = text;
+      el.className = 'chip';
+      if (type === 'success') el.classList.add('success');
+      if (type === 'error') el.classList.add('error');
+      if (type === 'warning') el.classList.add('warning');
+    }
+
+    async function apiFetch(url, options = {}) {
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${state.token}`,
+          ...(options.headers || {})
+        }
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Сервер вернул не JSON. HTTP ${res.status}`);
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.error || data?.details || `HTTP ${res.status}`);
+      }
+
+      return data;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function getItemTitle(item) {
+      return String(item?.item_name || '').trim() || `Товар ${item?.barcode || ''}`;
+    }
+
+    async function loadClients() {
+      const res = await apiFetch(`${API_BASE}/clients-short`);
+      state.clients = Array.isArray(res) ? res : Array.isArray(res?.clients) ? res.clients : [];
+
+      const select = document.getElementById('clientSelect');
+      select.innerHTML = '';
+
+      for (const client of state.clients) {
+        const opt = document.createElement('option');
+        opt.value = String(client.id);
+        opt.textContent = client.name || client.client_name || `Клиент ${client.id}`;
+        select.appendChild(opt);
+      }
+
+      if (state.clients.length) {
+        state.currentClientId = Number(state.clients[0].id);
+        select.value = String(state.currentClientId);
+      } else {
+        state.currentClientId = null;
+      }
+    }
+
+    async function loadAccounts() {
+      const res = await apiFetch(`${API_BASE}/mp/accounts?marketplace=wb`);
+      const raw = Array.isArray(res) ? res : Array.isArray(res?.items) ? res.items : [];
+
+      state.accounts = raw.filter(x =>
+        Number(x.wms_client_id || 0) === Number(state.currentClientId || 0)
+      );
+
+      const select = document.getElementById('accountSelect');
+      select.innerHTML = '';
+
+      for (const acc of state.accounts) {
+        const opt = document.createElement('option');
+        opt.value = String(acc.id);
+        opt.textContent = `${acc.label || 'WB аккаунт'} (#${acc.id})`;
+        select.appendChild(opt);
+      }
+
+      if (state.accounts.length) {
+        state.currentMpAccountId = Number(state.accounts[0].id);
+        select.value = String(state.currentMpAccountId);
+      } else {
+        state.currentMpAccountId = null;
+      }
+    }
+
+    async function loadCabinetData() {
+      if (!state.currentClientId || !state.currentMpAccountId) {
+        state.cabinetData = null;
+        renderCabinetData();
+        setStatus('Выбери клиента и MP аккаунт', 'warning');
+        return;
+      }
+
+      setStatus('Загрузка...', 'warning');
+
+      const data = await apiFetch(
+        `${API_BASE}/seller-cabinet/fbs-stock?client_id=${state.currentClientId}&mp_account_id=${state.currentMpAccountId}`
+      );
+
+      state.cabinetData = data;
+      renderCabinetData();
+      setStatus('Данные загружены', 'success');
+    }
+
+    function renderCabinetData() {
+      const data = state.cabinetData;
+      const empty = document.getElementById('emptyBox');
+      const thead = document.getElementById('tableHead');
+      const tbody = document.getElementById('tableBody');
+
+      if (!data || !Array.isArray(data.items) || !Array.isArray(data.warehouses)) {
+        document.getElementById('statWarehouses').textContent = '0';
+        document.getElementById('statEnabled').textContent = '0';
+        document.getElementById('statWeights').textContent = '0';
+        document.getElementById('statFact').textContent = '0';
+        document.getElementById('statDist').textContent = '0';
+        document.getElementById('statDiff').textContent = '0';
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      const warehouses = data.warehouses;
+      const items = data.items;
+
+      document.getElementById('statWarehouses').textContent = String(warehouses.length);
+      document.getElementById('statEnabled').textContent = String(
+        warehouses.filter(w => w.is_enabled_for_distribution).length
+      );
+      document.getElementById('statWeights').textContent = String(
+        warehouses
+          .filter(w => w.is_enabled_for_distribution)
+          .reduce((sum, w) => sum + Number(w.weight || 0), 0)
+      );
+      document.getElementById('statFact').textContent = String(data.totals?.fact_grand_total || 0);
+      document.getElementById('statDist').textContent = String(data.totals?.distributed_grand_total || 0);
+      document.getElementById('statDiff').textContent = String(data.totals?.diff_grand_total || 0);
+
+      let head = `
+        <tr>
+          <th>Товар</th>
+          <th>ШК</th>
+          <th>Факт WMS</th>
+          <th>Распределено</th>
+          <th>Разница</th>
+      `;
+      for (const wh of warehouses) {
+        head += `<th>${escapeHtml(wh.warehouse_name || wh.warehouse_code)}</th>`;
+      }
+      head += `</tr>`;
+      thead.innerHTML = head;
+
+      tbody.innerHTML = '';
+
+      if (!items.length) {
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+
+      for (const item of items) {
+        const fact = Number(item.fact_qty || 0);
+        const dist = Number(item.distributed_qty || 0);
+        const diff = fact - dist;
+
+        let row = `
+          <td class="item-title">${escapeHtml(getItemTitle(item))}</td>
+          <td>${escapeHtml(item.barcode || '')}</td>
+          <td>${fact}</td>
+          <td>${dist}</td>
+          <td class="${diff === 0 ? 'ok' : 'bad'}">${diff}</td>
+        `;
+
+        for (const wh of warehouses) {
+          const qty = Number(item.warehouse_qty?.[String(wh.warehouse_code)] || 0);
+          row += `<td>${qty}</td>`;
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = row;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderLastAction() {
+      const body = document.getElementById('resultBody');
+      const empty = document.getElementById('resultEmpty');
+      body.innerHTML = '';
+
+      const data = state.lastActionData;
+      if (!data) {
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+
+      const payloads = Array.isArray(data.payloads) ? data.payloads : [];
+      const results = Array.isArray(data.results) ? data.results : [];
+
+      if (payloads.length) {
+        for (const row of payloads) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${escapeHtml(row.warehouse_name || row.warehouse_code || '')}</td>
+            <td>${escapeHtml(row.warehouse_id || '')}</td>
+            <td>${Number(row.body?.stocks?.length || 0)}</td>
+            <td class="ok">Dry-run</td>
+          `;
+          body.appendChild(tr);
+        }
+        return;
+      }
+
+      if (results.length) {
+        for (const row of results) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${escapeHtml(row.warehouse_name || row.warehouse_code || '')}</td>
+            <td>${escapeHtml(row.warehouse_id || '')}</td>
+            <td>${Number(row.rows_sent || 0)}</td>
+            <td class="ok">Отправлено</td>
+          `;
+          body.appendChild(tr);
+        }
+        return;
+      }
+
+      empty.classList.remove('hidden');
+    }
+
+    async function syncWarehouses() {
+      if (!state.currentClientId || !state.currentMpAccountId) {
+        setStatus('Сначала выбери клиента и аккаунт', 'warning');
+        return;
+      }
+
+      setStatus('Синхронизация складов...', 'warning');
+
+      const data = await apiFetch(`${API_BASE}/api/wb/warehouses/sync`, {
+        method: 'POST',
+        body: JSON.stringify({
+          client_id: state.currentClientId,
+          mp_account_id: state.currentMpAccountId
+        })
+      });
+
+      state.lastActionData = data;
+      renderLastAction();
+      await loadCabinetData();
+      setStatus('Склады WB обновлены', 'success');
+    }
+
+    async function recalcDistribution() {
+      if (!state.currentClientId || !state.currentMpAccountId) {
+        setStatus('Сначала выбери клиента и аккаунт', 'warning');
+        return;
+      }
+
+      setStatus('Пересчёт распределения...', 'warning');
+
+      const data = await apiFetch(`${API_BASE}/seller-cabinet/auto-distribute`, {
+        method: 'POST',
+        body: JSON.stringify({
+          client_id: state.currentClientId,
+          mp_account_id: state.currentMpAccountId
+        })
+      });
+
+      state.lastActionData = data;
+      renderLastAction();
+      await loadCabinetData();
+      setStatus('Распределение пересчитано', 'success');
+    }
+
+    async function dryRunPublish() {
+      if (!state.currentClientId || !state.currentMpAccountId) {
+        setStatus('Сначала выбери клиента и аккаунт', 'warning');
+        return;
+      }
+
+      setStatus('Dry-run WB...', 'warning');
+
+      const data = await apiFetch(`${API_BASE}/seller-cabinet/publish-distribution`, {
+        method: 'POST',
+        body: JSON.stringify({
+          client_id: state.currentClientId,
+          mp_account_id: state.currentMpAccountId,
+          dry_run: true
+        })
+      });
+
+      state.lastActionData = data;
+      renderLastAction();
+      setStatus('Dry-run выполнен', 'success');
+    }
+
+    async function publishToWb() {
+      if (!state.currentClientId || !state.currentMpAccountId) {
+        setStatus('Сначала выбери клиента и аккаунт', 'warning');
+        return;
+      }
+
+      const ok = confirm('Отправить остатки в WB?');
+      if (!ok) return;
+
+      setStatus('Отправка в WB...', 'warning');
+
+      const data = await apiFetch(`${API_BASE}/seller-cabinet/publish-distribution`, {
+        method: 'POST',
+        body: JSON.stringify({
+          client_id: state.currentClientId,
+          mp_account_id: state.currentMpAccountId,
+          dry_run: false
+        })
+      });
+
+      state.lastActionData = data;
+      renderLastAction();
+      setStatus('Остатки отправлены в WB', 'success');
+    }
+
+    async function init() {
+      state.token = getToken();
+      const jwt = parseJwt(state.token);
+
+      if (!state.token || !jwt) {
+        window.location.href = '/login.html';
+        return;
+      }
+
+      state.role = String(jwt.role || '').toLowerCase();
+      if (!['owner', 'admin'].includes(state.role)) {
+        alert('Нет доступа к модулю.');
+        window.location.href = '/menu.html';
+        return;
+      }
+
+      document.getElementById('backBtn').onclick = () => {
+        window.location.href = '/menu.html';
+      };
+
+      document.getElementById('refreshBtn').onclick = loadCabinetData;
+      document.getElementById('syncBtn').onclick = syncWarehouses;
+      document.getElementById('recalcBtn').onclick = recalcDistribution;
+      document.getElementById('dryRunBtn').onclick = dryRunPublish;
+      document.getElementById('publishBtn').onclick = publishToWb;
+
+      document.getElementById('clientSelect').addEventListener('change', async (e) => {
+        state.currentClientId = Number(e.target.value || 0) || null;
+        await loadAccounts();
+        await loadCabinetData();
+      });
+
+      document.getElementById('accountSelect').addEventListener('change', async (e) => {
+        state.currentMpAccountId = Number(e.target.value || 0) || null;
+        await loadCabinetData();
+      });
+
+      await loadClients();
+      await loadAccounts();
+      await loadCabinetData();
+    }
+
+    init().catch((err) => {
+      console.error(err);
+      setStatus(`Ошибка: ${err.message}`, 'error');
+    });
+  </script>
+</body>
+</html>

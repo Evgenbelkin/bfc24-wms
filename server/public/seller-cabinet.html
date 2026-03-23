@@ -1,0 +1,1986 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Кабинет селлера</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #dbe3ef;
+      --primary: #2563eb;
+      --primary-2: #1d4ed8;
+      --success: #16a34a;
+      --success-bg: #dcfce7;
+      --danger: #dc2626;
+      --danger-bg: #fee2e2;
+      --warning: #f59e0b;
+      --warning-bg: #fef3c7;
+      --chip-bg: #eff6ff;
+      --shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+      --radius-lg: 16px;
+      --radius-md: 10px;
+      --radius-sm: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .hidden { display: none !important; }
+
+    .topbar {
+      background: linear-gradient(135deg, #0f1f4a 0%, #162a67 100%);
+      color: #fff;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.12);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      min-height: 60px;
+    }
+
+    .topbar-left h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .topbar-left .sub {
+      margin-top: 2px;
+      color: rgba(255,255,255,.8);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 9px;
+      padding: 7px 11px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: .18s ease;
+      white-space: nowrap;
+      min-height: 32px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-2);
+    }
+
+    .btn-light {
+      background: #fff;
+      color: #0f172a;
+      border: 1px solid var(--line);
+    }
+
+    .btn-light:hover {
+      background: #f8fafc;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+    }
+
+    .btn-warning {
+      background: var(--warning);
+      color: #fff;
+    }
+
+    .btn[disabled] {
+      opacity: .65;
+      cursor: not-allowed;
+    }
+
+    .btn-mini {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: #0f172a;
+      border-radius: 8px;
+      padding: 5px 9px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: .18s ease;
+      min-height: 29px;
+    }
+
+    .btn-mini:hover {
+      background: #f8fafc;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 235px minmax(0, 1fr);
+      gap: 10px;
+      padding: 10px;
+      align-items: start;
+    }
+
+    .sidebar,
+    .main-card,
+    .stat-card {
+      background: var(--card);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+    }
+
+    .sidebar {
+      padding: 12px;
+      position: sticky;
+      top: 70px;
+      height: calc(100vh - 80px);
+      overflow: auto;
+    }
+
+    .sidebar h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .nav-btn {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      color: #1e293b;
+      border-radius: 10px;
+      padding: 9px 10px;
+      text-align: left;
+      cursor: pointer;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      transition: .18s ease;
+    }
+
+    .nav-btn:hover {
+      background: #eef4ff;
+    }
+
+    .nav-btn.active {
+      background: #eaf2ff;
+      border-color: #b8d0ff;
+      color: var(--primary);
+    }
+
+    .sidebar-note {
+      margin-top: 9px;
+      border: 1px solid #fdba74;
+      background: #fff7ed;
+      color: #9a3412;
+      border-radius: 10px;
+      padding: 8px 9px;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .sidebar-panel {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #eef2f7;
+    }
+
+    .sidebar-panel-title {
+      font-size: 11px;
+      font-weight: 900;
+      color: #475569;
+      margin: 0 0 7px;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+    }
+
+    .sidebar-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .stat-card {
+      padding: 8px 10px;
+      min-height: 54px;
+      border-radius: 12px;
+      border: 1px solid #edf2f7;
+    }
+
+    .stat-title {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      line-height: 1.15;
+    }
+
+    .stat-value {
+      margin-top: 0;
+      font-size: 15px;
+      font-weight: 900;
+      color: #0b2457;
+      line-height: 1.1;
+      word-break: break-word;
+    }
+
+    .main-card {
+      padding: 10px;
+      min-width: 0;
+    }
+
+    .main-card h2 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.1;
+      font-weight: 900;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .chip {
+      border-radius: 9px;
+      padding: 5px 8px;
+      font-size: 10px;
+      font-weight: 800;
+      background: var(--chip-bg);
+      color: var(--primary);
+      border: 1px solid #bfd5ff;
+      line-height: 1.2;
+    }
+
+    .chip.success {
+      color: #166534;
+      background: #dcfce7;
+      border-color: #86efac;
+    }
+
+    .chip.error {
+      color: #991b1b;
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+
+    .chip.warning {
+      color: #92400e;
+      background: #fef3c7;
+      border-color: #fcd34d;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 5px;
+      margin-bottom: 8px;
+    }
+
+    .summary-card {
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 6px 8px;
+      min-height: 44px;
+    }
+
+    .summary-label {
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 700;
+      margin-bottom: 3px;
+      line-height: 1.1;
+    }
+
+    .summary-value {
+      font-size: 13px;
+      font-weight: 900;
+      color: #0b2457;
+      line-height: 1.1;
+    }
+
+    .summary-value.success,
+    .success { color: #166534; }
+
+    .summary-value.neutral,
+    .neutral { color: #475569; }
+
+    .summary-value.danger,
+    .danger { color: #991b1b; }
+
+    .summary-value.warning,
+    .warning { color: #92400e; }
+
+    .toolbar,
+    .toolbar-simple,
+    .toolbar-distribution,
+    .quick-switches,
+    .bulk-panel {
+      display: none !important;
+    }
+
+    .switch-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #334155;
+      cursor: pointer;
+      user-select: none;
+      line-height: 1.2;
+    }
+
+    .switch-label input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+      accent-color: var(--primary);
+      margin: 0;
+    }
+
+    .input,
+    .select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      min-height: 32px;
+      padding: 0 9px;
+      font-size: 12px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .input:focus,
+    .select:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+    }
+
+    .input-mini {
+      width: 82px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      min-height: 29px;
+      padding: 0 7px;
+      font-size: 12px;
+      color: var(--text);
+      outline: none;
+      font-weight: 800;
+    }
+
+    .input-mini:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+    }
+
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: auto;
+      background: #fff;
+      max-width: 100%;
+      max-height: calc(100vh - 148px);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      min-width: 820px;
+    }
+
+    .distribution-table {
+      min-width: 1080px;
+    }
+
+    .fact-table {
+      min-width: 1340px;
+    }
+
+    thead th {
+      background: #f8fafc;
+      color: #5b6f91;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+      text-align: left;
+      padding: 8px 8px;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    tbody td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #edf2f7;
+      vertical-align: top;
+      font-size: 12px;
+      background: #fff;
+      line-height: 1.25;
+    }
+
+    tbody tr:hover td {
+      background: #fbfdff;
+    }
+
+    .row-danger td {
+      background: #fff7f7 !important;
+    }
+
+    .row-critical td {
+      background: #fff1f2 !important;
+    }
+
+    .row-warning td {
+      background: #fffbeb !important;
+    }
+
+    .row-monitoring-off td {
+      opacity: 0.72;
+      background: #f8fafc !important;
+    }
+
+    .warehouse-name {
+      font-size: 12px;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.2;
+    }
+
+    .warehouse-meta {
+      margin-top: 2px;
+      color: var(--muted);
+      line-height: 1.2;
+      font-size: 10px;
+    }
+
+    .toggle-box {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      flex-wrap: wrap;
+    }
+
+    .toggle-text {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 800;
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .weight-input {
+      width: 78px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-height: 30px;
+      padding: 0 8px;
+      font-size: 12px;
+      font-weight: 800;
+      outline: none;
+    }
+
+    .weight-input:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+    }
+
+    .save-state {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      margin-left: 2px;
+    }
+
+    .inline-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .empty-box {
+      padding: 14px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .item-title {
+      font-weight: 800;
+      line-height: 1.2;
+      white-space: normal;
+      min-width: 160px;
+      color: #0f172a;
+    }
+
+    .item-meta {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1.2;
+    }
+
+    .empty-val {
+      color: #94a3b8;
+    }
+
+    .cell-num {
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .fact-cell {
+      font-weight: 900;
+      color: #0b2457;
+    }
+
+    .warehouse-positive {
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .warehouse-zero {
+      color: #cbd5e1;
+    }
+
+    .days-danger {
+      color: #991b1b;
+      font-weight: 900;
+    }
+
+    .days-warning {
+      color: #92400e;
+      font-weight: 900;
+    }
+
+    .days-normal {
+      color: #166534;
+      font-weight: 900;
+    }
+
+    .mismatch-badge,
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 7px;
+      font-size: 9px;
+      font-weight: 800;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .mismatch-ok {
+      background: var(--success-bg);
+      color: #166534;
+    }
+
+    .mismatch-bad {
+      background: var(--danger-bg);
+      color: #991b1b;
+    }
+
+    .status-normal {
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+
+    .status-critical {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .status-warning {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-monitoring-off {
+      background: #e2e8f0;
+      color: #475569;
+    }
+
+    .section-note {
+      margin: 0 0 6px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    @media (max-width: 1480px) {
+      .stats,
+      .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 1180px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+        height: auto;
+        overflow: visible;
+      }
+
+      .table-wrap {
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .topbar {
+        padding: 8px 10px;
+      }
+
+      .stats,
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .layout {
+        padding: 8px;
+      }
+
+      .main-card,
+      .sidebar {
+        padding: 9px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>Кабинет селлера</h1>
+      <div class="sub">Склады WB, фактические остатки в WMS и распределение по складам WB</div>
+    </div>
+
+    <div class="topbar-right">
+      <button class="btn btn-light" id="refreshBtn">Обновить</button>
+      <button class="btn btn-primary" id="logoutBtn">Выход</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h3>Разделы кабинета</h3>
+
+      <button class="nav-btn active" data-tab="warehousesTab">Склады WB</button>
+      <button class="nav-btn" data-tab="factStockTab">Фактические остатки</button>
+      <button class="nav-btn" data-tab="distributionTab">Распределение</button>
+
+      <div class="sidebar-panel" id="sidebarWarehousesPanel">
+        <div class="sidebar-panel-title">Управление складами</div>
+        <div class="sidebar-stack">
+          <button class="btn btn-warning" id="syncWarehousesBtn">Загрузить склады WB</button>
+          <button class="btn btn-success" id="recalcBtn">Пересчитать распределение</button>
+          <input class="input" id="warehouseSearch" type="text" placeholder="Поиск по складам" />
+          <select class="select" id="warehouseEnabledFilter">
+            <option value="all">Все</option>
+            <option value="enabled">Только включённые</option>
+            <option value="disabled">Только выключенные</option>
+          </select>
+          <button class="btn btn-light" id="resetWarehouseFiltersBtn">Сброс</button>
+        </div>
+      </div>
+
+      <div class="sidebar-panel hidden" id="sidebarFactPanel">
+        <div class="sidebar-panel-title">Фильтры остатков</div>
+        <div class="sidebar-stack">
+          <input class="input" id="factSearch" type="text" placeholder="Поиск по названию, ШК, артикулам" />
+          <select class="select" id="factStockFilter">
+            <option value="all">Все остатки</option>
+            <option value="positive">Только факт > 0</option>
+            <option value="zero">Только факт = 0</option>
+          </select>
+          <select class="select" id="factStatusFilter">
+            <option value="all">Все статусы</option>
+            <option value="critical">Только критические</option>
+            <option value="warning">Только предупреждение</option>
+            <option value="normal">Только нормальные</option>
+            <option value="monitoring_off">Мониторинг выключен</option>
+          </select>
+          <label class="switch-label">
+            <input type="checkbox" id="toggleFactProblemFirst" checked />
+            Сначала проблемные товары
+          </label>
+          <input
+            type="number"
+            min="1.01"
+            step="0.01"
+            class="input-mini"
+            id="bulkWarningMultiplier"
+            value="1.50"
+            style="width:100%;"
+          />
+          <button class="btn btn-primary" id="applyBulkWarningBtn">Применить буфер ко всем</button>
+          <span class="save-state" id="bulkWarningState"></span>
+          <button class="btn btn-light" id="resetFactFiltersBtn">Сброс</button>
+        </div>
+      </div>
+
+      <div class="sidebar-panel hidden" id="sidebarDistributionPanel">
+        <div class="sidebar-panel-title">Фильтры распределения</div>
+        <div class="sidebar-stack">
+          <input class="input" id="distSearch" type="text" placeholder="Поиск по названию, ШК" />
+          <select class="select" id="distWarehouseFilter">
+            <option value="all">Все склады</option>
+          </select>
+          <label class="switch-label">
+            <input type="checkbox" id="toggleDistOnlyStock" />
+            Только с остатком
+          </label>
+          <button class="btn btn-light" id="resetDistFiltersBtn">Сброс</button>
+        </div>
+      </div>
+
+      <div class="sidebar-note">
+        Здесь селлер видит фактический остаток товара в WMS и отдельно то, как он разложен по виртуальным складам WB.
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="stats">
+        <div class="stat-card">
+          <div class="stat-title">Всего складов WB</div>
+          <div class="stat-value" id="statWarehousesTotal">0</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-title">Участвуют</div>
+          <div class="stat-value" id="statWarehousesEnabled">0</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-title">Сумма весов</div>
+          <div class="stat-value" id="statWeightsSum">0</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-title">Последняя синхронизация</div>
+          <div class="stat-value" id="statLastSync">—</div>
+        </div>
+      </section>
+
+      <section class="main-card" id="warehousesTab">
+        <div class="section-head">
+          <h2>Склады WB</h2>
+        </div>
+
+        <div class="chips">
+          <div class="chip" id="chipClientId">client_id: —</div>
+          <div class="chip" id="chipMpAccountId">mp_account_id: —</div>
+          <div class="chip success" id="chipLoadState">Ожидание загрузки</div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Склад</th>
+                <th>Участие</th>
+                <th>Вес</th>
+                <th>Последняя синхронизация</th>
+                <th>Последнее изменение</th>
+              </tr>
+            </thead>
+            <tbody id="warehousesTbody"></tbody>
+          </table>
+          <div class="empty-box hidden" id="warehousesEmpty">Склады не найдены.</div>
+        </div>
+      </section>
+
+      <section class="main-card hidden" id="factStockTab">
+        <div class="section-head">
+          <h2>Фактические остатки</h2>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-label">Товаров</div>
+            <div class="summary-value" id="factSummaryItems">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Факт WMS всего</div>
+            <div class="summary-value" id="factSummaryQty">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Продано 14д</div>
+            <div class="summary-value" id="factSummarySold14d">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Скорость/день</div>
+            <div class="summary-value" id="factSummaryAvgDailySales">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Критические</div>
+            <div class="summary-value danger" id="factSummaryCritical">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Предупр.</div>
+            <div class="summary-value warning" id="factSummaryWarning">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Нормальные</div>
+            <div class="summary-value success" id="factSummaryNormal">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Мониторинг выкл.</div>
+            <div class="summary-value neutral" id="factSummaryMonitoringOff">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">С остатком</div>
+            <div class="summary-value success" id="factSummaryPositive">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Без остатка</div>
+            <div class="summary-value neutral" id="factSummaryZero">0</div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="fact-table">
+            <thead>
+              <tr>
+                <th>Товар</th>
+                <th>ШК</th>
+                <th>Факт WMS</th>
+                <th>Продано 14д</th>
+                <th>Продаж/день</th>
+                <th>Дней остатка</th>
+                <th>Порог</th>
+                <th>Буфер</th>
+                <th>Статус</th>
+                <th>Действие</th>
+              </tr>
+            </thead>
+            <tbody id="factTbody"></tbody>
+          </table>
+          <div class="empty-box hidden" id="factEmpty">Фактических остатков не найдено.</div>
+        </div>
+      </section>
+
+      <section class="main-card hidden" id="distributionTab">
+        <div class="section-head">
+          <h2>Распределение</h2>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-label">Товаров</div>
+            <div class="summary-value" id="distSummaryItems">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Факт WMS</div>
+            <div class="summary-value" id="distSummaryFact">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Распределено</div>
+            <div class="summary-value success" id="distSummaryDistributed">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Разница</div>
+            <div class="summary-value neutral" id="distSummaryDiff">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Совпало</div>
+            <div class="summary-value success" id="distSummaryMatched">0</div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-label">Расхождений</div>
+            <div class="summary-value danger" id="distSummaryMismatched">0</div>
+          </div>
+        </div>
+
+        <div class="section-note">
+          Здесь видно, как фактический остаток в WMS разложен по виртуальным складам WB.
+        </div>
+
+        <div class="table-wrap">
+          <table class="distribution-table">
+            <thead id="distributionThead"></thead>
+            <tbody id="distributionTbody"></tbody>
+          </table>
+          <div class="empty-box hidden" id="distributionEmpty">Распределения пока нет.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const state = {
+      token: null,
+      clientId: null,
+      mpAccountId: null,
+      warehouses: [],
+      items: [],
+      totals: {
+        by_warehouse: {},
+        grand_total: 0,
+        fact_grand_total: 0,
+        distributed_grand_total: 0,
+        diff_grand_total: 0,
+        sold_qty_14d_total: 0,
+        avg_daily_sales_total: 0
+      },
+      stats: {
+        warehouses_total: 0,
+        warehouses_enabled: 0,
+        weights_sum: 0,
+        last_sync_at: null,
+        critical_items_count: 0,
+        warning_items_count: 0,
+        monitoring_off_items_count: 0
+      }
+    };
+
+    const uiState = {
+      distOnlyStock: false,
+      factProblemFirst: true
+    };
+
+    function getToken() {
+      return (
+        localStorage.getItem('seller_token') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('auth_token') ||
+        localStorage.getItem('wmsToken') ||
+        localStorage.getItem('authToken') ||
+        sessionStorage.getItem('seller_token') ||
+        sessionStorage.getItem('token') ||
+        sessionStorage.getItem('auth_token') ||
+        sessionStorage.getItem('wmsToken') ||
+        sessionStorage.getItem('authToken') ||
+        ''
+      );
+    }
+
+    function setLoadChip(text, type) {
+      const el = document.getElementById('chipLoadState');
+      el.textContent = text;
+      el.className = 'chip';
+      if (type === 'success') el.classList.add('success');
+      if (type === 'error') el.classList.add('error');
+      if (type === 'warning') el.classList.add('warning');
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function fmtValue(value) {
+      if (value === null || value === undefined || value === '') {
+        return '<span class="empty-val">—</span>';
+      }
+      return escapeHtml(value);
+    }
+
+    function shortDateTime(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function fmtDateTime(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value);
+      return d.toLocaleString('ru-RU');
+    }
+
+    function getItemDisplayName(item) {
+      const name = String(item?.item_name || '').trim();
+      if (name) return name;
+
+      const barcode = String(item?.barcode || '').trim();
+      if (barcode) return `Товар ${barcode}`;
+
+      return 'Товар без названия';
+    }
+
+    function getItemDiff(item) {
+      return Number(item.fact_qty || 0) - Number(item.distributed_qty || 0);
+    }
+
+    function isItemMatched(item) {
+      return getItemDiff(item) === 0;
+    }
+
+    function getStockStatusLabel(status) {
+      if (status === 'critical') return 'Критический';
+      if (status === 'warning') return 'Предупреждение';
+      if (status === 'monitoring_off') return 'Мониторинг выкл.';
+      return 'Нормальный';
+    }
+
+    function getStockStatusClass(status) {
+      if (status === 'critical') return 'status-critical';
+      if (status === 'warning') return 'status-warning';
+      if (status === 'monitoring_off') return 'status-monitoring-off';
+      return 'status-normal';
+    }
+
+    function getFactRowClass(item) {
+      if (item.stock_status === 'critical') return 'row-critical';
+      if (item.stock_status === 'warning') return 'row-warning';
+      if (item.stock_status === 'monitoring_off') return 'row-monitoring-off';
+      return '';
+    }
+
+    function getDaysLeftClass(daysLeft) {
+      if (daysLeft === null || daysLeft === undefined) return '';
+      const d = Number(daysLeft);
+      if (!Number.isFinite(d)) return '';
+      if (d <= 5) return 'days-danger';
+      if (d <= 10) return 'days-warning';
+      return 'days-normal';
+    }
+
+    function formatDaysLeft(daysLeft) {
+      if (daysLeft === null || daysLeft === undefined) {
+        return '—';
+      }
+
+      const d = Number(daysLeft);
+
+      if (!Number.isFinite(d)) return '—';
+
+      return `${d.toFixed(1)} дн`;
+    }
+
+    function parseQueryParams() {
+      state.clientId = null;
+      state.mpAccountId = null;
+
+      document.getElementById('chipClientId').textContent = 'client_id: авто';
+      document.getElementById('chipMpAccountId').textContent = 'mp_account_id: авто';
+    }
+
+    function calcStatus(qty, threshold, isMonitoringEnabled, warningMultiplier) {
+      const numQty = Number(qty || 0);
+      const numThreshold = Number(threshold || 0);
+      const multiplier = Number(warningMultiplier || 1.5);
+
+      if (!isMonitoringEnabled) return 'monitoring_off';
+      if (numThreshold > 0 && numQty <= numThreshold) return 'critical';
+      if (numThreshold > 0 && numQty <= Math.ceil(numThreshold * multiplier)) return 'warning';
+      return 'normal';
+    }
+
+    function updateSidebarPanels(activeTabId) {
+      document.getElementById('sidebarWarehousesPanel').classList.toggle('hidden', activeTabId !== 'warehousesTab');
+      document.getElementById('sidebarFactPanel').classList.toggle('hidden', activeTabId !== 'factStockTab');
+      document.getElementById('sidebarDistributionPanel').classList.toggle('hidden', activeTabId !== 'distributionTab');
+    }
+
+    async function apiFetch(url, options = {}) {
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${state.token}`,
+          ...(options.headers || {})
+        }
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        throw new Error(`Сервер вернул не JSON. HTTP ${res.status}`);
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+
+      return data;
+    }
+
+    async function loadCabinet() {
+      setLoadChip('Загрузка...', '');
+
+      const urlList = [
+        '/seller-cabinet/fbs-stock',
+        '/seller-cabinet/wb-stock-distribution'
+      ];
+
+      let data = null;
+
+      for (const url of urlList) {
+        try {
+          data = await apiFetch(url);
+          break;
+        } catch (err) {
+          console.warn('[seller-cabinet] load attempt failed:', url, err.message);
+        }
+      }
+
+      if (!data) {
+        setLoadChip('Ошибка загрузки: сервер недоступен', 'error');
+        return;
+      }
+
+      state.clientId = data.client_id ?? null;
+      state.mpAccountId = data.mp_account_id ?? null;
+      state.warehouses = Array.isArray(data.warehouses) ? data.warehouses : [];
+      state.items = Array.isArray(data.items) ? data.items : [];
+      state.totals = data.totals || {
+        by_warehouse: {},
+        grand_total: 0,
+        fact_grand_total: 0,
+        distributed_grand_total: 0,
+        diff_grand_total: 0,
+        sold_qty_14d_total: 0,
+        avg_daily_sales_total: 0
+      };
+      state.stats = data.stats || {
+        warehouses_total: state.warehouses.length,
+        warehouses_enabled: state.warehouses.filter(w => w.is_enabled_for_distribution).length,
+        weights_sum: state.warehouses
+          .filter(w => w.is_enabled_for_distribution)
+          .reduce((sum, w) => sum + Number(w.weight || 0), 0),
+        last_sync_at: null,
+        critical_items_count: 0,
+        warning_items_count: 0,
+        monitoring_off_items_count: 0
+      };
+
+      document.getElementById('chipClientId').textContent = `client_id: ${state.clientId ?? '—'}`;
+      document.getElementById('chipMpAccountId').textContent = `mp_account_id: ${state.mpAccountId ?? '—'}`;
+
+      renderStats();
+      renderWarehouses();
+      fillDistributionFilters();
+      renderFactStock();
+      renderDistribution();
+
+      const mismatched = state.items.filter(item => !isItemMatched(item)).length;
+      if (mismatched > 0) {
+        setLoadChip(`Есть расхождения: ${mismatched}`, 'warning');
+      } else {
+        setLoadChip('Готово', 'success');
+      }
+    }
+
+    function renderStats() {
+      const enabledWarehouses = state.warehouses.filter(w => w.is_enabled_for_distribution).length;
+      const enabledWeightSum = state.warehouses
+        .filter(w => w.is_enabled_for_distribution)
+        .reduce((sum, w) => sum + Number(w.weight || 0), 0);
+
+      document.getElementById('statWarehousesTotal').textContent = String(state.warehouses.length || 0);
+      document.getElementById('statWarehousesEnabled').textContent = String(enabledWarehouses);
+      document.getElementById('statWeightsSum').textContent = String(enabledWeightSum);
+      document.getElementById('statLastSync').textContent = shortDateTime(state.stats.last_sync_at);
+
+      const factItems = state.items.length;
+      const factPositive = state.items.filter(x => Number(x.fact_qty || 0) > 0).length;
+      const factZero = state.items.filter(x => Number(x.fact_qty || 0) === 0).length;
+      const factQty = state.items.reduce((sum, x) => sum + Number(x.fact_qty || 0), 0);
+      const factSold14d = state.items.reduce((sum, x) => sum + Number(x.sold_qty_14d || 0), 0);
+      const factAvgDailySales = state.items.reduce((sum, x) => sum + Number(x.avg_daily_sales || 0), 0);
+      const factCritical = state.items.filter(x => x.stock_status === 'critical').length;
+      const factWarning = state.items.filter(x => x.stock_status === 'warning').length;
+      const factMonitoringOff = state.items.filter(x => x.stock_status === 'monitoring_off').length;
+      const factNormal = state.items.filter(x => (x.stock_status || 'normal') === 'normal').length;
+
+      document.getElementById('factSummaryItems').textContent = String(factItems);
+      document.getElementById('factSummaryQty').textContent = String(factQty);
+      document.getElementById('factSummarySold14d').textContent = String(factSold14d);
+      document.getElementById('factSummaryAvgDailySales').textContent = Number(factAvgDailySales.toFixed(2)).toString();
+      document.getElementById('factSummaryPositive').textContent = String(factPositive);
+      document.getElementById('factSummaryZero').textContent = String(factZero);
+      document.getElementById('factSummaryCritical').textContent = String(factCritical);
+      document.getElementById('factSummaryWarning').textContent = String(factWarning);
+      document.getElementById('factSummaryNormal').textContent = String(factNormal);
+      document.getElementById('factSummaryMonitoringOff').textContent = String(factMonitoringOff);
+
+      const distItems = state.items.length;
+      const distFact = state.items.reduce((sum, x) => sum + Number(x.fact_qty || 0), 0);
+      const distDistributed = state.items.reduce((sum, x) => sum + Number(x.distributed_qty || 0), 0);
+      const distDiff = distFact - distDistributed;
+      const matched = state.items.filter(isItemMatched).length;
+      const mismatched = state.items.filter(item => !isItemMatched(item)).length;
+
+      document.getElementById('distSummaryItems').textContent = String(distItems);
+      document.getElementById('distSummaryFact').textContent = String(distFact);
+      document.getElementById('distSummaryDistributed').textContent = String(distDistributed);
+      document.getElementById('distSummaryMatched').textContent = String(matched);
+      document.getElementById('distSummaryMismatched').textContent = String(mismatched);
+
+      const diffEl = document.getElementById('distSummaryDiff');
+      diffEl.textContent = String(distDiff);
+      diffEl.className = 'summary-value';
+      if (distDiff === 0) diffEl.classList.add('neutral');
+      else diffEl.classList.add('danger');
+    }
+
+    function getFilteredWarehouses() {
+      const search = document.getElementById('warehouseSearch').value.trim().toLowerCase();
+      const enabledFilter = document.getElementById('warehouseEnabledFilter').value;
+
+      return state.warehouses.filter((w) => {
+        const hay = [w.warehouse_name, w.warehouse_code].join(' ').toLowerCase();
+
+        if (search && !hay.includes(search)) return false;
+        if (enabledFilter === 'enabled' && !w.is_enabled_for_distribution) return false;
+        if (enabledFilter === 'disabled' && w.is_enabled_for_distribution) return false;
+
+        return true;
+      });
+    }
+
+    function renderWarehouses() {
+      const tbody = document.getElementById('warehousesTbody');
+      const empty = document.getElementById('warehousesEmpty');
+      const list = getFilteredWarehouses();
+
+      tbody.innerHTML = '';
+
+      if (!list.length) {
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+
+      for (const w of list) {
+        const tr = document.createElement('tr');
+
+        tr.innerHTML = `
+          <td>
+            <div class="warehouse-name">${fmtValue(w.warehouse_name)}</div>
+            <div class="warehouse-meta">Код склада: ${fmtValue(w.warehouse_code)}</div>
+          </td>
+          <td>
+            <div class="toggle-box">
+              <input
+                type="checkbox"
+                ${w.is_enabled_for_distribution ? 'checked' : ''}
+                data-role="enabled"
+                data-warehouse-code="${escapeHtml(w.warehouse_code || '')}"
+              />
+              <span class="toggle-text">${w.is_enabled_for_distribution ? 'Включён' : 'Выключен'}</span>
+              <span class="save-state" id="save-state-${escapeHtml(w.warehouse_code || '')}"></span>
+            </div>
+          </td>
+          <td>
+            <input
+              type="number"
+              min="0"
+              step="0.0001"
+              class="weight-input"
+              value="${Number(w.weight || 0)}"
+              data-role="weight"
+              data-warehouse-code="${escapeHtml(w.warehouse_code || '')}"
+            />
+          </td>
+          <td>${fmtValue(fmtDateTime(w.last_synced_at))}</td>
+          <td>${fmtValue(fmtDateTime(w.updated_at))}</td>
+        `;
+
+        tbody.appendChild(tr);
+      }
+
+      bindWarehouseControls();
+    }
+
+    function bindWarehouseControls() {
+      document.querySelectorAll('input[data-role="enabled"]').forEach((el) => {
+        el.addEventListener('change', async (e) => {
+          const warehouseCode = e.target.dataset.warehouseCode;
+          const rowWeightInput = document.querySelector(`input[data-role="weight"][data-warehouse-code="${CSS.escape(warehouseCode)}"]`);
+          const weight = Number(rowWeightInput?.value || 0);
+          await saveWarehouseSettings(warehouseCode, weight, e.target.checked);
+        });
+      });
+
+      document.querySelectorAll('input[data-role="weight"]').forEach((el) => {
+        el.addEventListener('blur', async (e) => {
+          const warehouseCode = e.target.dataset.warehouseCode;
+          const rowEnabledInput = document.querySelector(`input[data-role="enabled"][data-warehouse-code="${CSS.escape(warehouseCode)}"]`);
+          const isEnabled = !!rowEnabledInput?.checked;
+          const weight = Number(e.target.value || 0);
+          await saveWarehouseSettings(warehouseCode, weight, isEnabled);
+        });
+
+        el.addEventListener('keydown', async (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.target.blur();
+          }
+        });
+      });
+    }
+
+    async function saveWarehouseSettings(warehouseCode, weight, isEnabled) {
+      const saveStateEl = document.getElementById(`save-state-${warehouseCode}`);
+      if (saveStateEl) saveStateEl.textContent = 'Сохранение...';
+
+      try {
+        await apiFetch('/seller-cabinet/update-distribution', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            warehouse_code: warehouseCode,
+            weight,
+            is_enabled_for_distribution: isEnabled
+          })
+        });
+
+        const idx = state.warehouses.findIndex((w) => String(w.warehouse_code) === String(warehouseCode));
+        if (idx >= 0) {
+          state.warehouses[idx].weight = Number(weight || 0);
+          state.warehouses[idx].is_enabled_for_distribution = !!isEnabled;
+          state.warehouses[idx].updated_at = new Date().toISOString();
+        }
+
+        renderStats();
+        renderWarehouses();
+        fillDistributionFilters();
+        renderDistribution();
+
+        if (saveStateEl) saveStateEl.textContent = 'Сохранено';
+        setLoadChip('Настройки сохранены', 'success');
+      } catch (err) {
+        console.error(err);
+        if (saveStateEl) saveStateEl.textContent = 'Ошибка';
+        setLoadChip(`Ошибка сохранения: ${err.message}`, 'error');
+      }
+    }
+
+    async function saveItemSettings(barcode) {
+      const thresholdInput = document.querySelector(`input[data-role="threshold"][data-barcode="${CSS.escape(barcode)}"]`);
+      const warningInput = document.querySelector(`input[data-role="warning-multiplier"][data-barcode="${CSS.escape(barcode)}"]`);
+      const stateEl = document.getElementById(`settings-state-${barcode}`);
+
+      if (!thresholdInput || !warningInput) return;
+
+      const lowStockThreshold = Number(thresholdInput.value || 0);
+      const warningMultiplier = Number(warningInput.value || 0);
+
+      if (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0) {
+        setLoadChip('Порог должен быть целым числом 0 или больше', 'error');
+        if (stateEl) stateEl.textContent = 'Ошибка';
+        return;
+      }
+
+      if (!Number.isFinite(warningMultiplier) || warningMultiplier <= 1) {
+        setLoadChip('Буфер должен быть числом больше 1. Например 1.3 или 1.5', 'error');
+        if (stateEl) stateEl.textContent = 'Ошибка';
+        return;
+      }
+
+      if (stateEl) stateEl.textContent = 'Сохранение...';
+
+      try {
+        await apiFetch('/seller-item-settings/upsert', {
+          method: 'POST',
+          body: JSON.stringify({
+            client_id: state.clientId,
+            mp_account_id: state.mpAccountId,
+            barcode,
+            low_stock_threshold: lowStockThreshold,
+            warning_multiplier: warningMultiplier
+          })
+        });
+
+        const idx = state.items.findIndex((item) => String(item.barcode) === String(barcode));
+        if (idx >= 0) {
+          state.items[idx].low_stock_threshold = lowStockThreshold;
+          state.items[idx].warning_multiplier = warningMultiplier;
+          state.items[idx].stock_status = calcStatus(
+            state.items[idx].fact_qty,
+            lowStockThreshold,
+            state.items[idx].is_monitoring_enabled,
+            warningMultiplier
+          );
+        }
+
+        renderStats();
+        renderFactStock();
+
+        if (stateEl) stateEl.textContent = 'Сохранено';
+        setLoadChip('Настройки товара сохранены', 'success');
+      } catch (err) {
+        console.error(err);
+        if (stateEl) stateEl.textContent = 'Ошибка';
+        setLoadChip(`Ошибка сохранения настроек товара: ${err.message}`, 'error');
+      }
+    }
+
+    async function applyBulkWarningMultiplier() {
+      const input = document.getElementById('bulkWarningMultiplier');
+      const stateEl = document.getElementById('bulkWarningState');
+      const warningMultiplier = Number(input.value || 0);
+
+      if (!Number.isFinite(warningMultiplier) || warningMultiplier <= 1) {
+        setLoadChip('Массовый буфер должен быть числом больше 1. Например 1.3 или 1.5', 'error');
+        if (stateEl) stateEl.textContent = 'Ошибка';
+        return;
+      }
+
+      if (!state.items.length) {
+        setLoadChip('Нет товаров для массового обновления', 'warning');
+        return;
+      }
+
+      if (stateEl) stateEl.textContent = 'Сохранение...';
+
+      try {
+        await apiFetch('/seller-item-settings/bulk-update-warning', {
+          method: 'POST',
+          body: JSON.stringify({
+            client_id: state.clientId,
+            mp_account_id: state.mpAccountId,
+            barcodes: state.items.map(item => item.barcode).filter(Boolean),
+            warning_multiplier: warningMultiplier
+          })
+        });
+
+        for (const item of state.items) {
+          item.warning_multiplier = warningMultiplier;
+          item.stock_status = calcStatus(
+            item.fact_qty,
+            item.low_stock_threshold,
+            item.is_monitoring_enabled,
+            warningMultiplier
+          );
+        }
+
+        renderStats();
+        renderFactStock();
+
+        if (stateEl) stateEl.textContent = 'Применено';
+        setLoadChip('Буфер применён ко всем товарам', 'success');
+      } catch (err) {
+        console.error(err);
+        if (stateEl) stateEl.textContent = 'Ошибка';
+        setLoadChip(`Ошибка массового применения буфера: ${err.message}`, 'error');
+      }
+    }
+
+    async function syncWarehouses() {
+      const btn = document.getElementById('syncWarehousesBtn');
+      btn.disabled = true;
+      btn.textContent = 'Загрузка...';
+      setLoadChip('Синхронизация складов WB...', 'warning');
+
+      try {
+        await apiFetch('/api/wb/warehouses/sync', {
+          method: 'POST',
+          body: JSON.stringify({
+            client_id: state.clientId,
+            mp_account_id: state.mpAccountId
+          })
+        });
+
+        await loadCabinet();
+        setLoadChip('Склады WB обновлены', 'success');
+      } catch (err) {
+        console.error(err);
+        setLoadChip(`Ошибка синхронизации складов: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Загрузить склады WB';
+      }
+    }
+
+    async function recalcDistribution() {
+      const btn = document.getElementById('recalcBtn');
+      btn.disabled = true;
+      btn.textContent = 'Пересчёт...';
+      setLoadChip('Пересчёт распределения...', 'warning');
+
+      try {
+        await apiFetch('/seller-cabinet/auto-distribute', {
+          method: 'POST',
+          body: JSON.stringify({
+            client_id: state.clientId,
+            mp_account_id: state.mpAccountId
+          })
+        });
+
+        await loadCabinet();
+        setLoadChip('Распределение пересчитано', 'success');
+      } catch (err) {
+        console.error(err);
+        setLoadChip(`Ошибка пересчёта: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Пересчитать распределение';
+      }
+    }
+
+    function getFilteredFactItems() {
+      const search = document.getElementById('factSearch').value.trim().toLowerCase();
+      const stockFilter = document.getElementById('factStockFilter').value;
+      const statusFilter = document.getElementById('factStatusFilter').value;
+
+      let items = state.items.filter((item) => {
+        const hay = [
+          getItemDisplayName(item),
+          item.barcode,
+          item.vendor_code,
+          item.wb_vendor_code,
+          item.brand
+        ].join(' ').toLowerCase();
+
+        if (search && !hay.includes(search)) return false;
+        if (stockFilter === 'positive' && Number(item.fact_qty || 0) <= 0) return false;
+        if (stockFilter === 'zero' && Number(item.fact_qty || 0) !== 0) return false;
+        if (statusFilter !== 'all' && String(item.stock_status || 'normal') !== statusFilter) return false;
+
+        return true;
+      });
+
+      if (uiState.factProblemFirst) {
+        const order = {
+          critical: 0,
+          warning: 1,
+          normal: 2,
+          monitoring_off: 3
+        };
+
+        items = items.slice().sort((a, b) => {
+          const statusDiff = (order[a.stock_status] ?? 99) - (order[b.stock_status] ?? 99);
+          if (statusDiff !== 0) return statusDiff;
+
+          const aDays = (a.days_left === null || a.days_left === undefined || !Number.isFinite(Number(a.days_left)))
+            ? 999999
+            : Number(a.days_left);
+          const bDays = (b.days_left === null || b.days_left === undefined || !Number.isFinite(Number(b.days_left)))
+            ? 999999
+            : Number(b.days_left);
+
+          if (aDays !== bDays) return aDays - bDays;
+
+          const nameA = String(getItemDisplayName(a) || '');
+          const nameB = String(getItemDisplayName(b) || '');
+
+          return (
+            nameA.localeCompare(nameB, 'ru') ||
+            String(a.barcode || '').localeCompare(String(b.barcode || ''), 'ru')
+          );
+        });
+      }
+
+      return items;
+    }
+
+    function renderFactStock() {
+      const tbody = document.getElementById('factTbody');
+      const empty = document.getElementById('factEmpty');
+      const filtered = getFilteredFactItems();
+
+      tbody.innerHTML = '';
+
+      if (!filtered.length) {
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+
+      for (const item of filtered) {
+        const tr = document.createElement('tr');
+        const rowClass = getFactRowClass(item);
+        if (rowClass) tr.classList.add(rowClass);
+
+        const warningMultiplierValue = Number(item.warning_multiplier || 1.5);
+
+        tr.innerHTML = `
+          <td>
+            <div class="item-title">${fmtValue(getItemDisplayName(item))}</div>
+            <div class="item-meta">
+              Артикул WB: ${fmtValue(item.wb_vendor_code)}<br>
+              Артикул продавца: ${fmtValue(item.vendor_code)}<br>
+              Бренд: ${fmtValue(item.brand)}
+            </div>
+          </td>
+          <td>${fmtValue(item.barcode)}</td>
+          <td class="fact-cell cell-num">${Number(item.fact_qty || 0)}</td>
+          <td class="cell-num">${Number(item.sold_qty_14d || 0)}</td>
+          <td class="cell-num">${Number(item.avg_daily_sales || 0).toFixed(2)}</td>
+          <td class="cell-num ${getDaysLeftClass(item.days_left)}">${formatDaysLeft(item.days_left)}</td>
+          <td>
+            <div class="inline-actions">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                class="input-mini"
+                value="${Number(item.low_stock_threshold || 0)}"
+                data-role="threshold"
+                data-barcode="${escapeHtml(item.barcode || '')}"
+              />
+            </div>
+          </td>
+          <td>
+            <div class="inline-actions">
+              <input
+                type="number"
+                min="1.01"
+                step="0.01"
+                class="input-mini"
+                value="${warningMultiplierValue.toFixed(2)}"
+                data-role="warning-multiplier"
+                data-barcode="${escapeHtml(item.barcode || '')}"
+              />
+              <span class="save-state" id="settings-state-${escapeHtml(item.barcode || '')}"></span>
+            </div>
+          </td>
+          <td>
+            <span class="status-badge ${getStockStatusClass(item.stock_status)}">
+              ${escapeHtml(getStockStatusLabel(item.stock_status))}
+            </span>
+          </td>
+          <td>
+            <button
+              class="btn-mini"
+              data-role="save-item-settings"
+              data-barcode="${escapeHtml(item.barcode || '')}"
+            >
+              Сохранить
+            </button>
+          </td>
+        `;
+
+        tbody.appendChild(tr);
+      }
+
+      bindFactSettingsControls();
+    }
+
+    function bindFactSettingsControls() {
+      document.querySelectorAll('button[data-role="save-item-settings"]').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          const barcode = e.currentTarget.dataset.barcode;
+          await saveItemSettings(barcode);
+        });
+      });
+
+      document.querySelectorAll('input[data-role="threshold"], input[data-role="warning-multiplier"]').forEach((input) => {
+        input.addEventListener('keydown', async (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const barcode = e.currentTarget.dataset.barcode;
+            await saveItemSettings(barcode);
+          }
+        });
+      });
+    }
+
+    function fillDistributionFilters() {
+      const warehouseSelect = document.getElementById('distWarehouseFilter');
+      const currentWarehouse = warehouseSelect.value;
+
+      warehouseSelect.innerHTML = `<option value="all">Все склады</option>`;
+
+      for (const w of state.warehouses) {
+        const opt = document.createElement('option');
+        opt.value = String(w.warehouse_code);
+        opt.textContent = `${w.warehouse_name || 'Без названия'} (${w.warehouse_code})`;
+        warehouseSelect.appendChild(opt);
+      }
+
+      if ([...warehouseSelect.options].some((o) => o.value === currentWarehouse)) {
+        warehouseSelect.value = currentWarehouse;
+      }
+    }
+
+    function getFilteredDistributionItems() {
+      const search = document.getElementById('distSearch').value.trim().toLowerCase();
+      const warehouseFilter = document.getElementById('distWarehouseFilter').value;
+
+      return state.items.filter((item) => {
+        const hay = [
+          getItemDisplayName(item),
+          item.barcode
+        ].join(' ').toLowerCase();
+
+        if (search && !hay.includes(search)) return false;
+
+        if (warehouseFilter !== 'all') {
+          const qty = Number(item.warehouse_qty?.[warehouseFilter] || 0);
+          if (uiState.distOnlyStock && qty <= 0) return false;
+        } else {
+          if (uiState.distOnlyStock && Number(item.fact_qty || 0) <= 0) return false;
+        }
+
+        return true;
+      });
+    }
+
+    function getVisibleDistributionWarehouses() {
+      const selected = document.getElementById('distWarehouseFilter').value;
+
+      if (selected !== 'all') {
+        const wh = state.warehouses.find(w => String(w.warehouse_code) === String(selected));
+        return wh ? [{ code: String(wh.warehouse_code), name: wh.warehouse_name || wh.warehouse_code }] : [];
+      }
+
+      return state.warehouses.map((w) => ({
+        code: String(w.warehouse_code),
+        name: w.warehouse_name || w.warehouse_code
+      }));
+    }
+
+    function renderDistribution() {
+      const thead = document.getElementById('distributionThead');
+      const tbody = document.getElementById('distributionTbody');
+      const empty = document.getElementById('distributionEmpty');
+
+      const filtered = getFilteredDistributionItems();
+      const warehouseColumns = getVisibleDistributionWarehouses();
+
+      let headHtml = `
+        <tr>
+          <th>Товар</th>
+          <th>ШК</th>
+          <th>Факт WMS</th>
+          <th>Распределено</th>
+          <th>Разница</th>
+          <th>Статус</th>
+      `;
+
+      for (const col of warehouseColumns) {
+        headHtml += `<th>${escapeHtml(col.name)}</th>`;
+      }
+
+      headHtml += `</tr>`;
+      thead.innerHTML = headHtml;
+
+      tbody.innerHTML = '';
+
+      if (!filtered.length) {
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+
+      for (const item of filtered) {
+        const diff = getItemDiff(item);
+        const matched = isItemMatched(item);
+
+        let rowHtml = `
+          <td>
+            <div class="item-title">${fmtValue(getItemDisplayName(item))}</div>
+          </td>
+          <td>${fmtValue(item.barcode)}</td>
+          <td class="fact-cell cell-num">${Number(item.fact_qty || 0)}</td>
+          <td class="cell-num">${Number(item.distributed_qty || 0)}</td>
+          <td class="cell-num ${matched ? 'warehouse-positive' : 'danger'}">${diff}</td>
+          <td>
+            <span class="mismatch-badge ${matched ? 'mismatch-ok' : 'mismatch-bad'}">
+              ${matched ? 'OK' : 'Расхождение'}
+            </span>
+          </td>
+        `;
+
+        for (const col of warehouseColumns) {
+          const qty = Number(item.warehouse_qty?.[col.code] || 0);
+          rowHtml += `<td class="cell-num ${qty > 0 ? 'warehouse-positive' : 'warehouse-zero'}">${qty}</td>`;
+        }
+
+        const tr = document.createElement('tr');
+        if (!matched) tr.classList.add('row-danger');
+        tr.innerHTML = rowHtml;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function bindTabNavigation() {
+      document.querySelectorAll('.nav-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.nav-btn').forEach((x) => x.classList.remove('active'));
+          btn.classList.add('active');
+
+          ['warehousesTab', 'factStockTab', 'distributionTab'].forEach((id) => {
+            document.getElementById(id).classList.add('hidden');
+          });
+
+          const activeTabId = btn.dataset.tab;
+          document.getElementById(activeTabId).classList.remove('hidden');
+          updateSidebarPanels(activeTabId);
+        });
+      });
+    }
+
+    function bindFilters() {
+      document.getElementById('warehouseSearch').addEventListener('input', renderWarehouses);
+      document.getElementById('warehouseEnabledFilter').addEventListener('change', renderWarehouses);
+
+      document.getElementById('resetWarehouseFiltersBtn').addEventListener('click', () => {
+        document.getElementById('warehouseSearch').value = '';
+        document.getElementById('warehouseEnabledFilter').value = 'all';
+        renderWarehouses();
+      });
+
+      document.getElementById('factSearch').addEventListener('input', renderFactStock);
+      document.getElementById('factStockFilter').addEventListener('change', renderFactStock);
+      document.getElementById('factStatusFilter').addEventListener('change', renderFactStock);
+
+      document.getElementById('resetFactFiltersBtn').addEventListener('click', () => {
+        document.getElementById('factSearch').value = '';
+        document.getElementById('factStockFilter').value = 'all';
+        document.getElementById('factStatusFilter').value = 'all';
+        document.getElementById('toggleFactProblemFirst').checked = true;
+        uiState.factProblemFirst = true;
+        renderFactStock();
+      });
+
+      document.getElementById('toggleFactProblemFirst').addEventListener('change', (e) => {
+        uiState.factProblemFirst = !!e.target.checked;
+        renderFactStock();
+      });
+
+      document.getElementById('distSearch').addEventListener('input', renderDistribution);
+      document.getElementById('distWarehouseFilter').addEventListener('change', renderDistribution);
+
+      document.getElementById('resetDistFiltersBtn').addEventListener('click', () => {
+        document.getElementById('distSearch').value = '';
+        document.getElementById('distWarehouseFilter').value = 'all';
+        document.getElementById('toggleDistOnlyStock').checked = false;
+        uiState.distOnlyStock = false;
+        renderDistribution();
+      });
+
+      document.getElementById('toggleDistOnlyStock').addEventListener('change', (e) => {
+        uiState.distOnlyStock = !!e.target.checked;
+        renderDistribution();
+      });
+    }
+
+    function bindTopButtons() {
+      document.getElementById('refreshBtn').addEventListener('click', loadCabinet);
+      document.getElementById('syncWarehousesBtn').addEventListener('click', syncWarehouses);
+      document.getElementById('recalcBtn').addEventListener('click', recalcDistribution);
+      document.getElementById('applyBulkWarningBtn').addEventListener('click', applyBulkWarningMultiplier);
+
+      document.getElementById('logoutBtn').addEventListener('click', () => {
+        localStorage.removeItem('seller_token');
+        localStorage.removeItem('token');
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('wmsToken');
+        localStorage.removeItem('authToken');
+        sessionStorage.removeItem('seller_token');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('auth_token');
+        sessionStorage.removeItem('wmsToken');
+        sessionStorage.removeItem('authToken');
+        window.location.href = '/login.html';
+      });
+    }
+
+    async function init() {
+      state.token = getToken();
+
+      if (!state.token) {
+        alert('Токен не найден. Выполни вход заново.');
+        window.location.href = '/login.html';
+        return;
+      }
+
+      parseQueryParams();
+      bindTabNavigation();
+      bindFilters();
+      bindTopButtons();
+      updateSidebarPanels('warehousesTab');
+      await loadCabinet();
+    }
+
+    init();
+  </script>
+</body>
+</html>

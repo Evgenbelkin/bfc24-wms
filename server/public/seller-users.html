@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Селлеры</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --text: #0f172a;
+      --muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      --chip-green-bg: #dcfce7;
+      --chip-green-text: #166534;
+      --chip-red-bg: #fee2e2;
+      --chip-red-text: #991b1b;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .page {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+      padding: 18px 22px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #0f172a 0%, #172554 100%);
+      color: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .brand-title {
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .brand-subtitle {
+      margin-top: 6px;
+      font-size: 13px;
+      color: #cbd5e1;
+      line-height: 1.45;
+      max-width: 840px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      border: none;
+      cursor: pointer;
+      border-radius: 14px;
+      padding: 13px 18px;
+      font-size: 14px;
+      font-weight: 800;
+      transition: .15s ease;
+      white-space: nowrap;
+    }
+
+    .btn:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    .btn-light {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .status-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .status-box {
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 0 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 800;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+    }
+
+    .status-ok {
+      color: #166534;
+      background: #dcfce7;
+      border-color: #bbf7d0;
+    }
+
+    .status-error {
+      color: #991b1b;
+      background: #fee2e2;
+      border-color: #fecaca;
+    }
+
+    .status-info {
+      color: #1d4ed8;
+      background: #dbeafe;
+      border-color: #bfdbfe;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(15, 23, 42, 0.05);
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+
+    .section-subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+      margin-bottom: 18px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1.2fr 1fr 180px 180px;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .field-wrap {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+
+    .field, .select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 14px;
+      padding: 13px 14px;
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .field:focus,
+    .select:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: auto;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+    }
+
+    th, td {
+      padding: 14px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .chip-active {
+      background: var(--chip-green-bg);
+      color: var(--chip-green-text);
+    }
+
+    .chip-inactive {
+      background: var(--chip-red-bg);
+      color: var(--chip-red-text);
+    }
+
+    .inline-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-mini {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .empty-box {
+      border: 1px dashed #cbd5e1;
+      border-radius: 18px;
+      padding: 26px;
+      text-align: center;
+      color: var(--muted);
+      background: #f8fafc;
+      font-size: 14px;
+    }
+
+    @media (max-width: 1100px) {
+      .form-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        padding: 12px;
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .actions {
+        flex-direction: column;
+      }
+
+      .actions .btn {
+        width: 100%;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div>
+        <div class="brand-title">BFC24 WMS — Селлеры</div>
+        <div class="brand-subtitle">
+          Управление доступами селлеров в личный кабинет: создание логина, пароля, привязка к клиенту, отключение и смена пароля.
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-light" id="btnReload">Обновить</button>
+      </div>
+    </header>
+
+    <div class="status-row">
+      <div class="status-box status-info" id="statusBox">Готово к загрузке</div>
+    </div>
+
+    <section class="card">
+      <div class="section-title">Создать доступ селлера</div>
+      <div class="section-subtitle">
+        Администратор создаёт отдельную seller-учётку и привязывает её к конкретному клиенту. После этого клиент сможет войти в свой кабинет по логину и паролю.
+      </div>
+
+      <div class="form-grid">
+        <div class="field-wrap">
+          <label class="field-label">Клиент</label>
+          <select class="select" id="clientSelect">
+            <option value="">Загрузка клиентов...</option>
+          </select>
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label">Логин</label>
+          <input class="field" id="usernameInput" type="text" placeholder="Например: seller_client7" />
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label">Пароль</label>
+          <input class="field" id="passwordInput" type="text" placeholder="Например: 12345" />
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label">Статус</label>
+          <select class="select" id="isActiveSelect">
+            <option value="true">Активен</option>
+            <option value="false">Отключён</option>
+          </select>
+        </div>
+
+        <div class="field-wrap">
+          <label class="field-label">&nbsp;</label>
+          <button class="btn btn-primary" id="btnCreateSeller">Создать доступ</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-title">Список seller-учёток</div>
+      <div class="section-subtitle">
+        Здесь администратор видит все созданные доступы, может отключить селлера, сменить пароль или быстро открыть его кабинет.
+      </div>
+
+      <div id="sellersWrap">
+        <div class="empty-box">Загрузка...</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    function getAuthToken() {
+      return (
+        localStorage.getItem('wmsToken') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('authToken') ||
+        sessionStorage.getItem('wmsToken') ||
+        sessionStorage.getItem('token') ||
+        sessionStorage.getItem('authToken') ||
+        ''
+      );
+    }
+
+    function authHeaders(json = false) {
+      const headers = {};
+      const token = getAuthToken();
+
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      if (json) {
+        headers['Content-Type'] = 'application/json';
+      }
+
+      return headers;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    async function requestJson(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          ...authHeaders(false),
+          ...(options.headers || {})
+        }
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || data.details || `HTTP ${response.status}`);
+      }
+
+      return data;
+    }
+
+    const statusBox = document.getElementById('statusBox');
+    const btnReload = document.getElementById('btnReload');
+    const clientSelect = document.getElementById('clientSelect');
+    const usernameInput = document.getElementById('usernameInput');
+    const passwordInput = document.getElementById('passwordInput');
+    const isActiveSelect = document.getElementById('isActiveSelect');
+    const btnCreateSeller = document.getElementById('btnCreateSeller');
+    const sellersWrap = document.getElementById('sellersWrap');
+
+    let clientsState = [];
+    let sellersState = [];
+
+    function setStatus(text, type = 'info') {
+      statusBox.textContent = text;
+      statusBox.className = 'status-box';
+      if (type === 'ok') statusBox.classList.add('status-ok');
+      if (type === 'error') statusBox.classList.add('status-error');
+      if (type === 'info') statusBox.classList.add('status-info');
+    }
+
+    function renderClients() {
+      if (!clientsState.length) {
+        clientSelect.innerHTML = `<option value="">Нет клиентов</option>`;
+        return;
+      }
+
+      clientSelect.innerHTML = `
+        <option value="">Выбери клиента</option>
+        ${clientsState.map(item => `
+          <option value="${item.id}">${escapeHtml(item.client_name)} (#${item.id})</option>
+        `).join('')}
+      `;
+    }
+
+    function renderSellers() {
+      if (!sellersState.length) {
+        sellersWrap.innerHTML = `<div class="empty-box">Seller-учёток пока нет.</div>`;
+        return;
+      }
+
+      sellersWrap.innerHTML = `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Логин</th>
+                <th>Клиент</th>
+                <th>Роль</th>
+                <th>Статус</th>
+                <th>Создан</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sellersState.map(item => `
+                <tr>
+                  <td>${item.id}</td>
+                  <td><strong>${escapeHtml(item.username)}</strong></td>
+                  <td>${escapeHtml(item.client_name || '—')} (#${item.client_id || '—'})</td>
+                  <td>${escapeHtml(item.role || '—')}</td>
+                  <td>
+                    ${
+                      item.is_active
+                        ? '<span class="chip chip-active">Активен</span>'
+                        : '<span class="chip chip-inactive">Отключён</span>'
+                    }
+                  </td>
+                  <td>${item.created_at ? new Date(item.created_at).toLocaleString('ru-RU') : '—'}</td>
+                  <td>
+                    <div class="inline-actions">
+                      <button class="btn-mini" onclick="toggleSeller(${item.id}, ${item.is_active ? 'false' : 'true'})">
+                        ${item.is_active ? 'Отключить' : 'Включить'}
+                      </button>
+                      <button class="btn-mini" onclick="resetSellerPassword(${item.id}, '${escapeHtml(item.username)}')">
+                        Сменить пароль
+                      </button>
+                      <button class="btn-mini" onclick="openSellerCabinet(${item.client_id || 'null'})">
+                        Открыть кабинет
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    async function loadClients() {
+      const data = await requestJson('/sellers/clients', { method: 'GET' });
+      clientsState = Array.isArray(data.items) ? data.items : [];
+      renderClients();
+    }
+
+    async function loadSellers() {
+      const data = await requestJson('/sellers', { method: 'GET' });
+      sellersState = Array.isArray(data.items) ? data.items : [];
+      renderSellers();
+    }
+
+    async function loadAll() {
+      btnReload.disabled = true;
+      btnCreateSeller.disabled = true;
+      setStatus('Загружаем модуль селлеров...', 'info');
+
+      try {
+        await loadClients();
+        await loadSellers();
+        setStatus(`Загружено seller-учёток: ${sellersState.length}`, 'ok');
+      } catch (err) {
+        setStatus(`Ошибка загрузки: ${err.message || err}`, 'error');
+      } finally {
+        btnReload.disabled = false;
+        btnCreateSeller.disabled = false;
+      }
+    }
+
+    async function createSeller() {
+      const clientId = Number(clientSelect.value);
+      const username = String(usernameInput.value || '').trim();
+      const password = String(passwordInput.value || '').trim();
+      const isActive = isActiveSelect.value === 'true';
+
+      if (!Number.isInteger(clientId) || clientId <= 0) {
+        setStatus('Выбери клиента', 'error');
+        return;
+      }
+
+      if (!username) {
+        setStatus('Введи логин', 'error');
+        return;
+      }
+
+      if (!password || password.length < 4) {
+        setStatus('Пароль должен быть не короче 4 символов', 'error');
+        return;
+      }
+
+      btnCreateSeller.disabled = true;
+      setStatus('Создаём seller-учётку...', 'info');
+
+      try {
+        await requestJson('/sellers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            username,
+            password,
+            client_id: clientId,
+            is_active: isActive
+          })
+        });
+
+        usernameInput.value = '';
+        passwordInput.value = '';
+        isActiveSelect.value = 'true';
+
+        await loadSellers();
+        setStatus('Seller-учётка создана', 'ok');
+      } catch (err) {
+        setStatus(`Ошибка создания: ${err.message || err}`, 'error');
+      } finally {
+        btnCreateSeller.disabled = false;
+      }
+    }
+
+    window.toggleSeller = async function (sellerId, nextState) {
+      setStatus('Обновляем статус seller-учётки...', 'info');
+
+      try {
+        await requestJson(`/sellers/${sellerId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            is_active: nextState === 'true'
+          })
+        });
+
+        await loadSellers();
+        setStatus('Статус seller-учётки обновлён', 'ok');
+      } catch (err) {
+        setStatus(`Ошибка обновления: ${err.message || err}`, 'error');
+      }
+    };
+
+    window.resetSellerPassword = async function (sellerId, username) {
+      const password = prompt(`Новый пароль для ${username}:`);
+      if (!password) return;
+
+      if (password.trim().length < 4) {
+        setStatus('Пароль должен быть не короче 4 символов', 'error');
+        return;
+      }
+
+      setStatus('Меняем пароль seller-учётки...', 'info');
+
+      try {
+        await requestJson(`/sellers/${sellerId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            password: password.trim()
+          })
+        });
+
+        setStatus('Пароль обновлён', 'ok');
+      } catch (err) {
+        setStatus(`Ошибка смены пароля: ${err.message || err}`, 'error');
+      }
+    };
+
+    window.openSellerCabinet = function (clientId) {
+      if (!clientId) {
+        setStatus('У seller-учётки не указан client_id', 'error');
+        return;
+      }
+
+      window.open(`/seller-cabinet.html?client_id=${clientId}`, '_blank');
+    };
+
+    btnReload.addEventListener('click', loadAll);
+    btnCreateSeller.addEventListener('click', createSeller);
+
+    loadAll();
+  </script>
+</body>
+</html>

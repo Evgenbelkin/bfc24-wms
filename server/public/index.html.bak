@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BFC24 — Фулфилмент для маркетплейсов</title>
+  <meta name="description" content="BFC24 — фулфилмент для маркетплейсов с прозрачным учетом, личным кабинетом и контролем операций." />
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #dbe4f0;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --primary-soft: #eaf1ff;
+      --accent: #0f766e;
+      --accent-soft: #e8fbf7;
+      --warning: #b45309;
+      --warning-soft: #fff7ed;
+      --danger: #b91c1c;
+      --danger-soft: #fef2f2;
+      --success: #166534;
+      --success-soft: #f0fdf4;
+      --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --max: 1240px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, #f4f7fb 100%);
+      color: var(--text);
+    }
+
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+
+    .container {
+      width: min(var(--max), calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(248, 251, 255, 0.88);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(219, 228, 240, 0.8);
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      min-height: 76px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary), #0ea5e9);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 800;
+      box-shadow: var(--shadow);
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      color: var(--muted);
+      font-size: 15px;
+      flex-wrap: wrap;
+    }
+
+    .nav a:hover { color: var(--text); }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 46px;
+      padding: 0 18px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+      transition: 0.18s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 10px 20px rgba(37, 99, 235, 0.24);
+    }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary {
+      background: #fff;
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .btn-soft {
+      background: var(--primary-soft);
+      color: var(--primary-dark);
+    }
+
+    .hero {
+      padding: 52px 0 22px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 28px;
+      align-items: stretch;
+    }
+
+    .hero-main,
+    .hero-side,
+    .card {
+      background: var(--card);
+      border: 1px solid #edf2f7;
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+      padding: 38px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      right: -120px;
+      top: -80px;
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(37,99,235,0.12) 0%, rgba(37,99,235,0) 72%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      color: var(--primary-dark);
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+      max-width: 780px;
+    }
+
+    .hero-lead {
+      margin: 18px 0 0;
+      font-size: 18px;
+      line-height: 1.65;
+      color: var(--muted);
+      max-width: 760px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 28px;
+    }
+
+    .hero-points {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 26px;
+    }
+
+    .point {
+      padding: 14px 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fbfdff;
+    }
+
+    .point strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .point span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .hero-side {
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .dashboard {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    }
+
+    .dashboard-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #cbd5e1;
+    }
+
+    .dashboard-body {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .stat-box {
+      padding: 14px;
+      border-radius: 16px;
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+
+    .stat-box small {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .stat-box strong {
+      font-size: 24px;
+      letter-spacing: -0.03em;
+    }
+
+    .mini-table {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .mini-row {
+      display: grid;
+      grid-template-columns: 1.2fr 0.7fr 0.8fr;
+      gap: 10px;
+      padding: 12px 14px;
+      font-size: 13px;
+      border-top: 1px solid #eef3f8;
+    }
+
+    .mini-row:first-child { border-top: 0; background: #f8fbff; font-weight: 700; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .tag-success { background: var(--success-soft); color: var(--success); }
+    .tag-warn { background: var(--warning-soft); color: var(--warning); }
+    .tag-primary { background: var(--primary-soft); color: var(--primary-dark); }
+
+    .device-card {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 16px;
+      padding: 18px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, #0f172a 0%, #162133 100%);
+      color: #fff;
+    }
+
+    .device {
+      width: 100px;
+      height: 180px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #273449 0%, #0b1320 100%);
+      padding: 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      margin: 0 auto;
+    }
+
+    .device-screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+      padding: 10px 8px;
+      color: var(--text);
+      display: grid;
+      align-content: start;
+      gap: 8px;
+    }
+
+    .screen-bar,
+    .screen-line {
+      border-radius: 999px;
+      background: #dbeafe;
+    }
+
+    .screen-bar { height: 10px; width: 72%; }
+    .screen-line { height: 8px; }
+    .screen-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .screen-box {
+      height: 36px;
+      border-radius: 10px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+    }
+
+    .device-copy h3,
+    .section-head h2,
+    .cta-box h2 {
+      margin: 0;
+      letter-spacing: -0.03em;
+    }
+
+    .device-copy p {
+      color: rgba(255,255,255,0.8);
+      line-height: 1.55;
+      margin: 8px 0 0;
+      font-size: 14px;
+    }
+
+    .section {
+      padding: 22px 0;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    .section-head h2 {
+      font-size: clamp(28px, 4vw, 42px);
+    }
+
+    .section-head p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 760px;
+      line-height: 1.65;
+      font-size: 17px;
+    }
+
+    .grid-3,
+    .grid-4,
+    .grid-2 {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .card {
+      padding: 22px;
+    }
+
+    .icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: var(--primary-soft);
+      color: var(--primary-dark);
+      font-size: 20px;
+      margin-bottom: 14px;
+    }
+
+    .card h3 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .card p,
+    .card li,
+    .compare-item p,
+    .geo-card p,
+    .pricing-note,
+    .faq-answer,
+    .facts-subtitle,
+    .screenshot-card p,
+    .lead-copy p,
+    .lead-form label,
+    .lead-success,
+    .lead-error {
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 15px;
+    }
+
+    .stack { display: grid; gap: 16px; }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .problem {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      padding: 20px;
+      border-radius: 22px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .problem-side {
+      padding: 16px;
+      border-radius: 16px;
+    }
+
+    .problem-side.bad {
+      background: var(--danger-soft);
+      border: 1px solid #fecaca;
+    }
+
+    .problem-side.good {
+      background: var(--success-soft);
+      border: 1px solid #bbf7d0;
+    }
+
+    .problem-side strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 15px;
+    }
+
+    .problem-side.bad strong { color: var(--danger); }
+    .problem-side.good strong { color: var(--success); }
+
+    .compare-board {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .compare-col {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .compare-head {
+      padding: 18px 22px;
+      font-size: 20px;
+      font-weight: 800;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .compare-head.bad { background: var(--danger-soft); color: var(--danger); }
+    .compare-head.good { background: var(--success-soft); color: var(--success); }
+
+    .compare-list {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .compare-item {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+    }
+
+    .compare-item strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 15px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .step {
+      padding: 18px;
+      border-radius: 20px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .step-num {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      background: var(--primary);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    .geo-layout {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+    }
+
+    .geo-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    .warehouse-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .warehouse-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: #fbfdff;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .metric {
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .metric small { display: block; color: var(--muted); margin-bottom: 6px; }
+    .metric strong { font-size: 24px; }
+
+    .facts-band {
+      background: linear-gradient(135deg, #0f172a 0%, #172554 100%);
+      border-radius: 28px;
+      padding: 28px;
+      color: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .facts-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    .facts-header h2 {
+      margin: 0;
+      font-size: clamp(26px, 4vw, 38px);
+      letter-spacing: -0.03em;
+    }
+
+    .facts-subtitle {
+      color: rgba(255,255,255,0.76);
+      max-width: 760px;
+      margin: 10px 0 0;
+    }
+
+    .facts-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .fact-item {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .fact-item strong {
+      display: block;
+      font-size: 28px;
+      line-height: 1;
+      margin-bottom: 8px;
+      letter-spacing: -0.04em;
+    }
+
+    .fact-item span {
+      color: rgba(255,255,255,0.78);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .cabinet-layout {
+      display: grid;
+      grid-template-columns: 0.95fr 1.05fr;
+      gap: 18px;
+    }
+
+    .cabinet-points {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .cabinet-point {
+      display: flex;
+      gap: 12px;
+      align-items: start;
+      padding: 14px;
+      border-radius: 16px;
+      background: #fbfdff;
+      border: 1px solid var(--line);
+    }
+
+    .cabinet-point .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--primary);
+      margin-top: 6px;
+      flex: 0 0 auto;
+    }
+
+    .screen-large {
+      background: #0f172a;
+      border-radius: 24px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .screen-frame {
+      background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .screen-head {
+      height: 50px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .screen-content {
+      padding: 0;
+    }
+
+    .real-shot {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      background: #eff6ff;
+    }
+
+    .shot-caption {
+      padding: 14px 16px;
+      font-size: 14px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .screenshot-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .screenshot-card img {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      background: #eef4ff;
+    }
+
+    .screenshot-card-body {
+      padding: 16px;
+    }
+
+    .screenshot-card h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .services-grid .card { min-height: 220px; }
+
+    .pricing-wrap {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .pricing-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 24px;
+    }
+
+    .price-line {
+      font-size: 38px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      margin: 10px 0;
+    }
+
+    .pricing-list {
+      margin: 16px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .pricing-list li {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #fbfdff;
+      border: 1px solid var(--line);
+    }
+
+    .lead-wrap {
+      display: grid;
+      grid-template-columns: 0.95fr 1.05fr;
+      gap: 16px;
+    }
+
+    .lead-copy,
+    .lead-form-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 24px;
+    }
+
+    .lead-copy ul {
+      margin: 18px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .lead-copy li {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #fbfdff;
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .lead-form {
+      display: grid;
+      gap: 14px;
+    }
+
+    .lead-form label {
+      display: grid;
+      gap: 8px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .lead-form input,
+    .lead-form textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 15px;
+      font: inherit;
+      color: var(--text);
+      background: #fbfdff;
+      outline: none;
+    }
+
+    .lead-form input:focus,
+    .lead-form textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(37,99,235,0.08);
+      background: #fff;
+    }
+
+    .lead-form textarea {
+      min-height: 130px;
+      resize: vertical;
+    }
+
+    .lead-inline {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .lead-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .lead-status {
+      min-height: 22px;
+    }
+
+    .lead-success { color: var(--success); }
+    .lead-error { color: var(--danger); }
+
+    .faq-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .faq-item {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .faq-question {
+      width: 100%;
+      border: 0;
+      background: #fff;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font: inherit;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .faq-answer {
+      display: none;
+      padding: 0 20px 18px;
+    }
+
+    .faq-item.open .faq-answer { display: block; }
+
+    .cta-box {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #fff;
+      border-radius: 30px;
+      padding: 34px;
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .cta-box p {
+      color: rgba(255,255,255,0.78);
+      font-size: 17px;
+      line-height: 1.65;
+      margin: 12px 0 0;
+      max-width: 760px;
+    }
+
+    .cta-actions {
+      display: flex;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .footer {
+      padding: 26px 0 46px;
+      color: var(--muted);
+    }
+
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    @media (max-width: 1120px) {
+      .hero-grid,
+      .geo-layout,
+      .cabinet-layout,
+      .cta-box,
+      .pricing-wrap,
+      .grid-4,
+      .grid-3,
+      .grid-2,
+      .problem-grid,
+      .compare-board,
+      .facts-grid,
+      .screenshot-grid,
+      .lead-wrap {
+        grid-template-columns: 1fr;
+      }
+
+      .steps {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .hero-points { grid-template-columns: 1fr; }
+      .section-head { align-items: start; }
+      .cta-actions { justify-content: flex-start; }
+    }
+
+    @media (max-width: 820px) {
+      .header-inner {
+        min-height: auto;
+        padding: 12px 0;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .nav {
+        overflow-x: auto;
+        white-space: nowrap;
+        flex-wrap: nowrap;
+        padding-bottom: 4px;
+      }
+
+      .header-actions { justify-content: space-between; }
+      .hero-main,
+      .card,
+      .hero-side,
+      .geo-card,
+      .pricing-card,
+      .cta-box,
+      .lead-copy,
+      .lead-form-card,
+      .facts-band { padding: 22px; }
+      .hero { padding-top: 24px; }
+      .problem { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .stats-grid,
+      .metrics,
+      .lead-inline { grid-template-columns: 1fr; }
+      .device-card { grid-template-columns: 1fr; }
+      .price-line { font-size: 30px; }
+      h1 { font-size: 36px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="#top">
+        <span class="brand-mark">B</span>
+        <span>BFC24</span>
+      </a>
+
+      <nav class="nav">
+        <a href="#for-whom">Для кого</a>
+        <a href="#problems">Проблемы</a>
+        <a href="#workflow">Как работаем</a>
+        <a href="#facts">Факты</a>
+        <a href="#cabinet">Кабинет</a>
+        <a href="#screens">Скриншоты</a>
+        <a href="#services">Услуги</a>
+        <a href="#pricing">Условия</a>
+        <a href="#lead-form">Заявка</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <div class="header-actions">
+        <a class="btn btn-secondary" href="/login.html">Войти</a>
+        <a class="btn btn-primary" href="#lead-form">Оставить заявку</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-main">
+          <div class="eyebrow">Фулфилмент для маркетплейсов + личный кабинет</div>
+          <h1>Контроль товара, заказов и отгрузок — без хаоса и слепой передачи склада</h1>
+          <p class="hero-lead">
+            BFC24 помогает селлерам передать операционку на фулфилмент и при этом не терять контроль.
+            Вы видите остатки, движения, статусы и ключевые операции в личном кабинете, а мы берём на себя приёмку,
+            хранение, сборку, упаковку и отгрузку.
+          </p>
+
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#lead-form">Оставить заявку</a>
+            <a class="btn btn-soft" href="#cabinet">Посмотреть кабинет</a>
+            <a class="btn btn-secondary" href="/login.html">Войти для клиента</a>
+          </div>
+
+          <div class="hero-points">
+            <div class="point">
+              <strong>Прозрачный учет</strong>
+              <span>Актуальные остатки, операции и контроль по вашему товару.</span>
+            </div>
+            <div class="point">
+              <strong>Личный кабинет</strong>
+              <span>Доступ к данным 24/7 без звонков на склад и ручных сверок.</span>
+            </div>
+            <div class="point">
+              <strong>Фокус на маркетплейсах</strong>
+              <span>Процессы под реальную работу с WB и другими площадками.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-side">
+          <div class="dashboard">
+            <div class="dashboard-top">
+              <span>Личный кабинет BFC24</span>
+              <div class="dots"><span></span><span></span><span></span></div>
+            </div>
+            <div class="dashboard-body">
+              <div class="stats-grid">
+                <div class="stat-box">
+                  <small>Активные SKU</small>
+                  <strong>1 284</strong>
+                </div>
+                <div class="stat-box">
+                  <small>Текущий остаток</small>
+                  <strong>18 420</strong>
+                </div>
+                <div class="stat-box">
+                  <small>Отгрузки за сегодня</small>
+                  <strong>12</strong>
+                </div>
+                <div class="stat-box">
+                  <small>Заявки в работе</small>
+                  <strong>37</strong>
+                </div>
+              </div>
+
+              <div class="mini-table">
+                <div class="mini-row">
+                  <div>Товар</div>
+                  <div>Остаток</div>
+                  <div>Статус</div>
+                </div>
+                <div class="mini-row">
+                  <div>Мяч баскетбольный</div>
+                  <div>128 шт</div>
+                  <div><span class="tag tag-success">Норма</span></div>
+                </div>
+                <div class="mini-row">
+                  <div>Ночник LED</div>
+                  <div>24 шт</div>
+                  <div><span class="tag tag-warn">Низкий</span></div>
+                </div>
+                <div class="mini-row">
+                  <div>RC машина</div>
+                  <div>63 шт</div>
+                  <div><span class="tag tag-primary">В пути</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="device-card">
+            <div class="device">
+              <div class="device-screen">
+                <div class="screen-bar"></div>
+                <div class="screen-grid">
+                  <div class="screen-box"></div>
+                  <div class="screen-box"></div>
+                </div>
+                <div class="screen-line"></div>
+                <div class="screen-line" style="width:82%"></div>
+                <div class="screen-line" style="width:68%"></div>
+              </div>
+            </div>
+            <div class="device-copy">
+              <h3>Оцифрованный склад</h3>
+              <p>
+                Интерфейсы BFC24 работают не только в кабинете селлера, но и на стороне операций:
+                приёмка, сборка, упаковка и отгрузка идут через систему, а не в хаосе из Excel и переписок.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="for-whom">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <h2>Кому подходит BFC24</h2>
+            <p>Мы подходим селлерам и брендам, которым нужен не просто склад, а управляемый фулфилмент с понятными процессами и цифровым контролем.</p>
+          </div>
+        </div>
+
+        <div class="grid-4">
+          <div class="card">
+            <div class="icon">📦</div>
+            <h3>Тем, кто уже продаёт</h3>
+            <p>Если заказы уже идут, но склад и сборка начинают тормозить рост — мы забираем операционную часть на себя.</p>
+          </div>
+          <div class="card">
+            <div class="icon">📉</div>
+            <h3>Тем, кто устал от хаоса</h3>
+            <p>Ручные таблицы, постоянные уточнения и путаница с остатками съедают время и нервы. BFC24 убирает этот шум.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🚀</div>
+            <h3>Тем, кто хочет расти</h3>
+            <p>Когда объём заказов растёт, нужен порядок в учёте, сборке, упаковке и отгрузках. Иначе масштабирование превращается в аврал.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🏢</div>
+            <h3>Брендам и командам</h3>
+            <p>Подходит тем, кому важны системность, прозрачность и технологичный контур, а не просто аренда складского места.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="problems">
+      <div class="container stack">
+        <div class="section-head">
+          <div>
+            <h2>Какие проблемы мы закрываем</h2>
+            <p>Главная ценность BFC24 — не «место на складе», а спокойствие и контроль. Ниже — типичные проблемы селлеров и как мы их решаем.</p>
+          </div>
+        </div>
+
+        <div class="problem-grid">
+          <div class="problem">
+            <div class="problem-side bad">
+              <strong>Без системы</strong>
+              <p>Непонятно, сколько товара реально лежит на складе. Остатки в таблицах расходятся с реальностью.</p>
+            </div>
+            <div class="problem-side good">
+              <strong>С BFC24</strong>
+              <p>Актуальные остатки и история операций доступны в кабинете. Вы не работаете вслепую.</p>
+            </div>
+          </div>
+
+          <div class="problem">
+            <div class="problem-side bad">
+              <strong>Без системы</strong>
+              <p>Ошибки в сборке, путаница в упаковке и лишние звонки «что по заказу?» забирают время и деньги.</p>
+            </div>
+            <div class="problem-side good">
+              <strong>С BFC24</strong>
+              <p>Складские процессы идут по системе: приёмка, сборка, упаковка и отгрузка фиксируются и контролируются.</p>
+            </div>
+          </div>
+
+          <div class="problem">
+            <div class="problem-side bad">
+              <strong>Без системы</strong>
+              <p>Нужно постоянно уточнять, что уехало, что в работе, что зависло и где товар находится физически.</p>
+            </div>
+            <div class="problem-side good">
+              <strong>С BFC24</strong>
+              <p>Видны статусы, движение товара и ключевые операции. Меньше ручных вопросов — больше прозрачности.</p>
+            </div>
+          </div>
+
+          <div class="problem">
+            <div class="problem-side bad">
+              <strong>Без системы</strong>
+              <p>Когда заказы растут, операционка начинает ломаться: нет ритма, дисциплины и опоры на данные.</p>
+            </div>
+            <div class="problem-side good">
+              <strong>С BFC24</strong>
+              <p>Вы получаете технологичный фулфилмент, который помогает держать темп и масштабировать продажи.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container stack">
+        <div class="section-head">
+          <div>
+            <h2>С нами и без нас — разница видна сразу</h2>
+            <p>Наглядное сравнение помогает быстро понять, что именно получает селлер вместе с BFC24.</p>
+          </div>
+        </div>
+
+        <div class="compare-board">
+          <div class="compare-col">
+            <div class="compare-head bad">Без BFC24</div>
+            <div class="compare-list">
+              <div class="compare-item">
+                <strong>Excel и ручные сверки</strong>
+                <p>Остатки приходится перепроверять вручную, а данные часто устаревают.</p>
+              </div>
+              <div class="compare-item">
+                <strong>Постоянные уточнения</strong>
+                <p>Нужно звонить или писать на склад, чтобы понять, что с товаром и заказами.</p>
+              </div>
+              <div class="compare-item">
+                <strong>Высокий риск ошибок</strong>
+                <p>Когда процессы не опираются на систему, ошибки в сборке и маркировке становятся нормой.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="compare-col">
+            <div class="compare-head good">С BFC24</div>
+            <div class="compare-list">
+              <div class="compare-item">
+                <strong>Прозрачный кабинет</strong>
+                <p>Остатки, операции и статусы доступны в одном месте без ручной рутины.</p>
+              </div>
+              <div class="compare-item">
+                <strong>Системные процессы</strong>
+                <p>Приёмка, хранение, сборка, упаковка и отгрузка проходят по понятному операционному контуру.</p>
+              </div>
+              <div class="compare-item">
+                <strong>Контроль и спокойствие</strong>
+                <p>Вы не передаёте товар вслепую — вы видите, как с ним работают и что происходит на каждом этапе.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="workflow">
+      <div class="container stack">
+        <div class="section-head">
+          <div>
+            <h2>Как работает BFC24</h2>
+            <p>Простой и понятный маршрут для клиента: вы передаёте товар, мы забираем операционную нагрузку и даём вам прозрачность через кабинет.</p>
+          </div>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <h3>Передача товара</h3>
+            <p>Вы передаёте партию на наш контур хранения и обработки.</p>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <h3>Приёмка</h3>
+            <p>Товар принимается и фиксируется в системе, а не на словах.</p>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <h3>Размещение</h3>
+            <p>Позиции попадают на склад с учетом и понятной логикой хранения.</p>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <h3>Обработка заказов</h3>
+            <p>Сборка и упаковка идут по операционному контуру BFC24.</p>
+          </div>
+          <div class="step">
+            <div class="step-num">5</div>
+            <h3>Отгрузка</h3>
+            <p>Подготовленные заказы уходят по рабочему графику и маршрутам.</p>
+          </div>
+          <div class="step">
+            <div class="step-num">6</div>
+            <h3>Контроль в кабинете</h3>
+            <p>Вы видите остатки, статусы и ключевые данные без постоянных вопросов в чатах.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container geo-layout">
+        <div class="geo-card">
+          <div class="eyebrow">Скорость и логистика</div>
+          <h2 style="font-size:34px; margin:0; letter-spacing:-0.03em;">Работаем как операционный контур, а не просто как склад</h2>
+          <p>Для селлера важны не только хранение и сборка, но и реальная скорость. Мы работаем в зоне юг-запад, возим без выходных и держим ритм 2 рейса в сутки.</p>
+
+          <div class="warehouse-list">
+            <div class="warehouse-item">
+              <strong>Зона Юг-Запад</strong>
+              <span class="tag tag-primary">Основное направление</span>
+            </div>
+            <div class="warehouse-item">
+              <strong>Работа без выходных</strong>
+              <span class="tag tag-primary">Операционный ритм 7/7</span>
+            </div>
+            <div class="warehouse-item">
+              <strong>Два рейса в сутки</strong>
+              <span class="tag tag-primary">Соблюдаем график</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="geo-card">
+          <div class="eyebrow">Операционные метрики</div>
+          <div class="metrics">
+            <div class="metric">
+              <small>Ритм отгрузок</small>
+              <strong>2 рейса в сутки</strong>
+            </div>
+            <div class="metric">
+              <small>Рабочий режим</small>
+              <strong>Без выходных</strong>
+            </div>
+            <div class="metric">
+              <small>Срок от заказа до склада WB</small>
+              <strong>13–15 часов</strong>
+            </div>
+            <div class="metric">
+              <small>География</small>
+              <strong>Юг-Запад</strong>
+            </div>
+          </div>
+          <p style="margin-top:14px;">Работаем в зоне юг-запад и держим стабильный ритм доставки на склады Wildberries без выходных.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container stack">
+        <div class="section-head">
+          <div>
+            <h2>Почему выбирают BFC24</h2>
+            <p>Наше отличие не в громких обещаниях, а в том, что фулфилмент опирается на систему, дисциплину и реальный кабинет для клиента.</p>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="icon">👁️</div>
+            <h3>Прозрачность</h3>
+            <p>Вы видите остатки, статусы и операции, а не ждёте ответа в мессенджере.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🧭</div>
+            <h3>Системность</h3>
+            <p>Операции идут по контуру BFC24: приёмка, сборка, упаковка и отгрузка контролируются внутри системы.</p>
+          </div>
+          <div class="card">
+            <div class="icon">📈</div>
+            <h3>Готовность к росту</h3>
+            <p>Когда оборот растёт, вам не нужно заново строить процессы — база уже готова.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="cabinet">
+      <div class="container cabinet-layout">
+        <div class="card">
+          <div class="eyebrow">Личный кабинет клиента</div>
+          <h2 style="font-size:36px; margin:0; letter-spacing:-0.03em;">Вы не просто отдаёте товар на склад — вы видите, что с ним происходит</h2>
+          <p style="margin-top:12px; color:var(--muted); line-height:1.7; font-size:16px;">
+            Кабинет BFC24 — это важная часть сервиса. Селлер получает не чёрный ящик, а доступ к данным,
+            операциям и контролю по своему товару. Здесь можно показывать остатки, отгрузки, статусы и в дальнейшем аналитику по работе с маркетплейсами.
+          </p>
+
+          <div class="cabinet-points">
+            <div class="cabinet-point">
+              <span class="dot"></span>
+              <div><strong>Остатки и движение товара</strong><br><span style="color:var(--muted);">Актуальная информация по позициям и ключевым операциям.</span></div>
+            </div>
+            <div class="cabinet-point">
+              <span class="dot"></span>
+              <div><strong>Статусы заказов и отгрузок</strong><br><span style="color:var(--muted);">Понятная картина, что в работе, что уже ушло и где требуется внимание.</span></div>
+            </div>
+            <div class="cabinet-point">
+              <span class="dot"></span>
+              <div><strong>Основа для аналитики</strong><br><span style="color:var(--muted);">В будущем здесь можно развивать финансовую и WB-аналитику без смены платформы.</span></div>
+            </div>
+          </div>
+
+          <div class="hero-actions" style="margin-top:22px;">
+            <a class="btn btn-primary" href="/login.html">Войти в кабинет</a>
+            <a class="btn btn-secondary" href="#cta">Запросить демо</a>
+          </div>
+        </div>
+
+        <div class="screen-large">
+          <div class="screen-frame">
+            <div class="screen-head">
+              <strong>BFC24 — кабинет селлера</strong>
+              <span class="tag tag-success">Живой экран</span>
+            </div>
+            <div class="screen-content">
+              <img class="real-shot" src="assets/seller-cabinet-distribution.png" alt="Кабинет селлера BFC24" />
+              <div class="shot-caption">Реальный экран кабинета селлера: распределение фактического остатка WMS по складам WB.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="facts">
+      <div class="container">
+        <div class="facts-band">
+          <div class="facts-header">
+            <div>
+              <h2>Факты, которые важны селлеру</h2>
+              <p class="facts-subtitle">Здесь нет раздутых обещаний. Только то, что уже встроено в модель работы BFC24 и реально влияет на продажи и операционку.</p>
+            </div>
+          </div>
+
+          <div class="facts-grid">
+            <div class="fact-item">
+              <strong>2</strong>
+              <span>рейса в сутки в зоне юг-запад под рабочий ритм маркетплейсов</span>
+            </div>
+            <div class="fact-item">
+              <strong>7/7</strong>
+              <span>работаем без выходных, чтобы не срывать темп обработки заказов</span>
+            </div>
+            <div class="fact-item">
+              <strong>13–15 ч</strong>
+              <span>ориентир от заказа до доставки на склад WB при рабочем ритме</span>
+            </div>
+            <div class="fact-item">
+              <strong>24/7</strong>
+              <span>доступ к кабинету клиента и прозрачности по остаткам и операциям</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="screens">
+      <div class="container stack">
+        <div class="section-head">
+          <div>
+            <h2>Реальные экраны BFC24</h2>
+            <p>Не макеты и не случайные шаблоны. Ниже — живые интерфейсы твоей системы, которые уже можно показывать клиентам как подтверждение цифрового контура.</p>
+          </div>
+        </div>
+
+        <div class="screenshot-grid">
+          <article class="screenshot-card">
+            <img src="assets/wms-menu.png" alt="Панель управления WMS BFC24" />
+            <div class="screenshot-card-body">
+              <h3>Панель управления WMS</h3>
+              <p>Операционные модули приёмки, сборки, упаковки, отгрузки и инвентаризации работают внутри одной системы.</p>
+            </div>
+          </article>
+
+          <article class="screenshot-card">
+            <img src="assets/shipments-board.png" alt="Табло отгрузок BFC24" />
+            <div class="screenshot-card-body">
+              <h3>Табло отгрузок</h3>
+              <p>Наглядный контроль статусов, прогресса сборки, упаковки и отгрузки по поставкам и клиентам.</p>
+            </div>
+          </article>
+
+          <article class="screenshot-card">
+            <img src="assets/seller-cabinet-warehouses.png" alt="Склады WB в кабинете селлера BFC24" />
+            <div class="screenshot-card-body">
+              <h3>Кабинет селлера</h3>
+              <p>Селлер видит склады WB, настройки участия, веса распределения и фактическую картину по своему товару.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="services">
+      <div class="container stack services-grid">
+        <div class="section-head">
+          <div>
+            <h2>Что мы берём на себя</h2>
+            <p>BFC24 закрывает операционный контур фулфилмента и снимает с селлера ежедневную рутину.</p>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="icon">📥</div>
+            <h3>Приёмка товара</h3>
+            <p>Фиксация поступлений и контроль входящего потока через систему.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🏷️</div>
+            <h3>Хранение и учет</h3>
+            <p>Порядок по товару, остаткам и размещению без работы «по памяти».</p>
+          </div>
+          <div class="card">
+            <div class="icon">🛒</div>
+            <h3>Сборка заказов</h3>
+            <p>Обработка заказов под рабочий ритм маркетплейсов и контроль ошибок.</p>
+          </div>
+          <div class="card">
+            <div class="icon">📦</div>
+            <h3>Упаковка</h3>
+            <p>Подготовка отправлений с привязкой к складскому процессу и статусам.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🚚</div>
+            <h3>Отгрузка</h3>
+            <p>Передача готовых отправлений по рабочим маршрутам и графику.</p>
+          </div>
+          <div class="card">
+            <div class="icon">↩️</div>
+            <h3>Дополнительные операции</h3>
+            <p>Возвраты, проверки, доработки и другие процессы по вашему ассортименту.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🎨</div>
+            <h3>Инфографика и визуалы</h3>
+            <p>Помогаем подготовить карточки, изображения и инфографику для маркетплейсов.</p>
+          </div>
+          <div class="card">
+            <div class="icon">📊</div>
+            <h3>Ведение кабинета WB</h3>
+            <p>Можем помочь с операционной работой внутри кабинета Wildberries и текущими задачами.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🧠</div>
+            <h3>Аналитика</h3>
+            <p>Блок аналитики для селлеров запланирован и находится в разработке.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="pricing">
+      <div class="container stack">
+        <div class="section-head">
+          <div>
+            <h2>Понятные условия работы</h2>
+            <p>Прозрачность важна не только в учёте, но и в стоимости. Структура блока уже готова — сюда можно подставить твои реальные тарифы.</p>
+          </div>
+        </div>
+
+        <div class="pricing-wrap">
+          <div class="pricing-card">
+            <div class="eyebrow">Базовый ориентир</div>
+            <h3 style="margin:0; font-size:24px;">Фулфилмент под текущий объём</h3>
+            <div class="price-line">от 25 ₽</div>
+            <div class="pricing-note">сборка и доставка заказа до склада маркетплейса</div>
+            <ul class="pricing-list">
+              <li>Сборка и доставка — 25 ₽ за заказ</li>
+              <li>Подходит как понятный базовый тариф для старта работы</li>
+              <li>Дополнительные операции считаются отдельно и прозрачно</li>
+            </ul>
+          </div>
+
+          <div class="pricing-card">
+            <div class="eyebrow">Индивидуальный расчёт</div>
+            <h3 style="margin:0; font-size:24px;">Под ассортимент и объёмы</h3>
+            <div class="price-line">индивидуально</div>
+            <div class="pricing-note">хранение зависит от объёма: чем больше объём, тем ниже ставка</div>
+            <ul class="pricing-list">
+              <li>Ставка на хранение рассматривается индивидуально под ваш объём</li>
+              <li>Чем больше объём, тем интереснее условия по хранению</li>
+              <li>Хорошо подходит для заявки на точный просчёт</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="lead-form">
+      <div class="container stack">
+        <div class="section-head">
+          <div>
+            <h2>Оставить заявку</h2>
+            <p>Заявка не потеряется: она сохраняется в системе и может сразу дублироваться уведомлением в Telegram.</p>
+          </div>
+        </div>
+
+        <div class="lead-wrap">
+          <div class="lead-copy">
+            <div class="eyebrow">Старт работы</div>
+            <h3 style="margin:0; font-size:30px; letter-spacing:-0.03em;">Расскажите о вашем объёме — и мы предложим понятную модель работы</h3>
+            <p style="margin-top:12px;">Форма собирает только базовые данные, которые действительно нужны для первого расчёта и понимания вашей задачи.</p>
+            <ul>
+              <li>Имя и способ связи</li>
+              <li>Средний объём заказов</li>
+              <li>Количество SKU в продаже</li>
+              <li>Комментарий по товару, задачам и ожиданиям</li>
+            </ul>
+          </div>
+
+          <div class="lead-form-card">
+            <form id="siteLeadForm" class="lead-form">
+              <label>
+                Имя
+                <input type="text" name="name" placeholder="Как к вам обращаться" required />
+              </label>
+
+              <label>
+                Телефон или Telegram
+                <input type="text" name="contact" placeholder="Телефон, @username или ссылка на Telegram" required />
+              </label>
+
+              <div class="lead-inline">
+                <label>
+                  Объём заказов
+                  <input type="text" name="orders_volume" placeholder="Например: 80–100 заказов в день" required />
+                </label>
+
+                <label>
+                  Количество SKU
+                  <input type="text" name="sku_count" placeholder="Например: 250 SKU" required />
+                </label>
+              </div>
+
+              <label>
+                Комментарий
+                <textarea name="comment" placeholder="Коротко опишите товар, задачи, маркетплейсы или пожелания"></textarea>
+              </label>
+
+              <div class="lead-actions">
+                <button type="submit" class="btn btn-primary">Отправить заявку</button>
+                <a class="btn btn-secondary" href="https://t.me/bfc_fulfilment" target="_blank" rel="noreferrer">Написать в Telegram</a>
+              </div>
+
+              <div id="leadStatus" class="lead-status"></div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="faq">
+      <div class="container stack">
+        <div class="section-head">
+          <div>
+            <h2>Ответы на частые вопросы</h2>
+            <p>Здесь закрываем базовые сомнения клиента до первого контакта.</p>
+          </div>
+        </div>
+
+        <div class="faq-list">
+          <div class="faq-item open">
+            <button class="faq-question" type="button">С какими маркетплейсами вы работаете?<span>+</span></button>
+            <div class="faq-answer">Структура сайта рассчитана на работу с маркетплейсами и в первую очередь может подсвечивать твой опыт с Wildberries. При необходимости блок легко расширяется под другие площадки.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question" type="button">Как я буду контролировать остатки и заказы?<span>+</span></button>
+            <div class="faq-answer">Через личный кабинет BFC24. Главная идея сайта — показать, что клиент получает не только складскую услугу, но и прозрачный цифровой контур.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question" type="button">Можно ли работать с небольшими объёмами?<span>+</span></button>
+            <div class="faq-answer">Да. Конкретные условия ты потом подставишь в этот блок, но структура лендинга уже позволяет подать это аккуратно и без перегруза деталями.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question" type="button">Есть ли скрытые платежи?<span>+</span></button>
+            <div class="faq-answer">В текущей версии HTML специально заложен акцент на прозрачность. Рядом с тарифами можно будет усилить это обещание отдельным подблоком.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question" type="button">Можно ли потом развить сайт в SaaS-направление?<span>+</span></button>
+            <div class="faq-answer">Да. Структура собрана так, чтобы сейчас сайт продавал фулфилмент, а позже его можно было расширить под более нейтральную архитектуру бренда и SaaS-направление BFC24.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="cta">
+      <div class="container">
+        <div class="cta-box">
+          <div>
+            <div class="eyebrow" style="background: rgba(255,255,255,0.12); color:#fff;">Следующий шаг</div>
+            <h2>Готовы передать операционку и навести порядок в фулфилменте?</h2>
+            <p>
+              Оставьте заявку, чтобы обсудить ваш ассортимент, объём и формат работы.
+              А если вы уже клиент BFC24 — вход в кабинет всегда доступен прямо с сайта.
+            </p>
+          </div>
+          <div class="cta-actions">
+            <a class="btn btn-primary" href="#lead-form">Оставить заявку</a>
+            <a class="btn btn-secondary" href="https://t.me/bfc_fulfilment" target="_blank" rel="noreferrer">Telegram</a>
+            <a class="btn btn-secondary" href="https://wa.me/79260450729" target="_blank" rel="noreferrer">WhatsApp</a>
+            <a class="btn btn-secondary" href="/login.html">Войти в кабинет</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div>
+        <strong>BFC24</strong><br />
+        BFC24 — фулфилмент для маркетплейсов с фокусом на прозрачный учет и автоматизацию процессов.
+      </div>
+      <div>
+        Телефон: 8 926 045-07-29 · Telegram: @bfc_fulfilment · WhatsApp: 8 926 045-07-29
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.faq-question').forEach((button) => {
+      button.addEventListener('click', () => {
+        const item = button.parentElement;
+        const isOpen = item.classList.contains('open');
+        document.querySelectorAll('.faq-item').forEach((el) => el.classList.remove('open'));
+        if (!isOpen) item.classList.add('open');
+      });
+    });
+
+    const leadForm = document.getElementById('siteLeadForm');
+    const leadStatus = document.getElementById('leadStatus');
+
+    if (leadForm && leadStatus) {
+      leadForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        leadStatus.className = 'lead-status';
+        leadStatus.textContent = 'Отправляем заявку...';
+
+        const formData = new FormData(leadForm);
+        const payload = {
+          name: (formData.get('name') || '').toString().trim(),
+          contact: (formData.get('contact') || '').toString().trim(),
+          orders_volume: (formData.get('orders_volume') || '').toString().trim(),
+          sku_count: (formData.get('sku_count') || '').toString().trim(),
+          comment: (formData.get('comment') || '').toString().trim()
+        };
+
+        try {
+          const response = await fetch('/api/site-leads', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            throw new Error(data.error || 'Не удалось отправить заявку');
+          }
+
+          leadStatus.className = 'lead-status lead-success';
+          leadStatus.textContent = 'Заявка успешно отправлена. Мы скоро свяжемся с вами.';
+          leadForm.reset();
+        } catch (error) {
+          leadStatus.className = 'lead-status lead-error';
+          leadStatus.textContent = error.message || 'Ошибка отправки заявки';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

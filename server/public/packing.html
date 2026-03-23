@@ -67,7 +67,6 @@
       letter-spacing: 0.5px;
     }
 
-    /* Статусы */
     .status-chip {
       padding: 4px 10px;
       border-radius: 20px;
@@ -79,7 +78,6 @@
     .status-working { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
     .status-done { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
 
-    /* Поля задания */
     .task-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -94,7 +92,6 @@
     .task-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
     .task-value { font-size: 14px; font-weight: 700; color: var(--text-main); }
 
-    /* Кнопки ТСД */
     .btn-row { display: flex; gap: 8px; margin-top: 10px; }
     button {
       flex: 1;
@@ -115,7 +112,6 @@
     .btn-confirm-big { background: var(--success); color: white; height: 60px; font-size: 16px; width: 100%; box-shadow: 0 4px 6px rgba(22,163,74,0.3); }
     button:disabled { background: #d1d5db !important; color: #9ca3af !important; box-shadow: none !important; }
 
-    /* Сканирование */
     .scan-box { margin: 10px 0; }
     input[type="text"] {
       width: 100%;
@@ -131,7 +127,6 @@
     input[type="text"]:focus { border-color: var(--primary); outline: none; }
     input[type="text"]:disabled { background: #f3f4f6; border-color: #e5e7eb; }
 
-    /* Медиа блоки */
     .media-wrap { display: flex; gap: 10px; margin-bottom: 10px; }
     .media-item { flex: 1; text-align: center; }
     .img-placeholder {
@@ -157,7 +152,6 @@
     }
     .media-label { font-size: 10px; font-weight: 700; margin-top: 4px; color: var(--text-muted); }
 
-    /* Состав отгрузки карточками (для ТСД) */
     .item-card {
       border: 1px solid #e5e7eb;
       border-radius: 10px;
@@ -167,21 +161,19 @@
     }
     .item-card.row-ok, tr.row-ok { background: #f0fdf4 !important; }
     .item-card.row-ok { border-color: #bbf7d0; }
-    
+
     .item-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; display: block; }
     .item-details { display: flex; justify-content: space-between; font-size: 11px; }
     .item-barcode { color: var(--text-muted); font-family: monospace; }
     .item-qty-tag { font-weight: 800; color: var(--primary); font-size: 14px; }
     .status-ok-text { color: var(--success); }
 
-    /* Сообщения */
     .msg { padding: 12px; border-radius: 8px; font-size: 13px; font-weight: 600; margin: 8px 0; display: none; }
     .error { display: block; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
     .success { display: block; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
 
     .empty-text { font-size: 13px; color: #9ca3af; margin-top: 4px; }
 
-    /* Desktop Таблица */
     #shipment-lines-wrapper table { width: 100%; border-collapse: collapse; display: none; margin-top: 10px; }
     th, td { padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: left; font-size: 12px; }
     th { background: #f9fafb; color: var(--text-muted); }
@@ -225,13 +217,13 @@
       <div class="media-wrap">
         <div class="media-item">
           <div id="photo-box">
-             <div class="img-placeholder">НЕТ ФОТО</div>
+            <div class="img-placeholder">НЕТ ФОТО</div>
           </div>
           <div class="media-label">ТОВАР (WB)</div>
         </div>
         <div class="media-item">
           <div id="sticker-box">
-             <div class="img-placeholder">НЕТ СТИКЕРА</div>
+            <div class="img-placeholder">НЕТ СТИКЕРА</div>
           </div>
           <div class="media-label">СТИКЕР (WB)</div>
         </div>
@@ -424,11 +416,11 @@
           <div class="item-card ${isOk ? 'row-ok' : ''}">
             <span class="item-name">${row.item_name || 'Без названия'}</span>
             <div class="item-details">
-               <div>
-                  <div class="item-barcode">ШК: ${row.barcode || '—'}</div>
-                  <div class="item-barcode">WB: ${row.wb_sticker_code || '—'}</div>
-               </div>
-               <div class="item-qty-tag ${isOk ? 'status-ok-text' : ''}">${statusText}</div>
+              <div>
+                <div class="item-barcode">ШК: ${row.barcode || '—'}</div>
+                <div class="item-barcode">WB: ${row.wb_sticker_code || '—'}</div>
+              </div>
+              <div class="item-qty-tag ${isOk ? 'status-ok-text' : ''}">${statusText}</div>
             </div>
           </div>
         `;
@@ -456,12 +448,16 @@
 
     async function loadCurrentTask() {
       const msgEl = document.getElementById('task-message');
-      msgEl.textContent = ''; msgEl.className = 'msg';
+      msgEl.textContent = '';
+      msgEl.className = 'msg';
+
       try {
         const data = await apiRequest('/packing/current', { method: 'GET' });
         currentShipment = data.shipment || null;
         currentLines = (data.lines || []).map(l => ({
-          ...l, qty: Number(l.qty || l.planned_qty || 0), packed_qty: Number(l.packed_qty || 0)
+          ...l,
+          qty: Number(l.qty || l.planned_qty || 0),
+          packed_qty: Number(l.packed_qty || 0)
         }));
         locationScanned = false;
         currentLocationCode = null;
@@ -470,18 +466,19 @@
         renderTaskInfo(currentShipment);
         renderLines();
         if (currentShipment) {
-           document.getElementById('scan-input').focus();
+          document.getElementById('scan-input').focus();
         }
       } catch (err) {
-        currentShipment = null; 
-        currentLines = []; 
+        currentShipment = null;
+        currentLines = [];
         locationScanned = false;
         currentLocationCode = null;
         currentStickerBase64 = null;
         currentPreviewUrl = null;
-        renderTaskInfo(null); 
+        renderTaskInfo(null);
         renderLines();
-        msgEl.textContent = err.message; msgEl.className = 'msg error';
+        msgEl.textContent = err.message;
+        msgEl.className = 'msg error';
       }
     }
 
@@ -489,20 +486,29 @@
       const btn = document.getElementById('btn-take-task');
       const msgEl = document.getElementById('task-message');
       btn.disabled = true;
-      msgEl.textContent = ''; msgEl.className = 'msg';
+      msgEl.textContent = '';
+      msgEl.className = 'msg';
+
       try {
         const data = await apiRequest('/packing/next', { method: 'POST' });
         currentShipment = data.shipment || null;
         currentLines = (data.lines || []).map(l => ({
-          ...l, qty: Number(l.qty || l.planned_qty || 0), packed_qty: Number(l.packed_qty || 0)
+          ...l,
+          qty: Number(l.qty || l.planned_qty || 0),
+          packed_qty: Number(l.packed_qty || 0)
         }));
-        locationScanned = false; currentLocationCode = null;
-        currentStickerBase64 = null; currentPreviewUrl = null;
-        renderTaskInfo(currentShipment); renderLines();
-        msgEl.textContent = 'Задание получено'; msgEl.className = 'msg success';
+        locationScanned = false;
+        currentLocationCode = null;
+        currentStickerBase64 = null;
+        currentPreviewUrl = null;
+        renderTaskInfo(currentShipment);
+        renderLines();
+        msgEl.textContent = 'Задание получено';
+        msgEl.className = 'msg success';
         document.getElementById('scan-input').focus();
       } catch (err) {
-        msgEl.textContent = err.message; msgEl.className = 'msg error';
+        msgEl.textContent = err.message;
+        msgEl.className = 'msg error';
       } finally {
         if (!currentShipment) btn.disabled = false;
       }
@@ -511,7 +517,8 @@
     async function handleScan(barcode) {
       const scanMsgEl = document.getElementById('scan-message');
       const scanInput = document.getElementById('scan-input');
-      scanMsgEl.textContent = ''; scanMsgEl.className = 'msg';
+      scanMsgEl.textContent = '';
+      scanMsgEl.className = 'msg';
 
       if (!barcode || !currentShipment) return;
       barcode = barcode.trim();
@@ -530,7 +537,6 @@
         const respLine = data.line || {};
         const respBarcode = String(respLine.barcode || barcode);
 
-        // Пошаговый поиск строки
         let row = null;
         if (respLine.id) {
           row = currentLines.find(l => String(l.id) === String(respLine.id));
@@ -546,7 +552,10 @@
         }
 
         if (row) {
-          row.packed_qty = respLine.packed_qty != null ? Number(respLine.packed_qty) : Math.min(Number(row.qty || 0), Number(row.packed_qty || 0) + 1);
+          row.packed_qty = respLine.packed_qty != null
+            ? Number(respLine.packed_qty)
+            : Math.min(Number(row.qty || 0), Number(row.packed_qty || 0) + 1);
+
           if (respLine.wb_sticker_code) row.wb_sticker_code = respLine.wb_sticker_code;
           if (respLine.wb_sticker) row.wb_sticker = respLine.wb_sticker;
           if (respLine.preview_url) row.preview_url = respLine.preview_url;
@@ -556,24 +565,29 @@
         if (respLine.wb_sticker) currentStickerBase64 = respLine.wb_sticker;
 
         renderLines();
-        scanMsgEl.textContent = 'Скан принят'; scanMsgEl.className = 'msg success';
+        scanMsgEl.textContent = 'Скан принят';
+        scanMsgEl.className = 'msg success';
 
-        if (respLine.wb_sticker) openStickerWindowAndPrint();
-        
+        // ВАЖНО:
+        // Браузерную печать после сканирования НЕ запускаем.
+        // Печать должна идти через backend -> wms.print_jobs -> Print Agent.
+
         if (allLinesScanned()) {
-           document.getElementById('scan-location-input').focus();
+          document.getElementById('scan-location-input').focus();
         } else {
-           scanInput.focus();
+          scanInput.focus();
         }
       } catch (err) {
-        scanMsgEl.textContent = err.message; scanMsgEl.className = 'msg error';
+        scanMsgEl.textContent = err.message;
+        scanMsgEl.className = 'msg error';
         scanInput.focus();
       }
     }
 
     async function handleLocationScan(code) {
       const msgEl = document.getElementById('confirm-message');
-      msgEl.textContent = ''; msgEl.className = 'msg';
+      msgEl.textContent = '';
+      msgEl.className = 'msg';
       if (!code) return;
       code = code.trim();
 
@@ -585,11 +599,13 @@
         const loc = data.location;
         currentLocationCode = loc.code || loc.location_code || code;
         locationScanned = true;
-        msgEl.textContent = `МХ ${currentLocationCode} принята`; msgEl.className = 'msg success';
+        msgEl.textContent = `МХ ${currentLocationCode} принята`;
+        msgEl.className = 'msg success';
         updateConfirmButtonState();
         document.getElementById('btn-confirm').focus();
       } catch (err) {
-        msgEl.textContent = err.message; msgEl.className = 'msg error';
+        msgEl.textContent = err.message;
+        msgEl.className = 'msg error';
         locationScanned = false;
         updateConfirmButtonState();
       }
@@ -598,19 +614,23 @@
     async function confirmPacking() {
       const btn = document.getElementById('btn-confirm');
       const msgEl = document.getElementById('confirm-message');
-      
-      msgEl.textContent = ''; msgEl.className = 'msg';
+
+      msgEl.textContent = '';
+      msgEl.className = 'msg';
 
       if (!currentShipment) {
-        msgEl.textContent = 'Нет активного задания'; msgEl.className = 'msg error';
+        msgEl.textContent = 'Нет активного задания';
+        msgEl.className = 'msg error';
         return;
       }
       if (!allLinesScanned()) {
-        msgEl.textContent = 'Не все товары упакованы'; msgEl.className = 'msg error';
+        msgEl.textContent = 'Не все товары упакованы';
+        msgEl.className = 'msg error';
         return;
       }
       if (!locationScanned) {
-        msgEl.textContent = 'Не отсканировано МХ стола'; msgEl.className = 'msg error';
+        msgEl.textContent = 'Не отсканировано МХ стола';
+        msgEl.className = 'msg error';
         return;
       }
 
@@ -625,18 +645,22 @@
           }),
         });
 
-        msgEl.textContent = 'Задание завершено успешно'; msgEl.className = 'msg success';
-        currentShipment = null; 
-        currentLines = []; 
+        msgEl.textContent = 'Задание завершено успешно';
+        msgEl.className = 'msg success';
+
+        currentShipment = null;
+        currentLines = [];
         locationScanned = false;
-        currentLocationCode = null; 
-        currentStickerBase64 = null; 
+        currentLocationCode = null;
+        currentStickerBase64 = null;
         currentPreviewUrl = null;
-        renderTaskInfo(null); 
+
+        renderTaskInfo(null);
         renderLines();
         updateConfirmButtonState();
       } catch (err) {
-        msgEl.textContent = err.message; msgEl.className = 'msg error';
+        msgEl.textContent = err.message;
+        msgEl.className = 'msg error';
         btn.disabled = false;
       }
     }
@@ -645,7 +669,10 @@
       if (!currentStickerBase64) return;
       const src = 'data:image/svg+xml;base64,' + currentStickerBase64;
       const printWindow = window.open('', '_blank', 'width=400,height=400');
-      if (!printWindow) { alert('Разрешите всплывающие окна'); return; }
+      if (!printWindow) {
+        alert('Разрешите всплывающие окна');
+        return;
+      }
       const doc = printWindow.document;
       doc.open();
       doc.write(`<html><body style="margin:0;display:flex;align-items:center;justify-content:center;"><img id="st" src="${src}" style="max-width:100%;"><script>const i=document.getElementById('st');i.onload=()=>{setTimeout(()=>{window.print();window.close();},100);};<\/script></body></html>`);
@@ -656,15 +683,27 @@
       document.getElementById('btn-take-task').onclick = takeTask;
       document.getElementById('btn-refresh-task').onclick = loadCurrentTask;
       document.getElementById('btn-confirm').onclick = confirmPacking;
-      document.getElementById('btn-print-sticker').onclick = openStickerWindowAndPrint;
+
+      document.getElementById('btn-print-sticker').onclick = () => {
+        alert('Браузерная печать отключена. Стикер должен печататься автоматически через Print Agent.');
+      };
 
       const scanInput = document.getElementById('scan-input');
-      scanInput.onkeydown = (e) => { if (e.key === 'Enter') { handleScan(e.target.value); e.target.value = ''; } };
+      scanInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          handleScan(e.target.value);
+          e.target.value = '';
+        }
+      };
 
       const locInput = document.getElementById('scan-location-input');
-      locInput.onkeydown = (e) => { if (e.key === 'Enter') { handleLocationScan(e.target.value); e.target.value = ''; } };
+      locInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          handleLocationScan(e.target.value);
+          e.target.value = '';
+        }
+      };
 
-      // Парсинг инфо пользователя из токена
       const token = getToken();
       if (token) {
         try {

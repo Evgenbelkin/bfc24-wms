@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Панель управления принтерами</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f4f7fa;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --blue: #2563eb;
+      --blue-dark: #1d4ed8;
+      --green: #16a34a;
+      --red: #dc2626;
+      --orange: #ea580c;
+      --gray: #475569;
+      --shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+      --radius: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 20px;
+      background: var(--blue);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(37, 99, 235, 0.25);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .brand {
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    header nav {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    header nav a {
+      color: #fff;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .toolbar-btn {
+      border: 1px solid rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .toolbar-btn:hover {
+      background: rgba(255,255,255,0.18);
+    }
+
+    main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .page-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    .page-title-wrap h1 {
+      margin: 0 0 6px 0;
+      font-size: 28px;
+      line-height: 1.1;
+    }
+
+    .page-title-wrap p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status-panel {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stat-chip {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      min-width: 140px;
+      box-shadow: var(--shadow);
+    }
+
+    .stat-chip-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    .stat-chip-value {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .alerts {
+      display: none;
+      margin-bottom: 16px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid #fecaca;
+      background: #fff1f2;
+      color: #991b1b;
+      white-space: pre-wrap;
+    }
+
+    .alerts.show {
+      display: block;
+    }
+
+    .section-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+
+    .section-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .section-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 800;
+      margin: 0;
+    }
+
+    .section-desc {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .section-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .btn:hover {
+      background: #f8fafc;
+    }
+
+    .btn-primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--blue-dark);
+      border-color: var(--blue-dark);
+    }
+
+    .btn-success {
+      background: #ecfdf5;
+      border-color: #bbf7d0;
+      color: #166534;
+    }
+
+    .btn-danger {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #b91c1c;
+    }
+
+    .btn-warning {
+      background: #fff7ed;
+      border-color: #fed7aa;
+      color: #c2410c;
+    }
+
+    .btn-small {
+      padding: 6px 10px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+    }
+
+    th, td {
+      padding: 12px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f8fafc;
+      color: #334155;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 800;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    tr:hover td {
+      background: #fafcff;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 800;
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .status-active {
+      background: #ecfdf5;
+      color: #166534;
+      border-color: #bbf7d0;
+    }
+
+    .status-inactive {
+      background: #f1f5f9;
+      color: #475569;
+      border-color: #cbd5e1;
+    }
+
+    .status-printed {
+      background: #ecfdf5;
+      color: #15803d;
+      border-color: #bbf7d0;
+    }
+
+    .status-error {
+      background: #fef2f2;
+      color: #dc2626;
+      border-color: #fecaca;
+    }
+
+    .status-pending {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-color: #bfdbfe;
+    }
+
+    .status-processing {
+      background: #fff7ed;
+      color: #c2410c;
+      border-color: #fed7aa;
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .empty-cell {
+      color: #94a3b8;
+      font-style: italic;
+    }
+
+    .footer-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        padding: 14px;
+      }
+
+      .page-title-wrap h1 {
+        font-size: 24px;
+      }
+
+      header {
+        padding: 12px 14px;
+      }
+
+      .header-right {
+        justify-content: flex-end;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="brand">BFC24 WMS</div>
+    <div class="subtitle">Панель управления принтерами</div>
+  </div>
+
+  <div class="header-right">
+    <button class="toolbar-btn" onclick="refreshAll(true)">Обновить сейчас</button>
+    <nav>
+      <a href="/menu.html">Меню</a>
+      <a href="/printer-panel.html">Принтеры</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="page-head">
+    <div class="page-title-wrap">
+      <h1>Управление принтерами</h1>
+      <p>Контроль принтеров, маршрутов печати и очереди заданий в реальном времени.</p>
+    </div>
+
+    <div class="status-panel">
+      <div class="stat-chip">
+        <div class="stat-chip-label">Принтеры</div>
+        <div class="stat-chip-value" id="statPrinters">0</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip-label">Активные маршруты</div>
+        <div class="stat-chip-value" id="statRoutes">0</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip-label">Ошибки печати</div>
+        <div class="stat-chip-value" id="statErrors">0</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip-label">Последнее обновление</div>
+        <div class="stat-chip-value" id="statUpdated" style="font-size:14px; line-height:1.2;">—</div>
+      </div>
+    </div>
+  </section>
+
+  <div id="alerts" class="alerts"></div>
+
+  <section class="section-card">
+    <div class="section-head">
+      <div class="section-title-wrap">
+        <h2 class="section-title">Список принтеров</h2>
+        <p class="section-desc">Физические и сетевые принтеры, доступные в WMS.</p>
+      </div>
+      <div class="section-actions">
+        <button class="btn btn-primary" onclick="addPrinterRow()">Добавить принтер</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="printersTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Код</th>
+            <th>Имя</th>
+            <th>IP / Port</th>
+            <th>Тип</th>
+            <th>Статус</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section-card">
+    <div class="section-head">
+      <div class="section-title-wrap">
+        <h2 class="section-title">Маршруты зон</h2>
+        <p class="section-desc">Правила выбора принтера по типу документа, складу и зоне.</p>
+      </div>
+      <div class="section-actions">
+        <button class="btn btn-primary" onclick="addRouteRow()">Добавить маршрут</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="routesTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Код маршрута</th>
+            <th>Тип документа</th>
+            <th>Склад</th>
+            <th>Зона</th>
+            <th>Принтер</th>
+            <th>Статус</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section-card">
+    <div class="section-head">
+      <div class="section-title-wrap">
+        <h2 class="section-title">Очередь печати</h2>
+        <p class="section-desc">Последние задания печати и их текущие статусы.</p>
+      </div>
+      <div class="section-actions">
+        <button class="btn" onclick="loadJobs(true)">Обновить очередь</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="jobsTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Job Code</th>
+            <th>Doc Type</th>
+            <th>Printer</th>
+            <th>Route</th>
+            <th>Status</th>
+            <th>Детали</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="footer-note">
+      Повтор печати сработает только если backend поддерживает создание нового print-job на основе существующего.
+    </div>
+  </section>
+</main>
+
+<script>
+const API = '/';
+let autoRefreshTimer = null;
+
+function getStoredToken() {
+  return (
+    localStorage.getItem('token') ||
+    localStorage.getItem('authToken') ||
+    localStorage.getItem('wmsToken') ||
+    sessionStorage.getItem('token') ||
+    sessionStorage.getItem('authToken') ||
+    ''
+  );
+}
+
+function clearAuthAndRedirect() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('wmsToken');
+  localStorage.removeItem('role');
+  localStorage.removeItem('user');
+  localStorage.removeItem('wmsRole');
+  localStorage.removeItem('wmsUser');
+
+  sessionStorage.removeItem('token');
+  sessionStorage.removeItem('authToken');
+
+  window.location.href = '/login.html';
+}
+
+function showAlert(message) {
+  const box = document.getElementById('alerts');
+  if (!message) {
+    box.textContent = '';
+    box.classList.remove('show');
+    return;
+  }
+  box.textContent = message;
+  box.classList.add('show');
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function formatStatusBadge(status, type = 'job') {
+  const raw = String(status || '').trim();
+  const normalized = raw.toLowerCase();
+
+  let cls = 'status-badge status-inactive';
+  let label = raw || '—';
+
+  if (type === 'active') {
+    if (raw === true || normalized === 'true' || normalized === 'активен' || normalized === 'active') {
+      cls = 'status-badge status-active';
+      label = 'активен';
+    } else {
+      cls = 'status-badge status-inactive';
+      label = 'неактивен';
+    }
+    return `<span class="${cls}">${escapeHtml(label)}</span>`;
+  }
+
+  if (normalized === 'printed' || normalized === 'done' || normalized === 'success') {
+    cls = 'status-badge status-printed';
+  } else if (normalized === 'error' || normalized === 'failed') {
+    cls = 'status-badge status-error';
+  } else if (normalized === 'new' || normalized === 'pending' || normalized === 'queued') {
+    cls = 'status-badge status-pending';
+  } else if (normalized === 'processing' || normalized === 'printing' || normalized === 'running') {
+    cls = 'status-badge status-processing';
+  }
+
+  return `<span class="${cls}">${escapeHtml(label)}</span>`;
+}
+
+function setLastUpdated() {
+  const el = document.getElementById('statUpdated');
+  const now = new Date();
+  el.textContent = now.toLocaleTimeString('ru-RU');
+}
+
+function setStats({ printers = 0, activeRoutes = 0, errors = 0 } = {}) {
+  document.getElementById('statPrinters').textContent = String(printers);
+  document.getElementById('statRoutes').textContent = String(activeRoutes);
+  document.getElementById('statErrors').textContent = String(errors);
+  setLastUpdated();
+}
+
+async function apiFetch(path, options = {}) {
+  const token = getStoredToken();
+
+  if (!token) {
+    clearAuthAndRedirect();
+    throw new Error('Токен авторизации не найден');
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...(options.headers || {})
+  };
+
+  const response = await fetch(`${API}${path}`, {
+    ...options,
+    headers
+  });
+
+  if (response.status === 401) {
+    alert('Сессия истекла или токен недействителен. Выполните вход заново.');
+    clearAuthAndRedirect();
+    throw new Error('401 Unauthorized');
+  }
+
+  let data = null;
+  const contentType = response.headers.get('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    data = await response.json();
+  } else {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || `HTTP ${response.status}`);
+  }
+
+  return data;
+}
+
+function getJobErrorText(job) {
+  return (
+    job?.error_message ||
+    job?.error ||
+    job?.last_error ||
+    job?.comment ||
+    job?.message ||
+    'Текст ошибки в ответе API отсутствует.'
+  );
+}
+
+async function retryJob(job) {
+  const jobId = Number(job?.id);
+  if (!jobId) {
+    alert('Некорректный job id');
+    return;
+  }
+
+  try {
+    await apiFetch(`print-jobs/${jobId}/retry`, {
+      method: 'POST'
+    });
+
+    alert(`Задание ${jobId} отправлено на повтор.`);
+    await loadJobs(true);
+  } catch (err) {
+    alert(
+      `Повтор не выполнен.\n\n` +
+      `Скорее всего, на backend ещё нет маршрута POST /print-jobs/:id/retry.\n\n` +
+      `Текст ошибки:\n${err.message}`
+    );
+  }
+}
+
+// ------------------- Принтеры -------------------
+async function loadPrinters(showErrors = false) {
+  try {
+    const data = await apiFetch('printers');
+    const rows = data.data || [];
+    const tbody = document.querySelector('#printersTable tbody');
+    tbody.innerHTML = '';
+
+    rows.forEach((p) => {
+      const isActive = !!p.is_active;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${p.id ?? ''}</td>
+        <td class="mono">${escapeHtml(p.printer_code || '')}</td>
+        <td>${escapeHtml(p.printer_name || '')}</td>
+        <td class="mono">${escapeHtml((p.ip_address || '') + ((p.port || p.port === 0) ? ':' + p.port : '')) || '<span class="empty-cell">—</span>'}</td>
+        <td>${escapeHtml(p.printer_type || '')}</td>
+        <td>${formatStatusBadge(isActive ? 'активен' : 'неактивен', 'active')}</td>
+        <td>
+          <div class="row-actions">
+            <button class="btn btn-small" onclick="editPrinter(${p.id})">Редактировать</button>
+            <button class="btn btn-small ${isActive ? 'btn-danger' : 'btn-success'}" onclick="togglePrinterActive(${p.id}, ${isActive})">
+              ${isActive ? 'Отключить' : 'Активировать'}
+            </button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    return rows;
+  } catch (err) {
+    console.error('loadPrinters error:', err);
+    if (showErrors) showAlert(`Ошибка загрузки принтеров:\n${err.message}`);
+    return [];
+  }
+}
+
+async function addPrinterRow() {
+  try {
+    const code = prompt('Введите код принтера:');
+    if (!code) return;
+
+    const name = prompt('Введите имя принтера:');
+    if (!name) return;
+
+    const ip = prompt('IP адрес:') || '';
+    const port = prompt('Порт:') || '';
+    const printerType = prompt('Тип принтера (например: label, a4, sticker):') || 'label';
+
+    await apiFetch('printers', {
+      method: 'POST',
+      body: JSON.stringify({
+        printer_code: code,
+        printer_name: name,
+        ip_address: ip,
+        port,
+        printer_type: printerType
+      })
+    });
+
+    await refreshAll(true);
+  } catch (err) {
+    alert(`Ошибка добавления принтера:\n${err.message}`);
+    console.error('addPrinterRow error:', err);
+  }
+}
+
+async function editPrinter(id) {
+  try {
+    const name = prompt('Новое имя принтера:');
+    if (!name) return;
+
+    await apiFetch(`printers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ printer_name: name })
+    });
+
+    await refreshAll(true);
+  } catch (err) {
+    alert(`Ошибка изменения принтера:\n${err.message}`);
+    console.error('editPrinter error:', err);
+  }
+}
+
+async function togglePrinterActive(id, currentState) {
+  try {
+    await apiFetch(`printers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: !currentState })
+    });
+
+    await refreshAll(true);
+  } catch (err) {
+    alert(`Ошибка изменения статуса принтера:\n${err.message}`);
+    console.error('togglePrinterActive error:', err);
+  }
+}
+
+// ------------------- Маршруты -------------------
+async function loadRoutes(showErrors = false) {
+  try {
+    const data = await apiFetch('printer-routes');
+    const rows = data.data || [];
+    const tbody = document.querySelector('#routesTable tbody');
+    tbody.innerHTML = '';
+
+    rows.forEach((r) => {
+      const isActive = !!r.is_active;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.id ?? ''}</td>
+        <td class="mono">${escapeHtml(r.route_code || '')}</td>
+        <td>${escapeHtml(r.doc_type || '')}</td>
+        <td class="mono">${escapeHtml(r.warehouse_code || '')}</td>
+        <td class="mono">${escapeHtml(r.zone_code || '')}</td>
+        <td>${escapeHtml(r.printer_name || '')}</td>
+        <td>${formatStatusBadge(isActive ? 'активен' : 'неактивен', 'active')}</td>
+        <td>
+          <div class="row-actions">
+            <button class="btn btn-small" onclick="editRoute(${r.id})">Редактировать</button>
+            <button class="btn btn-small ${isActive ? 'btn-danger' : 'btn-success'}" onclick="toggleRouteActive(${r.id}, ${isActive})">
+              ${isActive ? 'Отключить' : 'Активировать'}
+            </button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    return rows;
+  } catch (err) {
+    console.error('loadRoutes error:', err);
+    if (showErrors) showAlert(`Ошибка загрузки маршрутов:\n${err.message}`);
+    return [];
+  }
+}
+
+async function addRouteRow() {
+  try {
+    const code = prompt('Код маршрута:');
+    if (!code) return;
+
+    const doc = prompt('Тип документа:');
+    if (!doc) return;
+
+    const wh = prompt('Код склада:') || '';
+    const zone = prompt('Код зоны:') || '';
+    const printer = prompt('ID принтера:');
+    if (!printer) return;
+
+    await apiFetch('printer-routes', {
+      method: 'POST',
+      body: JSON.stringify({
+        route_code: code,
+        doc_type: doc,
+        warehouse_code: wh,
+        zone_code: zone,
+        printer_id: Number(printer)
+      })
+    });
+
+    await refreshAll(true);
+  } catch (err) {
+    alert(`Ошибка добавления маршрута:\n${err.message}`);
+    console.error('addRouteRow error:', err);
+  }
+}
+
+async function editRoute(id) {
+  try {
+    const code = prompt('Новый код маршрута:');
+    if (!code) return;
+
+    await apiFetch(`printer-routes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ route_code: code })
+    });
+
+    await refreshAll(true);
+  } catch (err) {
+    alert(`Ошибка изменения маршрута:\n${err.message}`);
+    console.error('editRoute error:', err);
+  }
+}
+
+async function toggleRouteActive(id, currentState) {
+  try {
+    await apiFetch(`printer-routes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: !currentState })
+    });
+
+    await refreshAll(true);
+  } catch (err) {
+    alert(`Ошибка изменения статуса маршрута:\n${err.message}`);
+    console.error('toggleRouteActive error:', err);
+  }
+}
+
+// ------------------- Очередь печати -------------------
+async function loadJobs(showErrors = false) {
+  try {
+    const data = await apiFetch('print-jobs');
+    const rows = data.data || [];
+    const tbody = document.querySelector('#jobsTable tbody');
+    tbody.innerHTML = '';
+
+    rows.forEach((j) => {
+      const normalizedStatus = String(j.status || '').toLowerCase();
+      const hasError = normalizedStatus === 'error' || normalizedStatus === 'failed';
+
+      const detailsText =
+        j.error_message ||
+        j.error ||
+        j.last_error ||
+        j.comment ||
+        j.message ||
+        '';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${j.id ?? ''}</td>
+        <td class="mono">${escapeHtml(j.job_code || '')}</td>
+        <td>${escapeHtml(j.doc_type || '')}</td>
+        <td>${escapeHtml(j.printer_name || '')}</td>
+        <td>${escapeHtml(j.route_code || '')}</td>
+        <td>${formatStatusBadge(j.status || '')}</td>
+        <td>${detailsText ? escapeHtml(detailsText) : '<span class="empty-cell">—</span>'}</td>
+        <td>
+          <div class="row-actions">
+            ${hasError ? `<button class="btn btn-small btn-warning" onclick="showJobErrorById(${j.id})">Ошибка</button>` : ''}
+            ${hasError ? `<button class="btn btn-small btn-primary" onclick="retryJobById(${j.id})">Повторить</button>` : ''}
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    return rows;
+  } catch (err) {
+    console.error('loadJobs error:', err);
+    if (showErrors) showAlert(`Ошибка загрузки очереди печати:\n${err.message}`);
+    return [];
+  }
+}
+
+let cachedJobs = [];
+
+function showJobErrorById(jobId) {
+  const job = cachedJobs.find(x => Number(x.id) === Number(jobId));
+  if (!job) {
+    alert('Job не найден в текущем списке.');
+    return;
+  }
+
+  const text = getJobErrorText(job);
+  alert(`Ошибка по job #${jobId}:\n\n${text}`);
+}
+
+async function retryJobById(jobId) {
+  const job = cachedJobs.find(x => Number(x.id) === Number(jobId));
+  if (!job) {
+    alert('Job не найден в текущем списке.');
+    return;
+  }
+  await retryJob(job);
+}
+
+// ------------------- Общая загрузка -------------------
+async function refreshAll(showErrors = false) {
+  if (showErrors) showAlert('');
+
+  const [printers, routes, jobs] = await Promise.all([
+    loadPrinters(showErrors),
+    loadRoutes(showErrors),
+    loadJobs(showErrors)
+  ]);
+
+  cachedJobs = jobs;
+
+  const activeRoutes = routes.filter(r => !!r.is_active).length;
+  const errors = jobs.filter(j => {
+    const s = String(j.status || '').toLowerCase();
+    return s === 'error' || s === 'failed';
+  }).length;
+
+  setStats({
+    printers: printers.length,
+    activeRoutes,
+    errors
+  });
+}
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(() => refreshAll(false), 3000);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await refreshAll(true);
+  startAutoRefresh();
+});
+</script>
+
+</body>
+</html>

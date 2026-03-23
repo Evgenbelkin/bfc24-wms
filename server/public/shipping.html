@@ -406,6 +406,7 @@
   let currentShipment = null;
   let currentLines = [];
   let lastPrintedQrBase64 = null;
+  let lastPrintJobId = null;
   let currentUserRole = null;
 
   function getToken() {
@@ -589,7 +590,7 @@
     try { data = await res.json(); } catch (_) {}
 
     if (!res.ok) {
-      throw new Error(data.message || 'Ошибка API');
+      throw new Error(data.message || data.error || 'Ошибка API');
     }
     return data;
   }
@@ -605,6 +606,7 @@
     confirmMsgEl.className = '';
     if (previewEl) previewEl.innerHTML = '';
     lastPrintedQrBase64 = null;
+    lastPrintJobId = null;
 
     try {
       const data = await apiRequest('/shipping/current', { method: 'GET' });
@@ -630,6 +632,7 @@
     msgEl.className = '';
     if (previewEl) previewEl.innerHTML = '';
     lastPrintedQrBase64 = null;
+    lastPrintJobId = null;
     document.getElementById('wg-input').value = '';
 
     try {
@@ -649,15 +652,6 @@
   function makeQrSrc(qrBase64) {
     if (!qrBase64) return null;
     return qrBase64.startsWith('data:image/') ? qrBase64 : 'data:image/png;base64,' + qrBase64;
-  }
-
-  function openQrWindowAndPrint(qrBase64) {
-    const src = makeQrSrc(qrBase64);
-    if (!src) return;
-    const printWindow = window.open('', '_blank', 'width=400,height=400');
-    if (!printWindow) return;
-    printWindow.document.write(`<html><body style="margin:0;display:flex;align-items:center;justify-content:center;"><img src="${src}" style="width:90%;" onload="window.print();window.close();"></body></html>`);
-    printWindow.document.close();
   }
 
   function renderQrPreview(qrBase64) {
@@ -705,12 +699,18 @@
       }
 
       lastPrintedQrBase64 = data.qr_base64;
+      lastPrintJobId = data.print_job_id || null;
       renderQrPreview(data.qr_base64);
-      openQrWindowAndPrint(data.qr_base64);
 
       inputEl.value = '';
-      msgEl.textContent = 'ОТГРУЖЕНО';
-      msgEl.className = 'success';
+
+      if (lastPrintJobId) {
+        msgEl.textContent = 'ОТГРУЖЕНО. QR ОТПРАВЛЕН В ОЧЕРЕДЬ ПЕЧАТИ';
+        msgEl.className = 'success';
+      } else {
+        msgEl.textContent = 'ОТГРУЖЕНО. QR ПОЛУЧЕН, НО ЗАДАНИЕ ПЕЧАТИ НЕ СОЗДАНО';
+        msgEl.className = 'error';
+      }
 
       currentShipment = null;
       currentLines = [];
@@ -722,9 +722,29 @@
     }
   }
 
-  function reprintQr() {
+  async function reprintQr() {
     if (!['owner', 'admin'].includes(currentUserRole)) return;
-    if (lastPrintedQrBase64) openQrWindowAndPrint(lastPrintedQrBase64);
+
+    const msgEl = document.getElementById('task-message');
+
+    if (!lastPrintJobId) {
+      msgEl.textContent = 'Нет print_job для перепечати';
+      msgEl.className = 'error';
+      return;
+    }
+
+    try {
+      const data = await apiRequest(`/print-jobs/${lastPrintJobId}/retry`, {
+        method: 'POST'
+      });
+
+      lastPrintJobId = data?.data?.id || lastPrintJobId;
+      msgEl.textContent = 'QR повторно отправлен в очередь печати';
+      msgEl.className = 'success';
+    } catch (err) {
+      msgEl.textContent = err.message || 'Ошибка повторной печати';
+      msgEl.className = 'error';
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {

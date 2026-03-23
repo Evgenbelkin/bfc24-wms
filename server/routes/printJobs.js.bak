@@ -1,0 +1,938 @@
+const express = require('express');
+const router = express.Router();
+
+const db = require('../db');
+const pool = db.pool || db;
+
+const { authRequired, requireRole } = require('../authMiddleware');
+
+function toBool(value, defaultValue = false) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const v = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y'].includes(v)) return true;
+    if (['false', '0', 'no', 'n'].includes(v)) return false;
+  }
+  return Boolean(value);
+}
+
+function toIntOrNull(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) ? n : null;
+}
+
+function qident(name) {
+  return `"${String(name).replace(/"/g, '""')}"`;
+}
+
+async function getTableColumns(schema, table) {
+  const result = await pool.query(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = $1
+      AND table_name = $2
+    ORDER BY ordinal_position
+    `,
+    [schema, table]
+  );
+  return result.rows.map(r => r.column_name);
+}
+
+function hasCol(columns, name) {
+  return columns.includes(name);
+}
+
+function pickExisting(body, columns, allowed) {
+  const out = {};
+  for (const key of allowed) {
+    if (!columns.includes(key)) continue;
+    if (!Object.prototype.hasOwnProperty.call(body || {}, key)) continue;
+    out[key] = body[key];
+  }
+  return out;
+}
+
+function normalizeValue(field, value) {
+  if (value === undefined) return value;
+
+  if (
+    [
+      'job_code',
+      'job_type',
+      'doc_type',
+      'status',
+      'payload',
+      'payload_json',
+      'error_text',
+      'notes',
+      'label_format',
+      'printer_code',
+      'route_code',
+      'warehouse_code',
+      'zone_code',
+      'entity_type',
+      'entity_code',
+      'ref_type',
+      'ref_code'
+    ].includes(field)
+  ) {
+    return value === null || value === '' ? null : String(value).trim();
+  }
+
+  if (
+    [
+      'printer_id',
+      'route_id',
+      'client_id',
+      'copies',
+      'created_by',
+      'updated_by',
+      'printed_by',
+      'entity_id'
+    ].includes(field)
+  ) {
+    return toIntOrNull(value);
+  }
+
+  if (['is_active'].includes(field)) {
+    return toBool(value, true);
+  }
+
+  return value;
+}
+
+// -----------------------------------------------------
+// GET /print-jobs
+// -----------------------------------------------------
+router.get('/', authRequired, async (req, res) => {
+  try {
+    const columns = await getTableColumns('wms', 'print_jobs');
+
+    const where = [];
+    const values = [];
+
+    const addFilter = (field, value) => {
+      if (!hasCol(columns, field)) return;
+      if (value === undefined || value === null || value === '') return;
+      values.push(value);
+      where.push(`pj.${qident(field)} = $${values.length}`);
+    };
+
+    addFilter('status', req.query.status);
+    addFilter('job_type', req.query.job_type);
+    addFilter('doc_type', req.query.doc_type);
+    addFilter('printer_id', toIntOrNull(req.query.printer_id));
+    addFilter('route_id', toIntOrNull(req.query.route_id));
+    addFilter('client_id', toIntOrNull(req.query.client_id));
+    addFilter('warehouse_code', req.query.warehouse_code);
+    addFilter('zone_code', req.query.zone_code);
+
+    let sql = `SELECT pj.*`;
+
+    if (hasCol(columns, 'printer_id')) {
+      sql += `,
+        p.printer_code,
+        p.printer_name
+      `;
+    }
+
+    if (hasCol(columns, 'route_id')) {
+      sql += `,
+        pr.route_code,
+        pr.doc_type AS route_doc_type
+      `;
+    }
+
+    sql += `
+      FROM wms.print_jobs pj
+    `;
+
+    if (hasCol(columns, 'printer_id')) {
+      sql += `
+        LEFT JOIN wms.printers p
+          ON p.id = pj.printer_id
+      `;
+    }
+
+    if (hasCol(columns, 'route_id')) {
+      sql += `
+        LEFT JOIN wms.printer_routes pr
+          ON pr.id = pj.route_id
+      `;
+    }
+
+    if (where.length) {
+      sql += ` WHERE ${where.join(' AND ')}`;
+    }
+
+    if (hasCol(columns, 'id')) {
+      sql += ` ORDER BY pj.id DESC`;
+    }
+
+    const result = await pool.query(sql, values);
+
+    return res.json({
+      ok: true,
+      data: result.rows
+    });
+  } catch (err) {
+    console.error('GET /print-jobs error:', err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+// -----------------------------------------------------
+// GET /print-jobs/:id
+// -----------------------------------------------------
+router.get('/:id', authRequired, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Некорректный id'
+      });
+    }
+
+    const columns = await getTableColumns('wms', 'print_jobs');
+
+    let sql = `SELECT pj.*`;
+
+    if (hasCol(columns, 'printer_id')) {
+      sql += `,
+        p.printer_code,
+        p.printer_name
+      `;
+    }
+
+    if (hasCol(columns, 'route_id')) {
+      sql += `,
+        pr.route_code,
+        pr.doc_type AS route_doc_type
+      `;
+    }
+
+    sql += `
+      FROM wms.print_jobs pj
+    `;
+
+    if (hasCol(columns, 'printer_id')) {
+      sql += `
+        LEFT JOIN wms.printers p
+          ON p.id = pj.printer_id
+      `;
+    }
+
+    if (hasCol(columns, 'route_id')) {
+      sql += `
+        LEFT JOIN wms.printer_routes pr
+          ON pr.id = pj.route_id
+      `;
+    }
+
+    sql += ` WHERE pj.id = $1`;
+
+    const result = await pool.query(sql, [id]);
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Задание печати не найдено'
+      });
+    }
+
+    return res.json({
+      ok: true,
+      data: result.rows[0]
+    });
+  } catch (err) {
+    console.error('GET /print-jobs/:id error:', err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+// -----------------------------------------------------
+// POST /print-jobs
+// -----------------------------------------------------
+router.post('/', authRequired, requireRole(['owner', 'admin']), async (req, res) => {
+  try {
+    const columns = await getTableColumns('wms', 'print_jobs');
+
+    const allowed = [
+      'job_code',
+      'job_type',
+      'doc_type',
+      'status',
+      'printer_id',
+      'route_id',
+      'client_id',
+      'warehouse_code',
+      'zone_code',
+      'payload',
+      'payload_json',
+      'label_format',
+      'copies',
+      'entity_type',
+      'entity_id',
+      'entity_code',
+      'ref_type',
+      'ref_code',
+      'notes',
+      'error_text',
+      'is_active'
+    ];
+
+    const body = pickExisting(req.body || {}, columns, allowed);
+
+    if (hasCol(columns, 'job_code') && (!body.job_code || !String(body.job_code).trim())) {
+      return res.status(400).json({
+        ok: false,
+        error: 'job_code обязателен'
+      });
+    }
+
+    if (hasCol(columns, 'doc_type') && (!body.doc_type || !String(body.doc_type).trim())) {
+      return res.status(400).json({
+        ok: false,
+        error: 'doc_type обязателен'
+      });
+    }
+
+    if (hasCol(columns, 'status') && !body.status) {
+      body.status = 'new';
+    }
+
+    if (hasCol(columns, 'copies') && body.copies === undefined) {
+      body.copies = 1;
+    }
+
+    if (hasCol(columns, 'created_by') && req.user?.id) {
+      body.created_by = req.user.id;
+    }
+
+    for (const key of Object.keys(body)) {
+      body[key] = normalizeValue(key, body[key]);
+    }
+
+    if (hasCol(columns, 'printer_id') && body.printer_id !== undefined && body.printer_id !== null) {
+      const printerCheck = await pool.query(
+        `SELECT id FROM wms.printers WHERE id = $1 LIMIT 1`,
+        [body.printer_id]
+      );
+      if (!printerCheck.rows.length) {
+        return res.status(400).json({
+          ok: false,
+          error: 'printer_id не найден в wms.printers'
+        });
+      }
+    }
+
+    if (hasCol(columns, 'route_id') && body.route_id !== undefined && body.route_id !== null) {
+      const routeCheck = await pool.query(
+        `SELECT id FROM wms.printer_routes WHERE id = $1 LIMIT 1`,
+        [body.route_id]
+      );
+      if (!routeCheck.rows.length) {
+        return res.status(400).json({
+          ok: false,
+          error: 'route_id не найден в wms.printer_routes'
+        });
+      }
+    }
+
+    if (hasCol(columns, 'job_code') && body.job_code) {
+      const dup = await pool.query(
+        `SELECT id, job_code FROM wms.print_jobs WHERE job_code = $1 LIMIT 1`,
+        [body.job_code]
+      );
+      if (dup.rows.length) {
+        return res.status(409).json({
+          ok: false,
+          error: 'Задание с таким job_code уже существует',
+          data: dup.rows[0]
+        });
+      }
+    }
+
+    // Автопроставление sent_at / printed_at при создании
+    if (hasCol(columns, 'status')) {
+      if (body.status === 'sent' && hasCol(columns, 'sent_at') && !Object.prototype.hasOwnProperty.call(body, 'sent_at')) {
+        body.sent_at = new Date();
+      }
+
+      if (body.status === 'printed' && hasCol(columns, 'printed_at') && !Object.prototype.hasOwnProperty.call(body, 'printed_at')) {
+        body.printed_at = new Date();
+      }
+    }
+
+    const keys = Object.keys(body).filter(k => columns.includes(k));
+    if (!keys.length) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Нет допустимых полей для вставки'
+      });
+    }
+
+    const values = keys.map(k => body[k]);
+
+    const sql = `
+      INSERT INTO wms.print_jobs (
+        ${keys.map(qident).join(', ')}
+      )
+      VALUES (
+        ${keys.map((_, i) => `$${i + 1}`).join(', ')}
+      )
+      RETURNING *
+    `;
+
+    const result = await pool.query(sql, values);
+
+    return res.status(201).json({
+      ok: true,
+      data: result.rows[0]
+    });
+  } catch (err) {
+    console.error('POST /print-jobs error:', err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+// -----------------------------------------------------
+// PATCH /print-jobs/:id
+// -----------------------------------------------------
+router.patch('/:id', authRequired, requireRole(['owner', 'admin']), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Некорректный id'
+      });
+    }
+
+    const columns = await getTableColumns('wms', 'print_jobs');
+
+    const currentRes = await pool.query(
+      `SELECT * FROM wms.print_jobs WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+
+    if (!currentRes.rows.length) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Задание печати не найдено'
+      });
+    }
+
+    const currentJob = currentRes.rows[0];
+
+    const allowed = [
+      'job_code',
+      'job_type',
+      'doc_type',
+      'status',
+      'printer_id',
+      'route_id',
+      'client_id',
+      'warehouse_code',
+      'zone_code',
+      'payload',
+      'payload_json',
+      'label_format',
+      'copies',
+      'entity_type',
+      'entity_id',
+      'entity_code',
+      'ref_type',
+      'ref_code',
+      'notes',
+      'error_text',
+      'is_active'
+    ];
+
+    const body = pickExisting(req.body || {}, columns, allowed);
+
+    if (hasCol(columns, 'updated_by') && req.user?.id) {
+      body.updated_by = req.user.id;
+    }
+
+    for (const key of Object.keys(body)) {
+      body[key] = normalizeValue(key, body[key]);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'job_code')) {
+      if (!body.job_code) {
+        return res.status(400).json({
+          ok: false,
+          error: 'job_code не может быть пустым'
+        });
+      }
+
+      const dup = await pool.query(
+        `SELECT id FROM wms.print_jobs WHERE job_code = $1 AND id <> $2 LIMIT 1`,
+        [body.job_code, id]
+      );
+      if (dup.rows.length) {
+        return res.status(409).json({
+          ok: false,
+          error: 'Задание с таким job_code уже существует'
+        });
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'printer_id') && body.printer_id !== null) {
+      const printerCheck = await pool.query(
+        `SELECT id FROM wms.printers WHERE id = $1 LIMIT 1`,
+        [body.printer_id]
+      );
+      if (!printerCheck.rows.length) {
+        return res.status(400).json({
+          ok: false,
+          error: 'printer_id не найден в wms.printers'
+        });
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'route_id') && body.route_id !== null) {
+      const routeCheck = await pool.query(
+        `SELECT id FROM wms.printer_routes WHERE id = $1 LIMIT 1`,
+        [body.route_id]
+      );
+      if (!routeCheck.rows.length) {
+        return res.status(400).json({
+          ok: false,
+          error: 'route_id не найден в wms.printer_routes'
+        });
+      }
+    }
+
+    // Логика статусов
+    if (Object.prototype.hasOwnProperty.call(body, 'status')) {
+      const newStatus = body.status;
+      const oldStatus = currentJob.status;
+
+      if (newStatus === 'sent' && newStatus !== oldStatus && hasCol(columns, 'sent_at')) {
+        if (!currentJob.sent_at) {
+          body.sent_at = new Date();
+        }
+      }
+
+      if (newStatus === 'printed' && newStatus !== oldStatus && hasCol(columns, 'printed_at')) {
+        if (!currentJob.printed_at) {
+          body.printed_at = new Date();
+        }
+      }
+
+      if (newStatus === 'error') {
+        if (!Object.prototype.hasOwnProperty.call(body, 'error_text')) {
+          body.error_text = currentJob.error_text || 'print_job_error';
+        }
+      }
+    }
+
+    const keys = Object.keys(body).filter(k => columns.includes(k));
+    if (!keys.length) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Нет полей для обновления'
+      });
+    }
+
+    const values = keys.map(k => body[k]);
+    const setParts = keys.map((k, i) => `${qident(k)} = $${i + 1}`);
+
+    if (hasCol(columns, 'updated_at')) {
+      setParts.push(`updated_at = now()`);
+    }
+
+    const sql = `
+      UPDATE wms.print_jobs
+      SET ${setParts.join(', ')}
+      WHERE id = $${values.length + 1}
+      RETURNING *
+    `;
+
+    const result = await pool.query(sql, [...values, id]);
+
+    return res.json({
+      ok: true,
+      data: result.rows[0]
+    });
+  } catch (err) {
+    console.error('PATCH /print-jobs/:id error:', err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+// -----------------------------------------------------
+// DELETE /print-jobs/:id
+// -----------------------------------------------------
+router.delete('/:id', authRequired, requireRole(['owner', 'admin']), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Некорректный id'
+      });
+    }
+
+    const result = await pool.query(
+      `
+      DELETE FROM wms.print_jobs
+      WHERE id = $1
+      RETURNING *
+      `,
+      [id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Задание печати не найдено'
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: 'Deleted',
+      data: result.rows[0]
+    });
+  } catch (err) {
+    console.error('DELETE /print-jobs/:id error:', err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+// -----------------------------------------------------
+// POST /print-jobs/create-by-route
+// -----------------------------------------------------
+router.post('/create-by-route', authRequired, requireRole(['owner', 'admin']), async (req, res) => {
+  try {
+    const columns = await getTableColumns('wms', 'print_jobs');
+
+    const {
+      job_code,
+      doc_type,
+      warehouse_code,
+      zone_code,
+      client_id,
+      payload,
+      payload_json,
+      copies,
+      entity_type,
+      entity_id,
+      ref_type,
+      ref_code,
+      notes
+    } = req.body || {};
+
+    if (!job_code || !String(job_code).trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: 'job_code обязателен'
+      });
+    }
+
+    if (!doc_type || !String(doc_type).trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: 'doc_type обязателен'
+      });
+    }
+
+    // 1. Ищем маршрут печати
+    const routeRes = await pool.query(
+      `
+      SELECT
+        pr.*,
+        p.printer_code,
+        p.printer_name
+      FROM wms.printer_routes pr
+      INNER JOIN wms.printers p
+        ON p.id = pr.printer_id
+      WHERE pr.is_active = true
+        AND p.is_active = true
+        AND pr.doc_type = $1
+        AND (pr.warehouse_code = $2 OR pr.warehouse_code IS NULL)
+        AND (pr.zone_code = $3 OR pr.zone_code IS NULL)
+        AND (pr.client_id = $4 OR pr.client_id IS NULL)
+      ORDER BY
+        CASE WHEN pr.client_id = $4 THEN 0 ELSE 1 END,
+        CASE WHEN pr.zone_code = $3 THEN 0 ELSE 1 END,
+        CASE WHEN pr.warehouse_code = $2 THEN 0 ELSE 1 END,
+        CASE WHEN pr.is_default = true THEN 0 ELSE 1 END,
+        pr.id
+      LIMIT 1
+      `,
+      [
+        String(doc_type).trim(),
+        warehouse_code ? String(warehouse_code).trim() : null,
+        zone_code ? String(zone_code).trim() : null,
+        client_id ? Number(client_id) : null
+      ]
+    );
+
+    if (!routeRes.rows.length) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Подходящий printer_route не найден'
+      });
+    }
+
+    const route = routeRes.rows[0];
+
+    // 2. Проверка дубля job_code
+    if (hasCol(columns, 'job_code')) {
+      const dup = await pool.query(
+        `SELECT id, job_code FROM wms.print_jobs WHERE job_code = $1 LIMIT 1`,
+        [String(job_code).trim()]
+      );
+
+      if (dup.rows.length) {
+        return res.status(409).json({
+          ok: false,
+          error: 'Задание с таким job_code уже существует',
+          data: dup.rows[0]
+        });
+      }
+    }
+
+    // 3. Собираем body под реальные колонки таблицы
+    const body = {};
+
+    if (hasCol(columns, 'job_code')) body.job_code = String(job_code).trim();
+    if (hasCol(columns, 'doc_type')) body.doc_type = String(doc_type).trim();
+    if (hasCol(columns, 'status')) body.status = 'new';
+    if (hasCol(columns, 'printer_id')) body.printer_id = Number(route.printer_id);
+    if (hasCol(columns, 'route_id')) body.route_id = Number(route.id);
+    if (hasCol(columns, 'client_id')) body.client_id = client_id ? Number(client_id) : null;
+    if (hasCol(columns, 'warehouse_code')) body.warehouse_code = warehouse_code ? String(warehouse_code).trim() : null;
+    if (hasCol(columns, 'zone_code')) body.zone_code = zone_code ? String(zone_code).trim() : null;
+    if (hasCol(columns, 'copies')) body.copies = copies ? Number(copies) : 1;
+    if (hasCol(columns, 'entity_type')) body.entity_type = entity_type ? String(entity_type).trim() : null;
+    if (hasCol(columns, 'entity_id')) body.entity_id = entity_id ? Number(entity_id) : null;
+    if (hasCol(columns, 'ref_type')) body.ref_type = ref_type ? String(ref_type).trim() : null;
+    if (hasCol(columns, 'ref_code')) body.ref_code = ref_code ? String(ref_code).trim() : null;
+    if (hasCol(columns, 'notes')) body.notes = notes ? String(notes).trim() : null;
+
+    if (hasCol(columns, 'payload') && payload !== undefined) {
+      body.payload = payload === null ? null : String(payload);
+    }
+
+    if (hasCol(columns, 'payload_json') && payload_json !== undefined) {
+      body.payload_json = payload_json === null ? null : JSON.stringify(payload_json);
+    }
+
+    if (hasCol(columns, 'created_by') && req.user?.id) {
+      body.created_by = req.user.id;
+    }
+
+    // 4. Нормализация значений
+    for (const key of Object.keys(body)) {
+      body[key] = normalizeValue(key, body[key]);
+    }
+
+    // 5. Создание print_job
+    const keys = Object.keys(body).filter(k => columns.includes(k));
+    const values = keys.map(k => body[k]);
+
+    const insertSql = `
+      INSERT INTO wms.print_jobs (
+        ${keys.map(qident).join(', ')}
+      )
+      VALUES (
+        ${keys.map((_, i) => `$${i + 1}`).join(', ')}
+      )
+      RETURNING *
+    `;
+
+    const insertRes = await pool.query(insertSql, values);
+
+    return res.status(201).json({
+      ok: true,
+      route: {
+        id: route.id,
+        route_code: route.route_code,
+        printer_id: route.printer_id,
+        printer_code: route.printer_code,
+        printer_name: route.printer_name
+      },
+      data: insertRes.rows[0]
+    });
+  } catch (err) {
+    console.error('POST /print-jobs/create-by-route error:', err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+// -----------------------------------------------------
+// POST /print-jobs/:id/retry
+// Повторная постановка задания в очередь печати
+// -----------------------------------------------------
+router.post('/:id/retry', authRequired, requireRole(['owner', 'admin']), async (req, res) => {
+  try {
+    const jobId = toIntOrNull(req.params.id);
+    if (!jobId) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Некорректный id print_job'
+      });
+    }
+
+    const columns = await getTableColumns('wms', 'print_jobs');
+
+    const originalRes = await pool.query(
+      `
+      SELECT pj.*
+      FROM wms.print_jobs pj
+      WHERE pj.id = $1
+      LIMIT 1
+      `,
+      [jobId]
+    );
+
+    if (!originalRes.rows.length) {
+      return res.status(404).json({
+        ok: false,
+        error: 'print_job не найден'
+      });
+    }
+
+    const original = originalRes.rows[0];
+    const retryBody = {};
+
+    const copyFields = [
+      'job_type',
+      'doc_type',
+      'printer_id',
+      'route_id',
+      'client_id',
+      'warehouse_code',
+      'zone_code',
+      'payload',
+      'payload_json',
+      'label_format',
+      'copies',
+      'entity_type',
+      'entity_id',
+      'entity_code',
+      'ref_type',
+      'ref_code',
+      'notes',
+      'is_active'
+    ];
+
+    for (const field of copyFields) {
+      if (hasCol(columns, field)) {
+        retryBody[field] = original[field];
+      }
+    }
+
+    if (hasCol(columns, 'job_code')) {
+      const oldCode = original.job_code ? String(original.job_code).trim() : `JOB-${jobId}`;
+      retryBody.job_code = `${oldCode}-RETRY-${Date.now()}`;
+    }
+
+    if (hasCol(columns, 'status')) {
+      retryBody.status = 'new';
+    }
+
+    if (hasCol(columns, 'error_text')) {
+      retryBody.error_text = null;
+    }
+
+    if (hasCol(columns, 'created_by') && req.user?.id) {
+      retryBody.created_by = req.user.id;
+    }
+
+    for (const key of Object.keys(retryBody)) {
+      let value = retryBody[key];
+
+      if (key === 'payload' || key === 'payload_json') {
+        if (value === undefined || value === null) {
+          value = null;
+        } else if (typeof value === 'object') {
+          value = JSON.stringify(value);
+        } else if (typeof value === 'string') {
+          const trimmed = value.trim();
+
+          if (!trimmed) {
+            value = null;
+          } else {
+            try {
+              JSON.parse(trimmed);
+              value = trimmed;
+            } catch (e) {
+              value = JSON.stringify({ raw: trimmed });
+            }
+          }
+        } else {
+          value = JSON.stringify(value);
+        }
+      } else {
+        value = normalizeValue(key, value);
+      }
+
+      retryBody[key] = value;
+    }
+
+    const keys = Object.keys(retryBody).filter(k => columns.includes(k));
+    if (!keys.length) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Нет допустимых полей для создания retry print_job'
+      });
+    }
+
+    const values = keys.map(k => retryBody[k]);
+
+    const insertSql = `
+      INSERT INTO wms.print_jobs (
+        ${keys.map(qident).join(', ')}
+      )
+      VALUES (
+        ${keys.map((_, i) => `$${i + 1}`).join(', ')}
+      )
+      RETURNING *
+    `;
+
+    const insertRes = await pool.query(insertSql, values);
+
+    return res.status(201).json({
+      ok: true,
+      message: 'Повторное задание печати создано',
+      source_job_id: original.id,
+      data: insertRes.rows[0]
+    });
+  } catch (err) {
+    console.error('POST /print-jobs/:id/retry error:', err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+module.exports = router;

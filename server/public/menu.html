@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -534,7 +534,7 @@
     { id: 'directories', icon: '📂', label: 'Склад и справочники', desc: 'Управление номенклатурой, ячейками и контрагентами' },
     { id: 'marketplaces', icon: '🌐', label: 'Маркетплейсы', desc: 'Синхронизация и работа с внешними торговыми площадками' },
     { id: 'analytics', icon: '📈', label: 'Отчёты', desc: 'Анализ эффективности и выгрузка складских данных' },
-    { id: 'admin', icon: '⚙️', label: 'Администрирование', desc: 'Системные настройки и управление пользователями' }
+    { id: 'admin', icon: '⚙️', label: 'Администрирование', desc: 'Системные настройки, заявки и управление пользователями' }
   ];
 
   const modules = [
@@ -558,8 +558,12 @@
     { code: 'receiving_report', section: 'analytics', icon: '📋', label: 'Отчёт по приёмке', desc: 'История и детали всех принятых товаров за период.', href: '/receiving-report.html' },
     { code: 'public_receiving', section: 'analytics', icon: '🌐', label: 'Публичная приёмка', desc: 'Отчёт для внешних клиентов без прямой авторизации.', href: '/publicreceiving-report.html' },
 
-    { code: 'admin_users', section: 'admin', icon: '👤', label: 'Пользователи', desc: 'Управление сотрудниками, ролями и правами доступа.', href: '/admin-users.html', badge: 'Скоро' },
-    { code: 'admin_tools', section: 'admin', icon: '🛠️', label: 'Сервис-инструменты', desc: 'Админка WB, очистка логов и технические настройки.', href: '/admin-tools.html' }
+    { code: 'admin_users', section: 'admin', icon: '👤', label: 'Пользователи', desc: 'Управление сотрудниками, ролями и правами доступа.', href: '/admin-users.html' },
+    { code: 'seller_users', section: 'admin', icon: '🧑‍💼', label: 'Селлеры', desc: 'Создание логинов и паролей для селлеров, привязка к клиенту и управление доступом в кабинет.', href: '/seller-users.html', badge: 'Новый' },
+    { code: 'leads', section: 'admin', icon: '📝', label: 'Заявки', desc: 'Входящие обращения с сайта, статусы, комментарии и планы по клиентам.', href: '/leads.html', badge: 'Новый' },
+    { code: 'admin_tools', section: 'admin', icon: '🛠️', label: 'Сервис-инструменты', desc: 'Админка WB, очистка логов и технические настройки.', href: '/admin-tools.html' },
+    { code: 'printer_panel', section: 'admin', icon: '🖨️', label: 'Панель принтеров', desc: 'Управление принтерами, маршрутами печати и очередью заданий.', href: '/printer-panel.html', badge: 'Новый' },
+    { code: 'wb_stock_control', section: 'admin', icon: '📡', label: 'WB FBS остатки', desc: 'Синхронизация складов WB, пересчёт распределения, dry-run и отправка остатков в WB.', href: '/wb-stock-control.html', badge: 'Новый' }
   ];
 
   const rolePermissions = {
@@ -576,15 +580,34 @@
     try {
       const parts = String(token || '').split('.');
       if (parts.length < 2) return null;
-      return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+      return JSON.parse(atob(padded));
     } catch (e) {
       return null;
     }
   }
 
+  function getStoredToken() {
+    return (
+      localStorage.getItem('token') ||
+      localStorage.getItem('authToken') ||
+      sessionStorage.getItem('token') ||
+      sessionStorage.getItem('authToken') ||
+      localStorage.getItem('wmsToken') ||
+      ''
+    );
+  }
+
   function getStoredUser() {
-    const rawUser = localStorage.getItem('wmsUser');
+    const rawUser =
+      localStorage.getItem('wmsUser') ||
+      localStorage.getItem('user') ||
+      '';
+
     if (!rawUser) return null;
+
     try {
       return JSON.parse(rawUser);
     } catch (e) {
@@ -593,20 +616,41 @@
   }
 
   function getUserData() {
-    const token = localStorage.getItem('wmsToken');
+    const token = getStoredToken();
     const jwt = parseJwt(token);
     const fallbackUser = getStoredUser();
 
-    const role = jwt?.role || localStorage.getItem('wmsRole') || 'guest';
+    const role =
+      jwt?.role ||
+      localStorage.getItem('wmsRole') ||
+      localStorage.getItem('role') ||
+      'guest';
 
-    let username =
+    const username =
       jwt?.username ||
       jwt?.login ||
+      jwt?.user ||
       (fallbackUser && (fallbackUser.username || fallbackUser.login || fallbackUser.name)) ||
       (typeof fallbackUser === 'string' ? fallbackUser : null) ||
       'unknown';
 
     return { username, role, token };
+  }
+
+  function clearAuthAndRedirect() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('role');
+
+    localStorage.removeItem('user');
+    localStorage.removeItem('wmsToken');
+    localStorage.removeItem('wmsRole');
+    localStorage.removeItem('wmsUser');
+
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('authToken');
+
+    window.location.href = '/login.html';
   }
 
   function getAllowedModules(role) {
@@ -624,9 +668,18 @@
     return 'badge';
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
   function createCardHtml(moduleItem) {
     const badgeHtml = moduleItem.badge
-      ? `<span class="${getBadgeClass(moduleItem.badge)}">${moduleItem.badge}</span>`
+      ? `<span class="${getBadgeClass(moduleItem.badge)}">${escapeHtml(moduleItem.badge)}</span>`
       : '';
 
     return `
@@ -635,14 +688,14 @@
           <span class="card-icon">${moduleItem.icon}</span>
           <div class="card-title-wrap">
             <div class="card-title-line">
-              <span class="card-title">${moduleItem.label}</span>
+              <span class="card-title">${escapeHtml(moduleItem.label)}</span>
               ${badgeHtml}
             </div>
           </div>
         </div>
-        <span class="card-desc">${moduleItem.desc}</span>
+        <span class="card-desc">${escapeHtml(moduleItem.desc)}</span>
         <div class="card-meta">
-          <span class="card-module-code">${moduleItem.code}</span>
+          <span class="card-module-code">${escapeHtml(moduleItem.code)}</span>
         </div>
         <span class="card-arrow">→</span>
       </a>
@@ -654,9 +707,9 @@
       <section class="section" id="section-${sectionItem.id}">
         <div class="section-header">
           <h2 class="section-title">
-            ${sectionItem.icon} ${sectionItem.label}
+            ${sectionItem.icon} ${escapeHtml(sectionItem.label)}
           </h2>
-          <div class="section-desc">${sectionItem.desc}</div>
+          <div class="section-desc">${escapeHtml(sectionItem.desc)}</div>
         </div>
         <div class="menu-grid">
           ${sectionModules.map((moduleItem) => createCardHtml(moduleItem)).join('')}
@@ -678,8 +731,15 @@
 
   function renderMenu() {
     const { username, role, token } = getUserData();
+
     if (!token) {
-      window.location.href = '/login.html';
+      clearAuthAndRedirect();
+      return;
+    }
+
+    const payload = parseJwt(token);
+    if (!payload) {
+      clearAuthAndRedirect();
       return;
     }
 
@@ -718,10 +778,7 @@
 
     btn.addEventListener('click', () => {
       if (confirm('Вы точно хотите выйти из системы?')) {
-        localStorage.removeItem('wmsToken');
-        localStorage.removeItem('wmsRole');
-        localStorage.removeItem('wmsUser');
-        window.location.href = '/login.html';
+        clearAuthAndRedirect();
       }
     });
   }

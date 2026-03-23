@@ -1,0 +1,17 @@
+{
+  "name": "printer-agent",
+  "version": "1.0.0",
+  "description": "",
+  "main": "agent.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.13.6",
+    "pdf-to-printer": "^5.7.0"
+  }
+}

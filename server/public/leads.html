@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Заявки</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #dbe3ef;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success: #16a34a;
+      --warning: #f59e0b;
+      --danger: #dc2626;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .topbar {
+      background: #0b1733;
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    .topbar small {
+      display: block;
+      opacity: 0.75;
+      margin-top: 4px;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: #fff;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .wrap {
+      padding: 20px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .kpi-card,
+    .filters,
+    .table-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .kpi-card {
+      padding: 18px;
+    }
+
+    .kpi-card small {
+      display: block;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .kpi-card strong {
+      font-size: 30px;
+      letter-spacing: -0.03em;
+    }
+
+    .filters {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr 0.8fr 0.8fr auto auto;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    input, select {
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0 12px;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+    }
+
+    .table-card {
+      overflow: hidden;
+    }
+
+    .table-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .table-head h2 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid #edf2f7;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f8fbff;
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    tr:hover td {
+      background: #f9fbff;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .status-new { background: #dbeafe; color: #1d4ed8; }
+    .status-in_progress { background: #fef3c7; color: #b45309; }
+    .status-waiting { background: #ede9fe; color: #6d28d9; }
+    .status-qualified { background: #dcfce7; color: #15803d; }
+    .status-won { background: #bbf7d0; color: #166534; }
+    .status-lost { background: #fee2e2; color: #b91c1c; }
+    .status-archive { background: #e5e7eb; color: #374151; }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .link-btn {
+      color: var(--primary);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    @media (max-width: 1200px) {
+      .filters-grid,
+      .kpi-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .topbar {
+        padding: 14px 16px;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .wrap {
+        padding: 14px;
+      }
+
+      .filters-grid,
+      .kpi-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .table-card {
+        overflow-x: auto;
+      }
+
+      table {
+        min-width: 1100px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Заявки</h1>
+      <small>Входящие лиды с сайта BFC24 и работа по ним внутри WMS</small>
+    </div>
+    <div class="top-actions">
+      <a class="btn" href="/menu.html">В меню</a>
+      <button class="btn btn-primary" onclick="loadLeads()">Обновить</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <small>Новые</small>
+        <strong id="kpiNew">0</strong>
+      </div>
+      <div class="kpi-card">
+        <small>В работе</small>
+        <strong id="kpiInProgress">0</strong>
+      </div>
+      <div class="kpi-card">
+        <small>Успешно</small>
+        <strong id="kpiWon">0</strong>
+      </div>
+      <div class="kpi-card">
+        <small>Не договорились</small>
+        <strong id="kpiLost">0</strong>
+      </div>
+    </section>
+
+    <section class="filters">
+      <div class="filters-grid">
+        <label>
+          Поиск
+          <input id="q" type="text" placeholder="Имя, контакт, комментарий, ID" />
+        </label>
+
+        <label>
+          Статус
+          <select id="status">
+            <option value="">Все</option>
+            <option value="new">Новая</option>
+            <option value="in_progress">В работе</option>
+            <option value="waiting">Ждём ответ</option>
+            <option value="qualified">Квалифицирована</option>
+            <option value="won">Успешно</option>
+            <option value="lost">Не договорились</option>
+            <option value="archive">Архив</option>
+          </select>
+        </label>
+
+        <label>
+          Дата от
+          <input id="date_from" type="date" />
+        </label>
+
+        <label>
+          Дата до
+          <input id="date_to" type="date" />
+        </label>
+
+        <button class="btn btn-primary" onclick="loadLeads()">Применить</button>
+        <button class="btn" onclick="resetFilters()">Сброс</button>
+      </div>
+    </section>
+
+    <section class="table-card">
+      <div class="table-head">
+        <h2>Список заявок</h2>
+        <div id="summary" class="muted">Загрузка...</div>
+      </div>
+
+      <div id="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Создано</th>
+              <th>Имя</th>
+              <th>Контакт</th>
+              <th>Объём</th>
+              <th>SKU</th>
+              <th>Статус</th>
+              <th>След. шаг</th>
+              <th>След. контакт</th>
+              <th>Последний комментарий</th>
+              <th>Действие</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    function getToken() {
+      return localStorage.getItem('token') ||
+             localStorage.getItem('authToken') ||
+             localStorage.getItem('wmsToken') ||
+             sessionStorage.getItem('token') ||
+             sessionStorage.getItem('authToken') ||
+             '';
+    }
+
+    function authHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + getToken()
+      };
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function formatDate(value) {
+      if (!value) return '—';
+      return new Date(value).toLocaleString('ru-RU');
+    }
+
+    function statusLabel(status) {
+      const map = {
+        new: 'Новая',
+        in_progress: 'В работе',
+        waiting: 'Ждём ответ',
+        qualified: 'Квалифицирована',
+        won: 'Успешно',
+        lost: 'Не договорились',
+        archive: 'Архив'
+      };
+      return map[status] || status || '—';
+    }
+
+    function renderKpi(rows) {
+      const count = (status) => rows.filter(r => r.status === status).length;
+      document.getElementById('kpiNew').textContent = count('new');
+      document.getElementById('kpiInProgress').textContent = count('in_progress');
+      document.getElementById('kpiWon').textContent = count('won');
+      document.getElementById('kpiLost').textContent = count('lost');
+    }
+
+    async function loadLeads() {
+      const tbody = document.getElementById('tbody');
+      const summary = document.getElementById('summary');
+
+      tbody.innerHTML = `<tr><td colspan="11" class="empty">Загрузка...</td></tr>`;
+      summary.textContent = 'Загрузка...';
+
+      const params = new URLSearchParams();
+      const q = document.getElementById('q').value.trim();
+      const status = document.getElementById('status').value;
+      const dateFrom = document.getElementById('date_from').value;
+      const dateTo = document.getElementById('date_to').value;
+
+      if (q) params.set('q', q);
+      if (status) params.set('status', status);
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+
+      try {
+        const res = await fetch('/leads?' + params.toString(), {
+          headers: authHeaders()
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Ошибка загрузки заявок');
+        }
+
+        const rows = data.rows || [];
+        summary.textContent = `Всего: ${rows.length}`;
+        renderKpi(rows);
+
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="11" class="empty">Заявки не найдены</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = rows.map(row => `
+          <tr>
+            <td>${row.id}</td>
+            <td>${escapeHtml(formatDate(row.created_at))}</td>
+            <td><strong>${escapeHtml(row.name)}</strong></td>
+            <td>${escapeHtml(row.contact)}</td>
+            <td>${escapeHtml(row.orders_volume || '—')}</td>
+            <td>${escapeHtml(row.sku_count || '—')}</td>
+            <td><span class="tag status-${escapeHtml(row.status)}">${escapeHtml(statusLabel(row.status))}</span></td>
+            <td>${escapeHtml(row.next_action || '—')}</td>
+            <td>${escapeHtml(formatDate(row.next_contact_at))}</td>
+            <td>${escapeHtml(row.last_comment || '—')}</td>
+            <td><a class="link-btn" href="/lead-details.html?id=${row.id}">Открыть</a></td>
+          </tr>
+        `).join('');
+      } catch (error) {
+        tbody.innerHTML = `<tr><td colspan="11" class="empty">${escapeHtml(error.message)}</td></tr>`;
+        summary.textContent = 'Ошибка';
+      }
+    }
+
+    function resetFilters() {
+      document.getElementById('q').value = '';
+      document.getElementById('status').value = '';
+      document.getElementById('date_from').value = '';
+      document.getElementById('date_to').value = '';
+      loadLeads();
+    }
+
+    loadLeads();
+  </script>
+</body>
+</html>

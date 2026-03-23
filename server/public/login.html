@@ -33,6 +33,7 @@
       font-weight: 600;
       margin-bottom: 4px;
     }
+
     .sub {
       font-size: 12px;
       color: #9ca3af;
@@ -75,8 +76,14 @@
       cursor: pointer;
       margin-top: 4px;
     }
+
     .btn-main:hover {
       background: #1d4ed8;
+    }
+
+    .btn-main:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
     }
 
     .status {
@@ -84,9 +91,11 @@
       margin-top: 8px;
       min-height: 16px;
     }
+
     .status.error {
       color: #f97373;
     }
+
     .status.ok {
       color: #6ee7b7;
     }
@@ -99,7 +108,7 @@
   <div class="sub">Вход в систему</div>
 
   <label for="username">Логин</label>
-  <input type="text" id="username" autocomplete="username" value="admin" />
+  <input type="text" id="username" autocomplete="username" value="" />
 
   <label for="password">Пароль</label>
   <input type="password" id="password" autocomplete="current-password" />
@@ -117,7 +126,130 @@
     if (type) el.classList.add(type);
   }
 
+  function clearStoredAuth() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('wmsToken');
+    localStorage.removeItem('wmsRole');
+    localStorage.removeItem('wmsUser');
+    localStorage.removeItem('seller_token');
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('role');
+    localStorage.removeItem('user');
+    localStorage.removeItem('sellerClientId');
+
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('authToken');
+    sessionStorage.removeItem('seller_token');
+    sessionStorage.removeItem('auth_token');
+  }
+
+  function saveAuth(data) {
+    const token = data.token;
+    const user = data.user || {};
+    const role = user.role || '';
+    const clientId = user.client_id || null;
+
+    localStorage.setItem('token', token);
+    localStorage.setItem('authToken', token);
+    localStorage.setItem('wmsToken', token);
+
+    localStorage.setItem('wmsRole', role);
+    localStorage.setItem('role', role);
+
+    localStorage.setItem('wmsUser', JSON.stringify(user));
+    localStorage.setItem('user', JSON.stringify(user));
+
+    if (clientId) {
+      localStorage.setItem('sellerClientId', String(clientId));
+    } else {
+      localStorage.removeItem('sellerClientId');
+    }
+
+    sessionStorage.setItem('token', token);
+    sessionStorage.setItem('authToken', token);
+  }
+
+  function getExistingToken() {
+    return (
+      localStorage.getItem('token') ||
+      localStorage.getItem('authToken') ||
+      localStorage.getItem('wmsToken') ||
+      sessionStorage.getItem('token') ||
+      sessionStorage.getItem('authToken') ||
+      ''
+    );
+  }
+
+  function parseJwt(token) {
+    try {
+      const parts = String(token || '').split('.');
+      if (parts.length < 2) return null;
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+      return JSON.parse(atob(padded));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isJwtExpired(payload) {
+    if (!payload || !payload.exp) return false;
+    const nowSec = Math.floor(Date.now() / 1000);
+    return nowSec >= Number(payload.exp);
+  }
+
+  function getStoredUser() {
+    const raw =
+      localStorage.getItem('wmsUser') ||
+      localStorage.getItem('user') ||
+      '';
+
+    if (!raw) return null;
+
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function redirectByRole(token) {
+    const jwtData = parseJwt(token);
+    const storedUser = getStoredUser();
+
+    if (!jwtData || isJwtExpired(jwtData)) {
+      clearStoredAuth();
+      return;
+    }
+
+    const role =
+      jwtData.role ||
+      storedUser?.role ||
+      localStorage.getItem('wmsRole') ||
+      localStorage.getItem('role') ||
+      '';
+
+    const clientId =
+      jwtData.client_id ||
+      storedUser?.client_id ||
+      localStorage.getItem('sellerClientId') ||
+      '';
+
+    if (role === 'seller') {
+      if (clientId) {
+        window.location.replace(`/seller-cabinet.html?client_id=${encodeURIComponent(clientId)}`);
+      } else {
+        window.location.replace('/seller-cabinet.html');
+      }
+      return;
+    }
+
+    window.location.replace('/menu.html');
+  }
+
   async function doLogin() {
+    const btn = document.getElementById('btnLogin');
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
 
@@ -126,6 +258,7 @@
       return;
     }
 
+    btn.disabled = true;
     setStatus('Вход...', null);
 
     try {
@@ -146,27 +279,30 @@
         return;
       }
 
-      // Ожидаем ответ формата { token, role, user }
-      const token = data.token;
-      const role  = data.role;
-      const user  = data.user || username;
-
+      const token = data && data.token;
       if (!token) {
+        console.error('LOGIN RESPONSE WITHOUT TOKEN', data);
         setStatus('Сервер не вернул токен', 'error');
         return;
       }
 
-      localStorage.setItem('wmsToken', token);
-      localStorage.setItem('wmsRole',  role  || '');
-      localStorage.setItem('wmsUser',  user  || '');
+      const payload = parseJwt(token);
+      if (!payload || isJwtExpired(payload)) {
+        setStatus('Сервер вернул некорректный токен', 'error');
+        clearStoredAuth();
+        return;
+      }
+
+      clearStoredAuth();
+      saveAuth(data);
 
       setStatus('Успешный вход, перенаправление...', 'ok');
-
-      // После логина сразу в меню
-      window.location.href = '/menu.html';
+      redirectByRole(token);
     } catch (e) {
       console.error(e);
       setStatus('Ошибка сети: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -176,6 +312,20 @@
     if (e.key === 'Enter') {
       doLogin();
     }
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const token = getExistingToken();
+
+    if (!token) return;
+
+    const payload = parseJwt(token);
+    if (!payload || isJwtExpired(payload)) {
+      clearStoredAuth();
+      return;
+    }
+
+    redirectByRole(token);
   });
 </script>
 

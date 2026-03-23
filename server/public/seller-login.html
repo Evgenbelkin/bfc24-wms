@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Вход селлера</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --text: #0f172a;
+      --muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+      color: var(--text);
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border: 1px solid rgba(15, 23, 42, 0.05);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 30px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .brand-badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: #2563eb;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+
+    .brand-title {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .brand-subtitle {
+      margin-top: 4px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .field-wrap {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .field {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 15px;
+      font-size: 15px;
+      outline: none;
+      background: #fff;
+    }
+
+    .field:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .btn {
+      width: 100%;
+      border: none;
+      cursor: pointer;
+      border-radius: 14px;
+      padding: 14px 18px;
+      font-size: 15px;
+      font-weight: 800;
+      background: var(--primary);
+      color: #fff;
+      transition: .15s ease;
+      margin-top: 6px;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    .btn:disabled {
+      opacity: .65;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-bottom: 16px;
+      min-height: 22px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .status.error { color: var(--danger); }
+    .status.ok { color: var(--success); }
+    .status.info { color: #1d4ed8; }
+
+    .note {
+      margin-top: 18px;
+      padding: 14px;
+      border-radius: 14px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-badge">B</div>
+      <div>
+        <div class="brand-title">Кабинет селлера</div>
+        <div class="brand-subtitle">BFC24 WMS — вход для клиентов фулфилмента</div>
+      </div>
+    </div>
+
+    <div class="status" id="statusBox"></div>
+
+    <div class="field-wrap">
+      <label class="field-label">Логин</label>
+      <input class="field" id="usernameInput" type="text" placeholder="Введите логин" />
+    </div>
+
+    <div class="field-wrap">
+      <label class="field-label">Пароль</label>
+      <input class="field" id="passwordInput" type="password" placeholder="Введите пароль" />
+    </div>
+
+    <button class="btn" id="btnLogin">Войти</button>
+
+    <div class="note">
+      После входа вы попадёте в свой кабинет и увидите только свои данные.
+    </div>
+  </div>
+
+  <script>
+    const statusBox = document.getElementById('statusBox');
+    const usernameInput = document.getElementById('usernameInput');
+    const passwordInput = document.getElementById('passwordInput');
+    const btnLogin = document.getElementById('btnLogin');
+
+    function setStatus(text, type = '') {
+      statusBox.textContent = text || '';
+      statusBox.className = 'status';
+      if (type) statusBox.classList.add(type);
+    }
+
+    function clearOldAuth() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('role');
+      localStorage.removeItem('user');
+
+      localStorage.removeItem('wmsToken');
+      localStorage.removeItem('wmsRole');
+      localStorage.removeItem('wmsUser');
+
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('authToken');
+      sessionStorage.removeItem('wmsToken');
+      sessionStorage.removeItem('wmsRole');
+      sessionStorage.removeItem('wmsUser');
+    }
+
+    async function loginSeller() {
+      const username = String(usernameInput.value || '').trim();
+      const password = String(passwordInput.value || '').trim();
+
+      if (!username || !password) {
+        setStatus('Введите логин и пароль', 'error');
+        return;
+      }
+
+      btnLogin.disabled = true;
+      setStatus('Выполняем вход...', 'info');
+
+      try {
+        const response = await fetch('/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.error || data.details || `HTTP ${response.status}`);
+        }
+
+        if (!data.token || !data.user) {
+          throw new Error('Сервер не вернул данные авторизации');
+        }
+
+        if (data.user.role !== 'seller') {
+          throw new Error('Эта учётная запись не является селлером');
+        }
+
+        if (!data.user.client_id) {
+          throw new Error('У seller-учётки не указан client_id');
+        }
+
+        clearOldAuth();
+
+        localStorage.setItem('wmsToken', data.token);
+        localStorage.setItem('wmsRole', data.user.role);
+        localStorage.setItem('wmsUser', JSON.stringify(data.user));
+
+        setStatus('Вход выполнен', 'ok');
+
+        setTimeout(() => {
+          window.location.href = '/seller-cabinet.html';
+        }, 250);
+      } catch (err) {
+        setStatus(`Ошибка входа: ${err.message || err}`, 'error');
+      } finally {
+        btnLogin.disabled = false;
+      }
+    }
+
+    btnLogin.addEventListener('click', loginSeller);
+
+    usernameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loginSeller();
+    });
+
+    passwordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loginSeller();
+    });
+  </script>
+</body>
+</html>

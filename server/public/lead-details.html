@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Карточка заявки</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #dbe3ef;
+      --primary: #2563eb;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .topbar {
+      background: #0b1733;
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    .topbar small {
+      display: block;
+      opacity: 0.75;
+      margin-top: 4px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: #fff;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .wrap {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .card h2 {
+      margin: 0 0 16px;
+      font-size: 22px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field small {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .field-value {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfdff;
+      padding: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    input, select, textarea {
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .status-line {
+      margin-top: 12px;
+      min-height: 22px;
+      color: var(--muted);
+    }
+
+    .comment-form {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .comment-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .comment-item {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fbfdff;
+      padding: 14px;
+    }
+
+    .comment-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .success { color: var(--success); }
+    .error { color: var(--danger); }
+
+    @media (max-width: 900px) {
+      .grid, .info-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .wrap {
+        padding: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1 id="pageTitle">Карточка заявки</h1>
+      <small>Детали заявки, статус, следующий шаг и история переговоров</small>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <a class="btn" href="/leads.html">К списку</a>
+      <a class="btn" href="/menu.html">В меню</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="grid">
+      <section class="card">
+        <h2>Данные клиента</h2>
+        <div class="info-grid">
+          <div class="field">
+            <small>ID</small>
+            <div id="leadId" class="field-value">—</div>
+          </div>
+          <div class="field">
+            <small>Статус</small>
+            <div id="leadStatusLabel" class="field-value">—</div>
+          </div>
+          <div class="field">
+            <small>Имя</small>
+            <div id="leadName" class="field-value">—</div>
+          </div>
+          <div class="field">
+            <small>Контакт</small>
+            <div id="leadContact" class="field-value">—</div>
+          </div>
+          <div class="field">
+            <small>Объём заказов</small>
+            <div id="leadOrders" class="field-value">—</div>
+          </div>
+          <div class="field">
+            <small>Количество SKU</small>
+            <div id="leadSku" class="field-value">—</div>
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <small>Комментарий с сайта</small>
+            <div id="leadComment" class="field-value">—</div>
+          </div>
+          <div class="field">
+            <small>Создано</small>
+            <div id="leadCreatedAt" class="field-value">—</div>
+          </div>
+          <div class="field">
+            <small>Обновлено</small>
+            <div id="leadUpdatedAt" class="field-value">—</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Работа по заявке</h2>
+
+        <label>
+          Статус
+          <select id="status">
+            <option value="new">Новая</option>
+            <option value="in_progress">В работе</option>
+            <option value="waiting">Ждём ответ</option>
+            <option value="qualified">Квалифицирована</option>
+            <option value="won">Успешно</option>
+            <option value="lost">Не договорились</option>
+            <option value="archive">Архив</option>
+          </select>
+        </label>
+
+        <label style="margin-top:12px;">
+          Следующий шаг / план
+          <textarea id="nextAction" placeholder="Например: созвониться, отправить условия, запросить фото товара"></textarea>
+        </label>
+
+        <label style="margin-top:12px;">
+          Дата следующего контакта
+          <input id="nextContactAt" type="datetime-local" />
+        </label>
+
+        <div class="actions">
+          <button class="btn btn-primary" onclick="saveLead()">Сохранить изменения</button>
+          <button class="btn" onclick="setQuickStatus('in_progress')">Взять в работу</button>
+          <button class="btn" onclick="setQuickStatus('won')">Успешно</button>
+          <button class="btn" onclick="setQuickStatus('lost')">Не договорились</button>
+        </div>
+
+        <div id="saveStatus" class="status-line"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>История комментариев</h2>
+
+      <div class="comment-form">
+        <label>
+          Новый комментарий
+          <textarea id="newComment" placeholder="Например: созвонились, клиенту нужен просчёт на 100 заказов в день, отправить КП завтра"></textarea>
+        </label>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="addComment()">Добавить комментарий</button>
+        </div>
+        <div id="commentStatus" class="status-line"></div>
+      </div>
+
+      <div id="commentsList" class="comment-list"></div>
+    </section>
+  </main>
+
+  <script>
+    const leadIdRaw = new URLSearchParams(location.search).get('id');
+    const leadId = Number(leadIdRaw);
+
+    if (!leadId || !Number.isFinite(leadId)) {
+      window.location.href = '/leads.html';
+    }
+
+    function getToken() {
+      return localStorage.getItem('token') ||
+             localStorage.getItem('authToken') ||
+             localStorage.getItem('wmsToken') ||
+             sessionStorage.getItem('token') ||
+             sessionStorage.getItem('authToken') ||
+             '';
+    }
+
+    function authHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + getToken()
+      };
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function formatDate(value) {
+      if (!value) return '—';
+      return new Date(value).toLocaleString('ru-RU');
+    }
+
+    function toDatetimeLocal(value) {
+      if (!value) return '';
+      const d = new Date(value);
+      const pad = (n) => String(n).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const mm = pad(d.getMonth() + 1);
+      const dd = pad(d.getDate());
+      const hh = pad(d.getHours());
+      const mi = pad(d.getMinutes());
+      return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+    }
+
+    function statusLabel(status) {
+      const map = {
+        new: 'Новая',
+        in_progress: 'В работе',
+        waiting: 'Ждём ответ',
+        qualified: 'Квалифицирована',
+        won: 'Успешно',
+        lost: 'Не договорились',
+        archive: 'Архив'
+      };
+      return map[status] || status || '—';
+    }
+
+    async function loadLead() {
+      const res = await fetch(`/leads/${leadId}`, { headers: authHeaders() });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Ошибка загрузки заявки');
+      }
+
+      const row = data.row;
+
+      document.getElementById('pageTitle').textContent = `Заявка #${row.id}`;
+      document.getElementById('leadId').textContent = row.id;
+      document.getElementById('leadStatusLabel').innerHTML = `<span class="tag">${escapeHtml(statusLabel(row.status))}</span>`;
+      document.getElementById('leadName').textContent = row.name || '—';
+      document.getElementById('leadContact').textContent = row.contact || '—';
+      document.getElementById('leadOrders').textContent = row.orders_volume || '—';
+      document.getElementById('leadSku').textContent = row.sku_count || '—';
+      document.getElementById('leadComment').textContent = row.comment || '—';
+      document.getElementById('leadCreatedAt').textContent = formatDate(row.created_at);
+      document.getElementById('leadUpdatedAt').textContent = formatDate(row.updated_at);
+
+      document.getElementById('status').value = row.status || 'new';
+      document.getElementById('nextAction').value = row.next_action || '';
+      document.getElementById('nextContactAt').value = toDatetimeLocal(row.next_contact_at);
+    }
+
+    async function loadComments() {
+      const list = document.getElementById('commentsList');
+      list.innerHTML = '<div class="muted">Загрузка комментариев...</div>';
+
+      const res = await fetch(`/leads/${leadId}/comments`, { headers: authHeaders() });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Ошибка загрузки комментариев');
+      }
+
+      const rows = data.rows || [];
+
+      if (!rows.length) {
+        list.innerHTML = '<div class="muted">Комментариев пока нет</div>';
+        return;
+      }
+
+      list.innerHTML = rows.map(row => `
+        <div class="comment-item">
+          <div class="comment-head">
+            <div><strong>${escapeHtml(row.created_by_username || 'Система')}</strong></div>
+            <div>${escapeHtml(formatDate(row.created_at))}</div>
+          </div>
+          <div>${escapeHtml(row.comment_text)}</div>
+        </div>
+      `).join('');
+    }
+
+    async function saveLead() {
+      const saveStatus = document.getElementById('saveStatus');
+      saveStatus.className = 'status-line';
+      saveStatus.textContent = 'Сохраняем...';
+
+      try {
+        const payload = {
+          status: document.getElementById('status').value,
+          next_action: document.getElementById('nextAction').value.trim(),
+          next_contact_at: document.getElementById('nextContactAt').value
+            ? new Date(document.getElementById('nextContactAt').value).toISOString()
+            : null
+        };
+
+        const res = await fetch(`/leads/${leadId}`, {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Ошибка сохранения');
+        }
+
+        saveStatus.className = 'status-line success';
+        saveStatus.textContent = 'Изменения сохранены';
+        await loadLead();
+      } catch (error) {
+        saveStatus.className = 'status-line error';
+        saveStatus.textContent = error.message;
+      }
+    }
+
+    function setQuickStatus(status) {
+      document.getElementById('status').value = status;
+      saveLead();
+    }
+
+    async function addComment() {
+      const commentStatus = document.getElementById('commentStatus');
+      const textarea = document.getElementById('newComment');
+      const text = textarea.value.trim();
+
+      if (!text) {
+        commentStatus.className = 'status-line error';
+        commentStatus.textContent = 'Комментарий пустой';
+        return;
+      }
+
+      commentStatus.className = 'status-line';
+      commentStatus.textContent = 'Сохраняем комментарий...';
+
+      try {
+        const res = await fetch(`/leads/${leadId}/comments`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ comment_text: text })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Ошибка добавления комментария');
+        }
+
+        textarea.value = '';
+        commentStatus.className = 'status-line success';
+        commentStatus.textContent = 'Комментарий добавлен';
+
+        await loadComments();
+        await loadLead();
+      } catch (error) {
+        commentStatus.className = 'status-line error';
+        commentStatus.textContent = error.message;
+      }
+    }
+
+    async function init() {
+      try {
+        await loadLead();
+        await loadComments();
+      } catch (error) {
+        alert(error.message || 'Ошибка загрузки');
+        window.location.href = '/leads.html';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

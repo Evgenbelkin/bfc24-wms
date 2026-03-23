@@ -23,6 +23,18 @@ function toIntOrNull(value) {
   return Number.isInteger(n) ? n : null;
 }
 
+// -------------------------------------------------------
+// DEBUG LOG ДЛЯ PRINTERS
+// -------------------------------------------------------
+router.use((req, res, next) => {
+  console.log('[ROUTES/PRINTERS]');
+  console.log('method:', req.method);
+  console.log('originalUrl:', req.originalUrl);
+  console.log('content-type:', req.headers['content-type']);
+  console.log('req.body:', req.body);
+  next();
+});
+
 // Получить все принтеры
 router.get('/', authRequired, async (req, res) => {
   try {
@@ -94,6 +106,8 @@ router.get('/:id', authRequired, async (req, res) => {
 // Добавить принтер
 router.post('/', authRequired, requireRole(['owner', 'admin']), async (req, res) => {
   try {
+    console.log('POST /printers BODY RAW =', req.body);
+
     const {
       printer_code,
       printer_name,
@@ -110,11 +124,21 @@ router.post('/', authRequired, requireRole(['owner', 'admin']), async (req, res)
       notes
     } = req.body || {};
 
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({
+        status: 400,
+        ok: false,
+        error: 'Тело запроса не распознано как JSON',
+        debug_body: req.body
+      });
+    }
+
     if (!printer_code || !String(printer_code).trim()) {
       return res.status(400).json({
         status: 400,
         ok: false,
-        error: 'printer_code обязателен'
+        error: 'printer_code обязателен',
+        debug_body: req.body
       });
     }
 
@@ -122,7 +146,27 @@ router.post('/', authRequired, requireRole(['owner', 'admin']), async (req, res)
       return res.status(400).json({
         status: 400,
         ok: false,
-        error: 'printer_name обязателен'
+        error: 'printer_name обязателен',
+        debug_body: req.body
+      });
+    }
+
+    const duplicate = await pool.query(
+      `
+      SELECT id, printer_code
+      FROM wms.printers
+      WHERE printer_code = $1
+      LIMIT 1
+      `,
+      [String(printer_code).trim()]
+    );
+
+    if (duplicate.rows.length > 0) {
+      return res.status(409).json({
+        status: 409,
+        ok: false,
+        error: 'Принтер с таким printer_code уже существует',
+        data: duplicate.rows[0]
       });
     }
 
@@ -165,8 +209,8 @@ router.post('/', authRequired, requireRole(['owner', 'admin']), async (req, res)
       ]
     );
 
-    return res.json({
-      status: 200,
+    return res.status(201).json({
+      status: 201,
       ok: true,
       data: result.rows[0]
     });
@@ -256,6 +300,49 @@ router.patch('/:id', authRequired, requireRole(['owner', 'admin']), async (req, 
       });
     }
 
+    if (Object.prototype.hasOwnProperty.call(payload, 'printer_code')) {
+      const newPrinterCode = payload.printer_code === null ? null : String(payload.printer_code).trim();
+
+      if (!newPrinterCode) {
+        return res.status(400).json({
+          status: 400,
+          ok: false,
+          error: 'printer_code не может быть пустым'
+        });
+      }
+
+      const duplicate = await pool.query(
+        `
+        SELECT id
+        FROM wms.printers
+        WHERE printer_code = $1
+          AND id <> $2
+        LIMIT 1
+        `,
+        [newPrinterCode, id]
+      );
+
+      if (duplicate.rows.length > 0) {
+        return res.status(409).json({
+          status: 409,
+          ok: false,
+          error: 'Принтер с таким printer_code уже существует'
+        });
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'printer_name')) {
+      const newPrinterName = payload.printer_name === null ? null : String(payload.printer_name).trim();
+
+      if (!newPrinterName) {
+        return res.status(400).json({
+          status: 400,
+          ok: false,
+          error: 'printer_name не может быть пустым'
+        });
+      }
+    }
+
     values.push(id);
 
     const result = await pool.query(
@@ -308,7 +395,7 @@ router.delete('/:id', authRequired, requireRole(['owner', 'admin']), async (req,
       `
       DELETE FROM wms.printers
       WHERE id = $1
-      RETURNING id
+      RETURNING *
       `,
       [id]
     );
@@ -324,7 +411,8 @@ router.delete('/:id', authRequired, requireRole(['owner', 'admin']), async (req,
     return res.json({
       status: 200,
       ok: true,
-      message: 'Deleted'
+      message: 'Принтер удалён',
+      data: result.rows[0]
     });
   } catch (err) {
     console.error('DELETE /printers/:id error:', err);

@@ -1,0 +1,8 @@
+{
+  "api_base_url": "http://localhost:3000",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGUiOiJvd25lciIsImlhdCI6MTc3MzI0NDM3MCwiZXhwIjoxNzczMjg3NTcwfQ.JA6045T7uotYH3Cwp-qPGz_G13ZIc48dOdo6UNUcBBA",
+  "printer_id": 4,
+  "printer_name": "Xprinter XP-D365B",
+  "poll_interval_ms": 1500,
+  "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+}
