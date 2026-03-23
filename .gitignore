@@ -1,6 +1,28 @@
-node_modules/
+# env
+server/.env
 .env
+
+# node
+node_modules/
+server/node_modules/
+
+# logs
 *.log
+
+# temp
+tmp/
+temp/
+*.tmp
+
+# printer agent garbage
+printer-agent/tmp/
+printer-agent/**/tmp/
+printer-agent/**/browser-profile/
+printer-agent/**/chrome-headless-profile/
+
+# misc
 *.txt
+
+# OS
 .DS_Store
-Thumbs.db
+Thumbs.dbb
