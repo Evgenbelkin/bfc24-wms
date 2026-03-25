@@ -83,6 +83,28 @@ async function syncOrdersToAnalytics(reqUser, body) {
   try {
     await client.query('BEGIN');
 
+    const accountCheckRes = await client.query(
+      `
+      SELECT id, wms_client_id, label, marketplace, is_active
+      FROM public.mp_accounts
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [mpAccountId]
+    );
+
+    if (accountCheckRes.rowCount === 0) {
+      throw new Error(`Аккаунт mp_accounts.id=${mpAccountId} не найден`);
+    }
+
+    const accountRow = accountCheckRes.rows[0];
+
+    if (Number(accountRow.wms_client_id) !== Number(clientId)) {
+      throw new Error(
+        `Аккаунт mp_accounts.id=${mpAccountId} не принадлежит client_id=${clientId}`
+      );
+    }
+
     const insertSyncRunSql = `
       INSERT INTO analytics.sync_runs (
         client_id,
@@ -112,9 +134,7 @@ async function syncOrdersToAnalytics(reqUser, body) {
 
     syncRunId = syncRunRes.rows[0].id;
 
-    const baseParams = [clientId, mpAccountId, body.date_from, body.date_to];
-    const deleteOrdersParams = [...baseParams];
-
+    const deleteOrdersParams = [clientId, mpAccountId, body.date_from, body.date_to];
     const deleteOrdersFulfillmentFilter = buildFulfillmentSqlFilter(
       fulfillmentModel,
       deleteOrdersParams,
@@ -131,12 +151,13 @@ async function syncOrdersToAnalytics(reqUser, body) {
         AND EXISTS (
           SELECT 1
           FROM public.mp_wb_orders src
-          INNER JOIN public.mp_client_accounts mca
-            ON mca.id = src.client_mp_account_id
-          WHERE mca.client_id = $1
+          INNER JOIN public.mp_accounts acc
+            ON acc.id = src.client_mp_account_id
+          WHERE acc.wms_client_id = $1
             AND src.client_mp_account_id = $2
             AND src.created_at >= $3::date
             AND src.created_at < ($4::date + INTERVAL '1 day')
+            AND src.wb_order_id IS NOT NULL
             AND src.wb_order_id::text = ao.external_order_id
             ${deleteOrdersFulfillmentFilter}
         )
@@ -169,7 +190,7 @@ async function syncOrdersToAnalytics(reqUser, body) {
         source_system
       )
       SELECT
-        mca.client_id AS client_id,
+        acc.wms_client_id AS client_id,
         src.client_mp_account_id AS mp_account_id,
         'wb' AS marketplace,
         CASE
@@ -192,20 +213,21 @@ async function syncOrdersToAnalytics(reqUser, body) {
         jsonb_build_object(
           'source_table', 'public.mp_wb_orders',
           'grouped_rows', COUNT(*),
-          'wb_order_id', src.wb_order_id
+          'wb_order_id', src.wb_order_id,
+          'source_mp_account_id', src.client_mp_account_id
         ) AS source_payload,
         'mp_wb_orders' AS source_system
       FROM public.mp_wb_orders src
-      INNER JOIN public.mp_client_accounts mca
-        ON mca.id = src.client_mp_account_id
-      WHERE mca.client_id = $1
+      INNER JOIN public.mp_accounts acc
+        ON acc.id = src.client_mp_account_id
+      WHERE acc.wms_client_id = $1
         AND src.client_mp_account_id = $2
         AND src.created_at >= $3::date
         AND src.created_at < ($4::date + INTERVAL '1 day')
         AND src.wb_order_id IS NOT NULL
         ${insertOrdersFulfillmentFilter}
       GROUP BY
-        mca.client_id,
+        acc.wms_client_id,
         src.client_mp_account_id,
         src.wb_order_id
     `;
@@ -242,7 +264,7 @@ async function syncOrdersToAnalytics(reqUser, body) {
       )
       SELECT
         ao.id AS sales_order_id,
-        mca.client_id AS client_id,
+        acc.wms_client_id AS client_id,
         src.client_mp_account_id AS mp_account_id,
         'wb' AS marketplace,
         CASE
@@ -279,14 +301,14 @@ async function syncOrdersToAnalytics(reqUser, body) {
         src.created_at AS order_date,
         src.raw AS source_payload
       FROM public.mp_wb_orders src
-      INNER JOIN public.mp_client_accounts mca
-        ON mca.id = src.client_mp_account_id
+      INNER JOIN public.mp_accounts acc
+        ON acc.id = src.client_mp_account_id
       INNER JOIN analytics.sales_orders ao
-        ON ao.client_id = mca.client_id
+        ON ao.client_id = acc.wms_client_id
        AND ao.mp_account_id = src.client_mp_account_id
        AND ao.external_order_id = src.wb_order_id::text
        AND ao.source_system = 'mp_wb_orders'
-      WHERE mca.client_id = $1
+      WHERE acc.wms_client_id = $1
         AND src.client_mp_account_id = $2
         AND src.created_at >= $3::date
         AND src.created_at < ($4::date + INTERVAL '1 day')
