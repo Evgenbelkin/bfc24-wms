@@ -30,6 +30,7 @@ const sellerItemSettingsRouter = require('./routes/sellerItemSettings');
 const siteLeadsRouter = require('./routes/siteLeads');
 const leadsRouter = require('./routes/leads');
 const sellerAnalyticsRoutes = require('./routes/sellerAnalytics');
+const sellerAnalyticsAdminRoutes = require('./routes/sellerAnalyticsAdmin');
 // ⬇️ WB API для складов/остатков
 const {
   fetchWbWarehouses,
@@ -80,6 +81,7 @@ app.use('/sellers', sellersRoutes);
 app.use('/seller-item-settings', sellerItemSettingsRouter);
 app.use(siteLeadsRouter);
 app.use(leadsRouter);
+app.use('/seller-analytics-admin', sellerAnalyticsAdminRoutes);
 
 // -------------------------------------------------------
 // ДАЛЕЕ ИДУТ ОСТАЛЬНЫЕ app.use(...), ROUTES И Т.Д.
