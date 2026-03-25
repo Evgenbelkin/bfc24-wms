@@ -29,7 +29,7 @@ const sellersRoutes = require('./routes/sellers');
 const sellerItemSettingsRouter = require('./routes/sellerItemSettings');
 const siteLeadsRouter = require('./routes/siteLeads');
 const leadsRouter = require('./routes/leads');
-
+const sellerAnalyticsRoutes = require('./routes/sellerAnalytics');
 // ⬇️ WB API для складов/остатков
 const {
   fetchWbWarehouses,
@@ -94,6 +94,8 @@ app.use('/printers', printersRouter);
 app.use('/printer-routes', printerRoutesRouter);
 
 app.use('/print-jobs', printJobsRouter);
+
+app.use('/seller-analytics', sellerAnalyticsRoutes);
 // ==============================
 // DEBUG: список зарегистрированных роутов
 // GET /debug/routes
