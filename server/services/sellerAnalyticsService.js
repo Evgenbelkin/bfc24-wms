@@ -4,16 +4,6 @@ function isValidDateOnly(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
 }
 
-function normalizeFulfillmentModel(value) {
-  const raw = String(value || 'all').trim().toLowerCase();
-
-  if (['all', 'fbs', 'fbo'].includes(raw)) {
-    return raw;
-  }
-
-  throw new Error('Некорректный fulfillment_model. Допустимо: all, fbs, fbo');
-}
-
 function normalizePositiveInt(value, fieldName) {
   const num = Number(value);
 
@@ -73,14 +63,12 @@ function validateBaseParams(reqUser, query) {
     throw new Error('date_from не может быть больше date_to');
   }
 
-  const fulfillmentModel = normalizeFulfillmentModel(query.fulfillment_model);
-
   return {
     clientId,
     mpAccountId,
     dateFrom: query.date_from,
     dateTo: query.date_to,
-    fulfillmentModel,
+    fulfillmentModel: 'all',
   };
 }
 
@@ -91,18 +79,21 @@ async function getOverview(reqUser, query) {
 
   return {
     ok: true,
+    source: 'analytics.wb_sales_normalized',
     filters: {
       client_id: params.clientId,
       mp_account_id: params.mpAccountId,
       date_from: params.dateFrom,
       date_to: params.dateTo,
-      fulfillment_model: params.fulfillmentModel,
+      fulfillment_model: 'all',
     },
     summary: {
       orders_count: Number(summary.orders_count || 0),
       revenue_total: Number(summary.revenue_total || 0),
       average_order_value: Number(summary.average_order_value || 0),
       items_sold: Number(summary.items_sold || 0),
+      returns_count: Number(summary.returns_count || 0),
+      returns_total: Number(summary.returns_total || 0),
     },
   };
 }
@@ -114,18 +105,21 @@ async function getSalesDaily(reqUser, query) {
 
   return {
     ok: true,
+    source: 'analytics.wb_sales_normalized',
     filters: {
       client_id: params.clientId,
       mp_account_id: params.mpAccountId,
       date_from: params.dateFrom,
       date_to: params.dateTo,
-      fulfillment_model: params.fulfillmentModel,
+      fulfillment_model: 'all',
     },
     rows: rows.map((row) => ({
       date: row.date,
       orders_count: Number(row.orders_count || 0),
       revenue_total: Number(row.revenue_total || 0),
       items_sold: Number(row.items_sold || 0),
+      returns_count: Number(row.returns_count || 0),
+      returns_total: Number(row.returns_total || 0),
     })),
   };
 }
@@ -145,12 +139,13 @@ async function getTopSkus(reqUser, query) {
 
   return {
     ok: true,
+    source: 'analytics.wb_sales_normalized',
     filters: {
       client_id: params.clientId,
       mp_account_id: params.mpAccountId,
       date_from: params.dateFrom,
       date_to: params.dateTo,
-      fulfillment_model: params.fulfillmentModel,
+      fulfillment_model: 'all',
       limit,
     },
     rows: rows.map((row) => ({
@@ -163,6 +158,8 @@ async function getTopSkus(reqUser, query) {
       revenue_total: Number(row.revenue_total || 0),
       avg_price: Number(row.avg_price || 0),
       orders_count: Number(row.orders_count || 0),
+      returns_count: Number(row.returns_count || 0),
+      returns_total: Number(row.returns_total || 0),
     })),
   };
 }
