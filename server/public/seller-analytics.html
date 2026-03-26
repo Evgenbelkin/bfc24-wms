@@ -402,13 +402,6 @@
       color: #111827;
     }
 
-    .metric-sub {
-      font-size: 12px;
-      color: #475569;
-      font-weight: 600;
-      line-height: 1.4;
-    }
-
     .metric-value {
       font-size: 20px;
       font-weight: 900;
@@ -510,10 +503,6 @@
       overflow: auto;
     }
 
-    .muted {
-      color: var(--muted);
-    }
-
     .right {
       text-align: right;
     }
@@ -547,7 +536,7 @@
           <div class="brand-subtitle">Seller Analytics</div>
         </div>
       </div>
-      <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+      <button type="button" class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
     </div>
 
     <nav class="sidebar-nav">
@@ -593,8 +582,8 @@
           </div>
         </div>
         <div class="topbar-right">
-          <button class="btn" onclick="goBack()">Назад</button>
-          <button class="btn btn-primary" onclick="loadAnalytics()">Обновить аналитику</button>
+          <button type="button" class="btn" onclick="goBack()">Назад</button>
+          <button type="button" class="btn btn-primary" onclick="refreshAndLoadAnalytics()">Обновить аналитику</button>
         </div>
       </div>
 
@@ -630,15 +619,15 @@
 
           <div class="field">
             <label>&nbsp;</label>
-            <button class="btn btn-primary" onclick="loadAnalytics()">Применить</button>
+            <button type="button" class="btn btn-primary" onclick="refreshAndLoadAnalytics()">Применить</button>
           </div>
         </div>
 
         <div class="quick-range">
-          <button class="quick-btn" onclick="setLastDays(7)">7 дней</button>
-          <button class="quick-btn" onclick="setLastDays(14)">14 дней</button>
-          <button class="quick-btn" onclick="setLastDays(30)">30 дней</button>
-          <button class="quick-btn" onclick="setCurrentMonth()">Текущий месяц</button>
+          <button type="button" class="quick-btn" onclick="setLastDays(7)">7 дней</button>
+          <button type="button" class="quick-btn" onclick="setLastDays(14)">14 дней</button>
+          <button type="button" class="quick-btn" onclick="setLastDays(30)">30 дней</button>
+          <button type="button" class="quick-btn" onclick="setCurrentMonth()">Текущий месяц</button>
         </div>
 
         <div id="statusLine" class="status-line"></div>
@@ -746,7 +735,16 @@
     let dailyChart = null;
 
     function toggleSidebar() {
-      document.getElementById('sidebar').classList.toggle('collapsed');
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('collapsed');
+      localStorage.setItem('sellerAnalyticsSidebarCollapsed', sidebar.classList.contains('collapsed') ? '1' : '0');
+    }
+
+    function restoreSidebarState() {
+      const collapsed = localStorage.getItem('sellerAnalyticsSidebarCollapsed') === '1';
+      if (collapsed) {
+        document.getElementById('sidebar').classList.add('collapsed');
+      }
     }
 
     function goBack() {
@@ -833,6 +831,32 @@
       return data;
     }
 
+    async function postJson(url, payload) {
+      const headers = {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        throw new Error(`Некорректный JSON от сервера: ${url}`);
+      }
+
+      if (!res.ok || data?.ok === false) {
+        throw new Error(data?.error || `Ошибка запроса: ${url}`);
+      }
+
+      return data;
+    }
+
     function buildQuery() {
       const clientId = document.getElementById('clientId').value.trim();
       const mpAccountId = document.getElementById('mpAccountId').value.trim();
@@ -847,6 +871,15 @@
       });
 
       return params.toString();
+    }
+
+    function getPayloadFromFilters() {
+      return {
+        client_id: Number(document.getElementById('clientId').value.trim()),
+        mp_account_id: Number(document.getElementById('mpAccountId').value.trim()),
+        date_from: document.getElementById('dateFrom').value,
+        date_to: document.getElementById('dateTo').value
+      };
     }
 
     function renderOverview(summary) {
@@ -1029,6 +1062,22 @@
       }
     }
 
+    async function refreshAndLoadAnalytics() {
+      try {
+        setStatus('Обновляю данные WB за выбранный период...');
+
+        const payload = getPayloadFromFilters();
+
+        await postJson('/seller-analytics-admin/refresh-period', payload);
+
+        setStatus('Данные обновлены. Загружаю дашборд...');
+        await loadAnalytics();
+      } catch (error) {
+        console.error('[seller-analytics] refreshAndLoadAnalytics error:', error);
+        setStatus(error.message || 'Ошибка обновления аналитики', true);
+      }
+    }
+
     function escapeHtml(value) {
       return String(value || '')
         .replaceAll('&', '&amp;')
@@ -1057,6 +1106,7 @@
       }
     }
 
+    restoreSidebarState();
     initDefaults();
     loadAnalytics();
   </script>
