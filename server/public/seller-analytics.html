@@ -7,337 +7,390 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --bg: #f4f7fb;
-      --card: #ffffff;
-      --text: #0f172a;
-      --muted: #64748b;
-      --line: #e2e8f0;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --panel-2: #f9fbff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --line-2: #dbe3ef;
       --primary: #2563eb;
-      --primary-dark: #1d4ed8;
-      --success: #16a34a;
-      --danger: #dc2626;
-      --warning: #d97706;
-      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --primary-hover: #1d4ed8;
+      --success-bg: #e8f7ea;
+      --danger-bg: #fdecec;
+      --neutral-bg: #f3f4f6;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
       --radius: 18px;
+      --radius-sm: 12px;
     }
 
     * {
       box-sizing: border-box;
     }
 
-    body {
+    html, body {
       margin: 0;
-      font-family: Arial, sans-serif;
+      padding: 0;
+      font-family: Inter, Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
     }
 
+    body {
+      min-width: 1200px;
+    }
+
     .page {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 24px;
+      padding: 20px 24px 32px;
     }
 
     .topbar {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
       gap: 16px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
+      margin-bottom: 18px;
     }
 
-    .title-wrap h1 {
-      margin: 0;
-      font-size: 30px;
-      line-height: 1.15;
-    }
-
-    .title-wrap p {
-      margin: 8px 0 0;
-      color: var(--muted);
-      font-size: 15px;
-    }
-
-    .actions {
+    .topbar-left {
       display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
       gap: 10px;
-      flex-wrap: wrap;
     }
 
     .btn {
-      border: none;
-      border-radius: 12px;
-      padding: 11px 16px;
+      height: 42px;
+      border: 1px solid var(--line-2);
+      border-radius: 14px;
+      background: #fff;
+      padding: 0 16px;
+      cursor: pointer;
       font-size: 14px;
       font-weight: 700;
-      cursor: pointer;
-      transition: 0.15s ease;
+      color: #0f172a;
+      transition: .15s ease;
+    }
+
+    .btn:hover {
+      border-color: #c7d2fe;
+      transform: translateY(-1px);
     }
 
     .btn-primary {
       background: var(--primary);
+      border-color: var(--primary);
       color: #fff;
     }
 
     .btn-primary:hover {
-      background: var(--primary-dark);
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
     }
 
-    .btn-secondary {
-      background: #fff;
-      color: var(--text);
+    .filters {
+      background: var(--panel);
       border: 1px solid var(--line);
-    }
-
-    .btn-secondary:hover {
-      background: #f8fafc;
-    }
-
-    .filters-card,
-    .chart-card,
-    .table-card,
-    .summary-card {
-      background: var(--card);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      border: 1px solid rgba(226, 232, 240, 0.9);
-    }
-
-    .filters-card {
+      border-radius: 20px;
       padding: 18px;
-      margin-bottom: 18px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
     }
 
     .filters-grid {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: 1.1fr 0.9fr 1fr 1fr 1fr auto;
       gap: 12px;
       align-items: end;
     }
 
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
     .field label {
-      display: block;
-      margin-bottom: 6px;
       font-size: 13px;
+      color: #475569;
       font-weight: 700;
-      color: var(--muted);
     }
 
     .field input,
     .field select {
       width: 100%;
-      height: 42px;
-      border-radius: 12px;
-      border: 1px solid var(--line);
+      height: 44px;
+      border-radius: 14px;
+      border: 1px solid var(--line-2);
       background: #fff;
-      padding: 0 12px;
+      padding: 0 14px;
       font-size: 14px;
-      color: var(--text);
+      color: #0f172a;
       outline: none;
     }
 
     .field input:focus,
     .field select:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
     }
 
-    .filters-actions {
+    .quick-range {
       display: flex;
-      gap: 10px;
+      gap: 8px;
+      margin-top: 14px;
       flex-wrap: wrap;
     }
 
-    .summary-grid {
+    .quick-btn {
+      border: 1px solid var(--line-2);
+      background: #fff;
+      color: #0f172a;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .quick-btn:hover {
+      border-color: #bfdbfe;
+      color: var(--primary);
+    }
+
+    .status-line {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #059669;
+      font-weight: 700;
+      min-height: 18px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 6px 0 12px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 800;
+      color: #111827;
+    }
+
+    .cards-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 14px;
       margin-bottom: 18px;
     }
 
-    .summary-card {
-      padding: 18px;
+    .metric-card {
+      border-radius: 18px;
+      padding: 18px 18px 16px;
+      border: 1px solid rgba(15, 23, 42, 0.05);
+      box-shadow: var(--shadow);
+      min-height: 134px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
 
-    .summary-label {
-      color: var(--muted);
-      font-size: 13px;
+    .metric-card.danger {
+      background: var(--danger-bg);
+    }
+
+    .metric-card.success {
+      background: var(--success-bg);
+    }
+
+    .metric-card.neutral {
+      background: var(--neutral-bg);
+    }
+
+    .metric-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       margin-bottom: 10px;
+    }
+
+    .metric-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #111827;
+    }
+
+    .metric-sub {
+      font-size: 12px;
+      color: #475569;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .metric-value {
+      font-size: 20px;
+      font-weight: 900;
+      color: #0f172a;
+      line-height: 1.2;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+
+    .metric-mini {
+      font-size: 13px;
+      color: #374151;
       font-weight: 700;
     }
 
-    .summary-value {
-      font-size: 30px;
-      font-weight: 800;
-      line-height: 1.1;
-      margin-bottom: 8px;
-    }
-
-    .summary-sub {
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .layout {
+    .panels {
       display: grid;
-      grid-template-columns: 1.6fr 1fr;
-      gap: 18px;
+      grid-template-columns: 1.55fr 1fr;
+      gap: 16px;
+      align-items: start;
     }
 
-    .chart-card,
-    .table-card {
-      padding: 18px;
-      min-height: 420px;
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
     }
 
-    .card-title {
-      margin: 0 0 14px;
-      font-size: 20px;
+    .panel-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 800;
+      color: #111827;
+    }
+
+    .panel-body {
+      padding: 16px 18px 18px;
     }
 
     .chart-wrap {
-      position: relative;
-      height: 340px;
-    }
-
-    .table-wrap {
-      overflow: auto;
-      max-height: 360px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
+      height: 380px;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      background: #fff;
     }
 
     thead th {
+      text-align: left;
+      font-size: 12px;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      color: #64748b;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
       position: sticky;
       top: 0;
-      background: #f8fafc;
+      background: #fff;
       z-index: 1;
-      text-align: left;
-      font-size: 13px;
-      padding: 12px 10px;
-      border-bottom: 1px solid var(--line);
-      white-space: nowrap;
     }
 
     tbody td {
-      font-size: 14px;
-      padding: 12px 10px;
+      padding: 12px 8px;
       border-bottom: 1px solid #eef2f7;
+      font-size: 14px;
       vertical-align: top;
     }
 
     tbody tr:hover {
-      background: #fafcff;
+      background: #f8fbff;
     }
 
     .sku-name {
-      font-weight: 700;
+      font-weight: 800;
+      color: #0f172a;
       margin-bottom: 3px;
     }
 
     .sku-sub {
-      color: var(--muted);
       font-size: 12px;
+      color: #64748b;
+      line-height: 1.45;
     }
 
-    .status-line {
-      margin-top: 14px;
-      font-size: 14px;
+    .table-scroll {
+      max-height: 430px;
+      overflow: auto;
+    }
+
+    .muted {
       color: var(--muted);
-      min-height: 20px;
     }
 
-    .status-line.error {
-      color: var(--danger);
-      font-weight: 700;
+    .right {
+      text-align: right;
     }
 
-    .status-line.success {
-      color: var(--success);
-      font-weight: 700;
+    .empty {
+      padding: 24px 0;
+      text-align: center;
+      color: #64748b;
+      font-weight: 600;
     }
 
-    .quick-periods {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 12px;
-    }
-
-    .quick-periods .mini-btn {
-      border: 1px solid var(--line);
-      background: #fff;
-      border-radius: 999px;
-      padding: 8px 12px;
+    .note-box {
+      margin-top: 16px;
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #9a3412;
+      border-radius: 16px;
+      padding: 12px 14px;
       font-size: 13px;
-      cursor: pointer;
-      font-weight: 700;
-    }
-
-    .quick-periods .mini-btn:hover {
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-
-    @media (max-width: 1180px) {
-      .filters-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-
-      .summary-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .layout {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media (max-width: 720px) {
-      .page {
-        padding: 14px;
-      }
-
-      .filters-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .summary-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .summary-value {
-        font-size: 24px;
-      }
-
-      .title-wrap h1 {
-        font-size: 24px;
-      }
+      line-height: 1.5;
     }
   </style>
 </head>
 <body>
   <div class="page">
     <div class="topbar">
-      <div class="title-wrap">
-        <h1>Аналитика селлера</h1>
-        <p>Первый аналитический блок: заказы, выручка, средний чек, график по дням и топ SKU.</p>
+      <div class="topbar-left">
+        <div>
+          <div class="title">Оцифровка</div>
+          <div class="subtitle">Заказы, продажи, реализация, возвраты и топ SKU по данным WB</div>
+        </div>
       </div>
-
-      <div class="actions">
-        <button class="btn btn-secondary" id="btnBack">Назад</button>
-        <button class="btn btn-primary" id="btnSync">Обновить аналитику</button>
+      <div class="topbar-right">
+        <button class="btn" onclick="goBack()">Назад</button>
+        <button class="btn btn-primary" onclick="loadAnalytics()">Обновить аналитику</button>
       </div>
     </div>
 
-    <div class="filters-card">
+    <section class="filters">
       <div class="filters-grid">
         <div class="field">
           <label for="clientId">Client ID</label>
@@ -360,294 +413,356 @@
         </div>
 
         <div class="field">
-          <label for="fulfillmentModel">Модель продаж</label>
-          <select id="fulfillmentModel">
-            <option value="all">Все</option>
-            <option value="fbs">FBS</option>
-            <option value="fbo">FBO</option>
+          <label for="viewMode">Режим</label>
+          <select id="viewMode">
+            <option value="truestats">Как в TrueStats</option>
+            <option value="compact">Компактный</option>
           </select>
         </div>
 
         <div class="field">
           <label>&nbsp;</label>
-          <div class="filters-actions">
-            <button class="btn btn-primary" id="btnApply">Применить</button>
+          <button class="btn btn-primary" onclick="loadAnalytics()">Применить</button>
+        </div>
+      </div>
+
+      <div class="quick-range">
+        <button class="quick-btn" onclick="setLastDays(7)">7 дней</button>
+        <button class="quick-btn" onclick="setLastDays(14)">14 дней</button>
+        <button class="quick-btn" onclick="setLastDays(30)">30 дней</button>
+        <button class="quick-btn" onclick="setCurrentMonth()">Текущий месяц</button>
+      </div>
+
+      <div id="statusLine" class="status-line"></div>
+    </section>
+
+    <div class="section-head">
+      <h2>Общие показатели</h2>
+    </div>
+
+    <section class="cards-grid" id="cardsGrid">
+      <div class="metric-card neutral">
+        <div class="metric-top">
+          <div class="metric-title">Продажи</div>
+        </div>
+        <div class="metric-value" id="salesCard">—</div>
+        <div class="metric-mini">Сумма и количество продаж за период</div>
+      </div>
+
+      <div class="metric-card success">
+        <div class="metric-top">
+          <div class="metric-title">Заказы</div>
+        </div>
+        <div class="metric-value" id="ordersCard">—</div>
+        <div class="metric-mini">Сумма и количество заказов за период</div>
+      </div>
+
+      <div class="metric-card danger">
+        <div class="metric-top">
+          <div class="metric-title">Процент выкупа</div>
+        </div>
+        <div class="metric-value" id="buyoutCard">—</div>
+        <div class="metric-mini">Продажи, шт / Заказы, шт</div>
+      </div>
+
+      <div class="metric-card danger">
+        <div class="metric-top">
+          <div class="metric-title">Реализация</div>
+        </div>
+        <div class="metric-value" id="realizationCard">—</div>
+        <div class="metric-mini">Gross-сумма по продажам</div>
+      </div>
+
+      <div class="metric-card neutral">
+        <div class="metric-top">
+          <div class="metric-title">Возвраты</div>
+        </div>
+        <div class="metric-value" id="returnsCard">—</div>
+        <div class="metric-mini">Сумма и количество возвратов</div>
+      </div>
+
+      <div class="metric-card success">
+        <div class="metric-top">
+          <div class="metric-title">Средний чек</div>
+        </div>
+        <div class="metric-value" id="avgCheckCard">—</div>
+        <div class="metric-mini">Продажи ₽ / количество продаж</div>
+      </div>
+    </section>
+
+    <section class="panels">
+      <div class="panel">
+        <div class="panel-header">
+          <h3 class="panel-title">График по дням</h3>
+        </div>
+        <div class="panel-body">
+          <div class="chart-wrap">
+            <canvas id="dailyChart"></canvas>
+          </div>
+          <div class="note-box">
+            Процент выкупа по дням сейчас специально не рисуем. На разных днях заказы и продажи могут жить в разных датах события, из-за этого дневной buyout может быть выше 100%, хотя период в целом считается нормально.
           </div>
         </div>
       </div>
 
-      <div class="quick-periods">
-        <button class="mini-btn" data-days="7">7 дней</button>
-        <button class="mini-btn" data-days="14">14 дней</button>
-        <button class="mini-btn" data-days="30">30 дней</button>
-        <button class="mini-btn" data-days="90">90 дней</button>
-      </div>
-
-      <div class="status-line" id="statusLine"></div>
-    </div>
-
-    <div class="summary-grid">
-      <div class="summary-card">
-        <div class="summary-label">Заказы</div>
-        <div class="summary-value" id="ordersCount">0</div>
-        <div class="summary-sub">Всего заказов за период</div>
-      </div>
-
-      <div class="summary-card">
-        <div class="summary-label">Выручка</div>
-        <div class="summary-value" id="revenueTotal">0 ₽</div>
-        <div class="summary-sub">Сумма по заказам за период</div>
-      </div>
-
-      <div class="summary-card">
-        <div class="summary-label">Средний чек</div>
-        <div class="summary-value" id="averageOrderValue">0 ₽</div>
-        <div class="summary-sub">Выручка / количество заказов</div>
-      </div>
-
-      <div class="summary-card">
-        <div class="summary-label">Продано, шт</div>
-        <div class="summary-value" id="itemsSold">0</div>
-        <div class="summary-sub">Суммарное количество строк/штук</div>
-      </div>
-    </div>
-
-    <div class="layout">
-      <div class="chart-card">
-        <h2 class="card-title">График по дням</h2>
-        <div class="chart-wrap">
-          <canvas id="salesChart"></canvas>
+      <div class="panel">
+        <div class="panel-header">
+          <h3 class="panel-title">Топ SKU</h3>
+        </div>
+        <div class="panel-body">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Товар</th>
+                  <th class="right">Продажи, шт</th>
+                  <th class="right">Продажи, ₽</th>
+                  <th class="right">Реализация</th>
+                  <th class="right">Возвраты</th>
+                </tr>
+              </thead>
+              <tbody id="topSkuBody">
+                <tr>
+                  <td colspan="5" class="empty">Нет данных</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-
-      <div class="table-card">
-        <h2 class="card-title">Топ SKU</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Товар</th>
-                <th>Шт</th>
-                <th>Выручка</th>
-                <th>Ср. цена</th>
-                <th>Заказы</th>
-              </tr>
-            </thead>
-            <tbody id="topSkusBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    </section>
   </div>
 
   <script>
-    const API_BASE = '';
-    let salesChart = null;
+    let dailyChart = null;
+
+    function goBack() {
+      window.history.back();
+    }
 
     function getToken() {
       return localStorage.getItem('wmsToken') || '';
     }
 
-    function setStatus(text, type = '') {
-      const el = document.getElementById('statusLine');
-      el.textContent = text || '';
-      el.className = 'status-line' + (type ? ' ' + type : '');
-    }
-
-    function formatMoney(value) {
-      const num = Number(value || 0);
-      return num.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
-    }
-
-    function formatInt(value) {
-      return Number(value || 0).toLocaleString('ru-RU');
-    }
-
-    function todayStr() {
-      const d = new Date();
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    }
-
-    function shiftDate(days) {
-      const d = new Date();
-      d.setDate(d.getDate() - days);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    }
-
-    function setDefaultDates() {
-      const dateTo = document.getElementById('dateTo');
-      const dateFrom = document.getElementById('dateFrom');
-      if (!dateTo.value) dateTo.value = todayStr();
-      if (!dateFrom.value) dateFrom.value = shiftDate(30);
-    }
-
-    function getFilters() {
+    function getAuthHeaders() {
+      const token = getToken();
+      if (!token) {
+        throw new Error('Не найден токен в localStorage (wmsToken)');
+      }
       return {
-        client_id: document.getElementById('clientId').value.trim(),
-        mp_account_id: document.getElementById('mpAccountId').value.trim(),
-        date_from: document.getElementById('dateFrom').value,
-        date_to: document.getElementById('dateTo').value,
-        fulfillment_model: document.getElementById('fulfillmentModel').value
+        'Authorization': `Bearer ${token}`
       };
     }
 
-    function buildQuery(filters, extra = {}) {
+    function formatCurrency(value) {
+      const num = Number(value || 0);
+      return `${num.toLocaleString('ru-RU', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      })} ₽`;
+    }
+
+    function formatCount(value) {
+      return Number(value || 0).toLocaleString('ru-RU');
+    }
+
+    function formatPercent(value) {
+      return `${Number(value || 0).toLocaleString('ru-RU', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      })} %`;
+    }
+
+    function setStatus(text, isError = false) {
+      const el = document.getElementById('statusLine');
+      el.textContent = text || '';
+      el.style.color = isError ? '#dc2626' : '#059669';
+    }
+
+    function toInputDate(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function setLastDays(days) {
+      const to = new Date();
+      const from = new Date();
+      from.setDate(to.getDate() - (days - 1));
+
+      document.getElementById('dateFrom').value = toInputDate(from);
+      document.getElementById('dateTo').value = toInputDate(to);
+    }
+
+    function setCurrentMonth() {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      document.getElementById('dateFrom').value = toInputDate(from);
+      document.getElementById('dateTo').value = toInputDate(now);
+    }
+
+    async function fetchJson(url) {
+      const headers = getAuthHeaders();
+      const res = await fetch(url, { headers });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        throw new Error(`Некорректный JSON от сервера: ${url}`);
+      }
+
+      if (!res.ok || data?.ok === false) {
+        throw new Error(data?.error || `Ошибка запроса: ${url}`);
+      }
+
+      return data;
+    }
+
+    function buildQuery() {
+      const clientId = document.getElementById('clientId').value.trim();
+      const mpAccountId = document.getElementById('mpAccountId').value.trim();
+      const dateFrom = document.getElementById('dateFrom').value;
+      const dateTo = document.getElementById('dateTo').value;
+
       const params = new URLSearchParams({
-        ...filters,
-        ...extra
+        client_id: clientId,
+        mp_account_id: mpAccountId,
+        date_from: dateFrom,
+        date_to: dateTo
       });
+
       return params.toString();
     }
 
-    async function apiGet(path) {
-      const token = getToken();
-      if (!token) {
-        throw new Error('Нет токена. Сначала войди в систему.');
-      }
+    function renderOverview(summary) {
+      const orders = summary?.orders || {};
+      const sales = summary?.sales || {};
+      const realization = summary?.realization || {};
+      const returns = summary?.returns || {};
+      const buyoutPercent = Number(summary?.buyout_percent || 0);
 
-      const res = await fetch(`${API_BASE}${path}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      const avgCheck = sales.count ? (Number(sales.amount || 0) / Number(sales.count || 1)) : 0;
 
-      const data = await res.json().catch(() => ({}));
+      document.getElementById('ordersCard').innerHTML =
+        `${formatCurrency(orders.amount)} / ${formatCount(orders.qty)} шт`;
 
-      if (!res.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
+      document.getElementById('salesCard').innerHTML =
+        `${formatCurrency(sales.amount)} / ${formatCount(sales.qty)} шт`;
 
-      return data;
-    }
+      document.getElementById('realizationCard').innerHTML =
+        `${formatCurrency(realization.amount || 0)}`;
 
-    async function apiPost(path, body) {
-      const token = getToken();
-      if (!token) {
-        throw new Error('Нет токена. Сначала войди в систему.');
-      }
+      document.getElementById('returnsCard').innerHTML =
+        `${formatCurrency(returns.amount || 0)} / ${formatCount(returns.count)} шт`;
 
-      const res = await fetch(`${API_BASE}${path}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(body)
-      });
+      document.getElementById('buyoutCard').innerHTML =
+        `${formatPercent(buyoutPercent)}`;
 
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-
-      return data;
-    }
-
-    function renderSummary(summary) {
-      document.getElementById('ordersCount').textContent = formatInt(summary.orders_count);
-      document.getElementById('revenueTotal').textContent = formatMoney(summary.revenue_total);
-      document.getElementById('averageOrderValue').textContent = formatMoney(summary.average_order_value);
-      document.getElementById('itemsSold').textContent = formatInt(summary.items_sold);
+      document.getElementById('avgCheckCard').innerHTML =
+        `${formatCurrency(avgCheck)}`;
     }
 
     function renderTopSkus(rows) {
-      const tbody = document.getElementById('topSkusBody');
-      tbody.innerHTML = '';
+      const body = document.getElementById('topSkuBody');
 
       if (!rows || !rows.length) {
-        tbody.innerHTML = `
+        body.innerHTML = `
           <tr>
-            <td colspan="5" style="text-align:center;color:#64748b;padding:24px;">
-              Нет данных по SKU за выбранный период
-            </td>
+            <td colspan="5" class="empty">Нет данных</td>
           </tr>
         `;
         return;
       }
 
-      tbody.innerHTML = rows.map(row => `
+      body.innerHTML = rows.map(row => `
         <tr>
           <td>
             <div class="sku-name">${escapeHtml(row.item_name || 'Без названия')}</div>
-            <div class="sku-sub">ШК: ${escapeHtml(row.barcode || '-')}</div>
-            <div class="sku-sub">Артикул: ${escapeHtml(row.vendor_code || '-')}</div>
+            <div class="sku-sub">
+              ШК: ${escapeHtml(row.barcode || '—')}<br>
+              Артикул: ${escapeHtml(row.vendor_code || row.wb_vendor_code || '—')}
+            </div>
           </td>
-          <td>${formatInt(row.qty_sold)}</td>
-          <td>${formatMoney(row.revenue_total)}</td>
-          <td>${formatMoney(row.avg_price)}</td>
-          <td>${formatInt(row.orders_count)}</td>
+          <td class="right">${formatCount(row.sales_qty)}</td>
+          <td class="right">${formatCurrency(row.sales_amount)}</td>
+          <td class="right">${formatCurrency(row.realization_amount)}</td>
+          <td class="right">${formatCurrency(row.returns_amount)}</td>
         </tr>
       `).join('');
     }
 
-    function escapeHtml(value) {
-      return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-    }
+    function renderDailyChart(rows) {
+      const labels = rows.map(r => {
+        const [y, m, d] = String(r.date).split('-');
+        return `${d}.${m}`;
+      });
 
-    function renderChart(rows) {
-      const labels = rows.map(r => r.date);
-      const revenueData = rows.map(r => Number(r.revenue_total || 0));
-      const ordersData = rows.map(r => Number(r.orders_count || 0));
+      const ordersAmount = rows.map(r => Number(r.orders?.amount || 0));
+      const salesAmount = rows.map(r => Number(r.sales?.amount || 0));
+      const realizationAmount = rows.map(r => Number(r.realization?.amount || 0));
 
-      const ctx = document.getElementById('salesChart').getContext('2d');
+      const ctx = document.getElementById('dailyChart').getContext('2d');
 
-      if (salesChart) {
-        salesChart.destroy();
+      if (dailyChart) {
+        dailyChart.destroy();
       }
 
-      salesChart = new Chart(ctx, {
+      dailyChart = new Chart(ctx, {
         type: 'bar',
         data: {
           labels,
           datasets: [
             {
-              type: 'bar',
-              label: 'Выручка',
-              data: revenueData,
-              yAxisID: 'y',
-              borderWidth: 1
+              label: 'Заказы',
+              data: ordersAmount,
+              backgroundColor: 'rgba(34, 197, 94, 0.55)',
+              borderColor: 'rgba(34, 197, 94, 1)',
+              borderWidth: 1,
+              borderRadius: 8
             },
             {
-              type: 'line',
-              label: 'Заказы',
-              data: ordersData,
-              yAxisID: 'y1',
-              tension: 0.25
+              label: 'Продажи',
+              data: salesAmount,
+              backgroundColor: 'rgba(59, 130, 246, 0.55)',
+              borderColor: 'rgba(59, 130, 246, 1)',
+              borderWidth: 1,
+              borderRadius: 8
+            },
+            {
+              label: 'Реализация',
+              data: realizationAmount,
+              backgroundColor: 'rgba(244, 114, 182, 0.40)',
+              borderColor: 'rgba(244, 114, 182, 1)',
+              borderWidth: 1,
+              borderRadius: 8
             }
           ]
         },
         options: {
-          maintainAspectRatio: false,
           responsive: true,
+          maintainAspectRatio: false,
           interaction: {
             mode: 'index',
             intersect: false
           },
           plugins: {
             legend: {
-              position: 'top'
+              position: 'top',
+              labels: {
+                boxWidth: 18,
+                color: '#334155',
+                font: {
+                  size: 12,
+                  weight: '700'
+                }
+              }
             },
             tooltip: {
               callbacks: {
                 label(context) {
-                  const label = context.dataset.label || '';
-                  const value = context.raw || 0;
-                  if (label === 'Выручка') {
-                    return `${label}: ${formatMoney(value)}`;
-                  }
-                  return `${label}: ${formatInt(value)}`;
+                  return `${context.dataset.label}: ${formatCurrency(context.raw)}`;
                 }
               }
             }
@@ -655,29 +770,22 @@
           scales: {
             x: {
               ticks: {
-                maxRotation: 0,
-                autoSkip: true
+                color: '#64748b'
+              },
+              grid: {
+                color: '#eef2f7'
               }
             },
             y: {
-              position: 'left',
               beginAtZero: true,
               ticks: {
+                color: '#64748b',
                 callback(value) {
                   return Number(value).toLocaleString('ru-RU');
                 }
-              }
-            },
-            y1: {
-              position: 'right',
-              beginAtZero: true,
-              grid: {
-                drawOnChartArea: false
               },
-              ticks: {
-                callback(value) {
-                  return Number(value).toLocaleString('ru-RU');
-                }
+              grid: {
+                color: '#eef2f7'
               }
             }
           }
@@ -687,89 +795,57 @@
 
     async function loadAnalytics() {
       try {
-        setStatus('Загрузка аналитики...');
-        const filters = getFilters();
+        setStatus('Загружаю аналитику...');
 
-        const [overview, daily, topSkus] = await Promise.all([
-          apiGet(`/seller-analytics/overview?${buildQuery(filters)}`),
-          apiGet(`/seller-analytics/sales-daily?${buildQuery(filters)}`),
-          apiGet(`/seller-analytics/top-skus?${buildQuery(filters, { limit: 10 })}`)
+        const query = buildQuery();
+
+        const [overview, daily, top] = await Promise.all([
+          fetchJson(`/seller-analytics/overview?${query}`),
+          fetchJson(`/seller-analytics/sales-daily?${query}`),
+          fetchJson(`/seller-analytics/top-skus?${query}&limit=20`)
         ]);
 
-        renderSummary(overview.summary || {});
-        renderChart(daily.rows || []);
-        renderTopSkus(topSkus.rows || []);
+        renderOverview(overview.summary);
+        renderDailyChart(daily.rows || []);
+        renderTopSkus(top.rows || []);
 
-        setStatus('Аналитика успешно загружена', 'success');
+        setStatus('Аналитика успешно загружена');
       } catch (error) {
         console.error('[seller-analytics] loadAnalytics error:', error);
-        setStatus(error.message || 'Ошибка загрузки аналитики', 'error');
+        setStatus(error.message || 'Ошибка загрузки аналитики', true);
       }
     }
 
-    async function syncAnalytics() {
-      try {
-        setStatus('Запускаю обновление аналитики...');
-        const filters = getFilters();
-
-        const result = await apiPost('/seller-analytics-admin/sync-orders', filters);
-
-        setStatus(
-          `Обновление завершено. Заказы: ${result.stats?.sales_orders_inserted || 0}, строки: ${result.stats?.sales_order_lines_inserted || 0}`,
-          'success'
-        );
-
-        await loadAnalytics();
-      } catch (error) {
-        console.error('[seller-analytics] syncAnalytics error:', error);
-        setStatus(error.message || 'Ошибка обновления аналитики', 'error');
-      }
+    function escapeHtml(value) {
+      return String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
     }
 
-    function bindEvents() {
-      document.getElementById('btnApply').addEventListener('click', loadAnalytics);
-      document.getElementById('btnSync').addEventListener('click', syncAnalytics);
-
-      document.getElementById('btnBack').addEventListener('click', () => {
-        if (document.referrer) {
-          history.back();
-          return;
-        }
-        window.location.href = '/seller-cabinet.html';
-      });
-
-      document.querySelectorAll('.mini-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const days = Number(btn.dataset.days || 30);
-          document.getElementById('dateTo').value = todayStr();
-          document.getElementById('dateFrom').value = shiftDate(days);
-          loadAnalytics();
-        });
-      });
-    }
-
-    function bootstrapFromUrl() {
+    function initDefaults() {
       const params = new URLSearchParams(window.location.search);
 
       const clientId = params.get('client_id');
       const mpAccountId = params.get('mp_account_id');
       const dateFrom = params.get('date_from');
       const dateTo = params.get('date_to');
-      const fulfillmentModel = params.get('fulfillment_model');
 
       if (clientId) document.getElementById('clientId').value = clientId;
       if (mpAccountId) document.getElementById('mpAccountId').value = mpAccountId;
-      if (dateFrom) document.getElementById('dateFrom').value = dateFrom;
-      if (dateTo) document.getElementById('dateTo').value = dateTo;
-      if (fulfillmentModel) document.getElementById('fulfillmentModel').value = fulfillmentModel;
+
+      if (dateFrom && dateTo) {
+        document.getElementById('dateFrom').value = dateFrom;
+        document.getElementById('dateTo').value = dateTo;
+      } else {
+        setLastDays(8);
+      }
     }
 
-    window.addEventListener('DOMContentLoaded', async () => {
-      setDefaultDates();
-      bootstrapFromUrl();
-      bindEvents();
-      await loadAnalytics();
-    });
+    initDefaults();
+    loadAnalytics();
   </script>
 </body>
 </html>
