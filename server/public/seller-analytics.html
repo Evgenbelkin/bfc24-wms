@@ -19,6 +19,12 @@
       --success-bg: #e8f7ea;
       --danger-bg: #fdecec;
       --neutral-bg: #f3f4f6;
+      --sidebar-bg: #ffffff;
+      --sidebar-line: #e5e7eb;
+      --sidebar-text: #111827;
+      --sidebar-muted: #6b7280;
+      --sidebar-active-bg: #eef4ff;
+      --sidebar-active: #2563eb;
       --shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
       --radius: 18px;
       --radius-sm: 12px;
@@ -34,10 +40,166 @@
       font-family: Inter, Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
+      min-height: 100%;
     }
 
     body {
-      min-width: 1200px;
+      min-width: 1320px;
+      display: flex;
+    }
+
+    .sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--sidebar-line);
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      transition: width 0.25s ease, min-width 0.25s ease;
+      display: flex;
+      flex-direction: column;
+      z-index: 20;
+    }
+
+    .sidebar.collapsed {
+      width: 76px;
+      min-width: 76px;
+    }
+
+    .sidebar-top {
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px 0 16px;
+      border-bottom: 1px solid var(--sidebar-line);
+      gap: 10px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      min-width: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 900;
+      color: #0f172a;
+      line-height: 1.1;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--sidebar-muted);
+      line-height: 1.1;
+      margin-top: 2px;
+    }
+
+    .sidebar.collapsed .brand-text {
+      display: none;
+    }
+
+    .sidebar-toggle {
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--line-2);
+      background: #fff;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 18px;
+      color: #334155;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: .15s ease;
+      flex-shrink: 0;
+    }
+
+    .sidebar-toggle:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    .sidebar-nav {
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 46px;
+      padding: 0 14px;
+      border-radius: 14px;
+      color: var(--sidebar-text);
+      text-decoration: none;
+      cursor: pointer;
+      transition: .15s ease;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .nav-item:hover {
+      background: #f8fafc;
+    }
+
+    .nav-item.active {
+      background: var(--sidebar-active-bg);
+      color: var(--sidebar-active);
+      font-weight: 800;
+    }
+
+    .nav-icon {
+      width: 22px;
+      min-width: 22px;
+      text-align: center;
+      font-size: 18px;
+    }
+
+    .nav-text {
+      font-size: 15px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar.collapsed .nav-text {
+      display: none;
+    }
+
+    .main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
     }
 
     .page {
@@ -376,165 +538,216 @@
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="topbar">
-      <div class="topbar-left">
-        <div>
-          <div class="title">Оцифровка</div>
-          <div class="subtitle">Заказы, продажи, реализация, возвраты и топ SKU по данным WB</div>
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-top">
+      <div class="brand">
+        <div class="brand-logo">B</div>
+        <div class="brand-text">
+          <div class="brand-title">BFC24</div>
+          <div class="brand-subtitle">Seller Analytics</div>
         </div>
       </div>
-      <div class="topbar-right">
-        <button class="btn" onclick="goBack()">Назад</button>
-        <button class="btn btn-primary" onclick="loadAnalytics()">Обновить аналитику</button>
-      </div>
+      <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
     </div>
 
-    <section class="filters">
-      <div class="filters-grid">
-        <div class="field">
-          <label for="clientId">Client ID</label>
-          <input id="clientId" type="number" value="7" />
-        </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item active" href="javascript:void(0)">
+        <span class="nav-icon">📊</span>
+        <span class="nav-text">Оцифровка</span>
+      </a>
 
-        <div class="field">
-          <label for="mpAccountId">MP Account ID</label>
-          <input id="mpAccountId" type="number" value="2" />
-        </div>
+      <a class="nav-item" href="javascript:void(0)">
+        <span class="nav-icon">📈</span>
+        <span class="nav-text">Сводный отчёт</span>
+      </a>
 
-        <div class="field">
-          <label for="dateFrom">Дата от</label>
-          <input id="dateFrom" type="date" />
-        </div>
+      <a class="nav-item" href="javascript:void(0)">
+        <span class="nav-icon">💰</span>
+        <span class="nav-text">Финансы</span>
+      </a>
 
-        <div class="field">
-          <label for="dateTo">Дата до</label>
-          <input id="dateTo" type="date" />
-        </div>
+      <a class="nav-item" href="javascript:void(0)">
+        <span class="nav-icon">📦</span>
+        <span class="nav-text">Товары</span>
+      </a>
 
-        <div class="field">
-          <label for="viewMode">Режим</label>
-          <select id="viewMode">
-            <option value="truestats">Как в TrueStats</option>
-            <option value="compact">Компактный</option>
-          </select>
-        </div>
+      <a class="nav-item" href="javascript:void(0)">
+        <span class="nav-icon">🧾</span>
+        <span class="nav-text">Прочие удержания</span>
+      </a>
 
-        <div class="field">
-          <label>&nbsp;</label>
-          <button class="btn btn-primary" onclick="loadAnalytics()">Применить</button>
+      <a class="nav-item" href="javascript:void(0)">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-text">Настройки</span>
+      </a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="page">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div>
+            <div class="title">Оцифровка</div>
+            <div class="subtitle">Заказы, продажи, реализация, возвраты и топ SKU по данным WB</div>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button class="btn" onclick="goBack()">Назад</button>
+          <button class="btn btn-primary" onclick="loadAnalytics()">Обновить аналитику</button>
         </div>
       </div>
 
-      <div class="quick-range">
-        <button class="quick-btn" onclick="setLastDays(7)">7 дней</button>
-        <button class="quick-btn" onclick="setLastDays(14)">14 дней</button>
-        <button class="quick-btn" onclick="setLastDays(30)">30 дней</button>
-        <button class="quick-btn" onclick="setCurrentMonth()">Текущий месяц</button>
+      <section class="filters">
+        <div class="filters-grid">
+          <div class="field">
+            <label for="clientId">Client ID</label>
+            <input id="clientId" type="number" value="7" />
+          </div>
+
+          <div class="field">
+            <label for="mpAccountId">MP Account ID</label>
+            <input id="mpAccountId" type="number" value="2" />
+          </div>
+
+          <div class="field">
+            <label for="dateFrom">Дата от</label>
+            <input id="dateFrom" type="date" />
+          </div>
+
+          <div class="field">
+            <label for="dateTo">Дата до</label>
+            <input id="dateTo" type="date" />
+          </div>
+
+          <div class="field">
+            <label for="viewMode">Режим</label>
+            <select id="viewMode">
+              <option value="truestats">Как в TrueStats</option>
+              <option value="compact">Компактный</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary" onclick="loadAnalytics()">Применить</button>
+          </div>
+        </div>
+
+        <div class="quick-range">
+          <button class="quick-btn" onclick="setLastDays(7)">7 дней</button>
+          <button class="quick-btn" onclick="setLastDays(14)">14 дней</button>
+          <button class="quick-btn" onclick="setLastDays(30)">30 дней</button>
+          <button class="quick-btn" onclick="setCurrentMonth()">Текущий месяц</button>
+        </div>
+
+        <div id="statusLine" class="status-line"></div>
+      </section>
+
+      <div class="section-head">
+        <h2>Общие показатели</h2>
       </div>
 
-      <div id="statusLine" class="status-line"></div>
-    </section>
+      <section class="cards-grid" id="cardsGrid">
+        <div class="metric-card neutral">
+          <div class="metric-top">
+            <div class="metric-title">Продажи</div>
+          </div>
+          <div class="metric-value" id="salesCard">—</div>
+          <div class="metric-mini">Сумма и количество продаж за период</div>
+        </div>
 
-    <div class="section-head">
-      <h2>Общие показатели</h2>
+        <div class="metric-card success">
+          <div class="metric-top">
+            <div class="metric-title">Заказы</div>
+          </div>
+          <div class="metric-value" id="ordersCard">—</div>
+          <div class="metric-mini">Сумма и количество заказов за период</div>
+        </div>
+
+        <div class="metric-card danger">
+          <div class="metric-top">
+            <div class="metric-title">Процент выкупа</div>
+          </div>
+          <div class="metric-value" id="buyoutCard">—</div>
+          <div class="metric-mini">Продажи, шт / Заказы, шт</div>
+        </div>
+
+        <div class="metric-card danger">
+          <div class="metric-top">
+            <div class="metric-title">Реализация</div>
+          </div>
+          <div class="metric-value" id="realizationCard">—</div>
+          <div class="metric-mini">Gross-сумма по продажам</div>
+        </div>
+
+        <div class="metric-card neutral">
+          <div class="metric-top">
+            <div class="metric-title">Возвраты</div>
+          </div>
+          <div class="metric-value" id="returnsCard">—</div>
+          <div class="metric-mini">Сумма и количество возвратов</div>
+        </div>
+
+        <div class="metric-card success">
+          <div class="metric-top">
+            <div class="metric-title">Средний чек</div>
+          </div>
+          <div class="metric-value" id="avgCheckCard">—</div>
+          <div class="metric-mini">Продажи ₽ / количество продаж</div>
+        </div>
+      </section>
+
+      <section class="panels">
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">График по дням</h3>
+          </div>
+          <div class="panel-body">
+            <div class="chart-wrap">
+              <canvas id="dailyChart"></canvas>
+            </div>
+            <div class="note-box">
+              Процент выкупа по дням сейчас специально не рисуем. На разных днях заказы и продажи могут жить в разных датах события, из-за этого дневной buyout может быть выше 100%, хотя период в целом считается нормально.
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">Топ SKU</h3>
+          </div>
+          <div class="panel-body">
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Товар</th>
+                    <th class="right">Продажи, шт</th>
+                    <th class="right">Продажи, ₽</th>
+                    <th class="right">Реализация</th>
+                    <th class="right">Возвраты</th>
+                  </tr>
+                </thead>
+                <tbody id="topSkuBody">
+                  <tr>
+                    <td colspan="5" class="empty">Нет данных</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
-
-    <section class="cards-grid" id="cardsGrid">
-      <div class="metric-card neutral">
-        <div class="metric-top">
-          <div class="metric-title">Продажи</div>
-        </div>
-        <div class="metric-value" id="salesCard">—</div>
-        <div class="metric-mini">Сумма и количество продаж за период</div>
-      </div>
-
-      <div class="metric-card success">
-        <div class="metric-top">
-          <div class="metric-title">Заказы</div>
-        </div>
-        <div class="metric-value" id="ordersCard">—</div>
-        <div class="metric-mini">Сумма и количество заказов за период</div>
-      </div>
-
-      <div class="metric-card danger">
-        <div class="metric-top">
-          <div class="metric-title">Процент выкупа</div>
-        </div>
-        <div class="metric-value" id="buyoutCard">—</div>
-        <div class="metric-mini">Продажи, шт / Заказы, шт</div>
-      </div>
-
-      <div class="metric-card danger">
-        <div class="metric-top">
-          <div class="metric-title">Реализация</div>
-        </div>
-        <div class="metric-value" id="realizationCard">—</div>
-        <div class="metric-mini">Gross-сумма по продажам</div>
-      </div>
-
-      <div class="metric-card neutral">
-        <div class="metric-top">
-          <div class="metric-title">Возвраты</div>
-        </div>
-        <div class="metric-value" id="returnsCard">—</div>
-        <div class="metric-mini">Сумма и количество возвратов</div>
-      </div>
-
-      <div class="metric-card success">
-        <div class="metric-top">
-          <div class="metric-title">Средний чек</div>
-        </div>
-        <div class="metric-value" id="avgCheckCard">—</div>
-        <div class="metric-mini">Продажи ₽ / количество продаж</div>
-      </div>
-    </section>
-
-    <section class="panels">
-      <div class="panel">
-        <div class="panel-header">
-          <h3 class="panel-title">График по дням</h3>
-        </div>
-        <div class="panel-body">
-          <div class="chart-wrap">
-            <canvas id="dailyChart"></canvas>
-          </div>
-          <div class="note-box">
-            Процент выкупа по дням сейчас специально не рисуем. На разных днях заказы и продажи могут жить в разных датах события, из-за этого дневной buyout может быть выше 100%, хотя период в целом считается нормально.
-          </div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <h3 class="panel-title">Топ SKU</h3>
-        </div>
-        <div class="panel-body">
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Товар</th>
-                  <th class="right">Продажи, шт</th>
-                  <th class="right">Продажи, ₽</th>
-                  <th class="right">Реализация</th>
-                  <th class="right">Возвраты</th>
-                </tr>
-              </thead>
-              <tbody id="topSkuBody">
-                <tr>
-                  <td colspan="5" class="empty">Нет данных</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
   </div>
 
   <script>
     let dailyChart = null;
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+    }
 
     function goBack() {
       window.history.back();
