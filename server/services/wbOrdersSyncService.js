@@ -1,8 +1,7 @@
 const axios = require('axios');
 const { pool } = require('../db');
 
-const WB_MARKETPLACE_API_BASE =
-  process.env.WB_API_BASE || 'https://marketplace-api.wildberries.ru';
+const WB_STATISTICS_API_BASE = 'https://statistics-api.wildberries.ru';
 
 function isValidDateOnly(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
@@ -76,28 +75,22 @@ function buildDateList(dateFrom, dateTo) {
   return days;
 }
 
-async function fetchOrdersForDate(apiToken, dateStr) {
-  const dateFrom = `${dateStr}T00:00:00Z`;
-  const url = `${WB_MARKETPLACE_API_BASE}/api/v3/orders/new`;
+async function fetchOrdersForDay(apiToken, dateStr) {
+  const url = `${WB_STATISTICS_API_BASE}/api/v1/supplier/orders`;
 
   const resp = await axios.get(url, {
     headers: {
       Authorization: apiToken,
     },
     params: {
-      dateFrom,
+      dateFrom: dateStr,
+      flag: 1,
     },
     timeout: 60000,
   });
 
-  const data = resp.data;
-
-  if (data && Array.isArray(data.orders)) {
-    return data.orders;
-  }
-
-  if (Array.isArray(data)) {
-    return data;
+  if (Array.isArray(resp.data)) {
+    return resp.data;
   }
 
   return [];
@@ -108,48 +101,61 @@ async function upsertOrderRaw({
   mpAccountId,
   order,
 }) {
-  const sourceOrderId = order.orderId || order.id || null;
-  const sourceRid = order.rid || null;
+  const sourceOrderId =
+    order.gNumber ||
+    order.odid ||
+    order.srid ||
+    order.orderId ||
+    null;
 
-  const skus = Array.isArray(order.skus) ? order.skus : [];
-  const barcode = skus.length ? String(skus[0]) : (order.barcode || null);
-
-  const offices = Array.isArray(order.offices) ? order.offices : [];
-  const warehouseName =
-    order.warehouseName ||
-    offices[1] ||
-    offices[0] ||
+  const sourceRid =
+    order.srid ||
+    order.rid ||
     null;
 
   const orderDatetime =
-    order.createdAt ||
-    order.createdDate ||
+    order.date ||
+    order.lastChangeDate ||
     null;
 
-  const statusRaw =
-    order.status !== undefined && order.status !== null
-      ? String(order.status)
-      : (order.deliveryType ? String(order.deliveryType) : null);
+  const eventDatetime =
+    order.lastChangeDate ||
+    order.date ||
+    null;
+
+  const article =
+    order.supplierArticle ||
+    order.article ||
+    null;
+
+  const barcode =
+    order.barcode ||
+    null;
 
   const priceRaw =
-    order.price !== undefined && order.price !== null
-      ? Number(order.price)
+    order.totalPrice !== undefined && order.totalPrice !== null
+      ? Number(order.totalPrice)
       : null;
 
   const convertedPriceRaw =
-    order.convertedPrice !== undefined && order.convertedPrice !== null
-      ? Number(order.convertedPrice)
+    order.priceWithDisc !== undefined && order.priceWithDisc !== null
+      ? Number(order.priceWithDisc)
       : null;
 
   const finalPriceRaw =
-    order.finalPrice !== undefined && order.finalPrice !== null
-      ? Number(order.finalPrice)
+    order.finishedPrice !== undefined && order.finishedPrice !== null
+      ? Number(order.finishedPrice)
       : null;
 
   const convertedFinalPriceRaw =
-    order.convertedFinalPrice !== undefined && order.convertedFinalPrice !== null
-      ? Number(order.convertedFinalPrice)
+    order.finishedPrice !== undefined && order.finishedPrice !== null
+      ? Number(order.finishedPrice)
       : null;
+
+  const statusRaw =
+    order.isCancel === true
+      ? 'cancelled'
+      : 'ordered';
 
   await pool.query(
     `
@@ -201,12 +207,12 @@ async function upsertOrderRaw({
       sourceRid ? String(sourceRid) : null,
       order.nmId || null,
       order.chrtId || null,
-      order.article || null,
+      article,
       barcode,
-      warehouseName,
+      order.warehouseName || null,
       order.regionName || null,
       statusRaw,
-      orderDatetime,
+      eventDatetime,
       orderDatetime,
       priceRaw,
       convertedPriceRaw,
@@ -244,7 +250,7 @@ async function syncWbOrders(reqUser, body) {
   let fetchedRows = 0;
 
   for (const day of days) {
-    const orders = await fetchOrdersForDate(account.api_token, day);
+    const orders = await fetchOrdersForDay(account.api_token, day);
     fetchedDays += 1;
     fetchedRows += orders.length;
 
@@ -263,8 +269,8 @@ async function syncWbOrders(reqUser, body) {
     FROM analytics.wb_orders_raw
     WHERE client_id = $1
       AND client_mp_account_id = $2
-      AND order_datetime >= $3::date
-      AND order_datetime < ($4::date + INTERVAL '1 day')
+      AND COALESCE(order_datetime, event_datetime, created_at) >= $3::date
+      AND COALESCE(order_datetime, event_datetime, created_at) < ($4::date + INTERVAL '1 day')
     `,
     [clientId, mpAccountId, body.date_from, body.date_to]
   );
