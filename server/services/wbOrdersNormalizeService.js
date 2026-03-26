@@ -121,8 +121,8 @@ async function normalizeWbOrders(reqUser, body) {
         r.converted_final_price_raw,
 
        COALESCE(
-  r.price_raw,
   r.converted_price_raw,
+  r.price_raw,
   r.final_price_raw,
   r.converted_final_price_raw,
   0
