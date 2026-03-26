@@ -12,26 +12,13 @@ async function getOverviewSummary({
     WITH orders_agg AS (
       SELECT
         COUNT(DISTINCT o.wb_order_id)::int AS orders_count,
-        COUNT(*)::int AS orders_qty,
-        COALESCE(
-          SUM(
-            COALESCE(
-              NULLIF(o.raw->>'convertedFinalPrice', '')::numeric(14,2),
-              NULLIF(o.raw->>'finalPrice', '')::numeric(14,2),
-              o.converted_price,
-              o.price,
-              0
-            )
-          ),
-          0
-        )::numeric(14,2) AS orders_amount
-      FROM public.mp_wb_orders o
-      INNER JOIN public.mp_accounts a
-        ON a.id = o.client_mp_account_id
-      WHERE a.wms_client_id = $1
+        COALESCE(SUM(o.qty), 0)::int AS orders_qty,
+        COALESCE(SUM(o.order_amount), 0)::numeric(14,2) AS orders_amount
+      FROM analytics.wb_orders_normalized o
+      WHERE o.client_id = $1
         AND o.client_mp_account_id = $2
-        AND o.created_at >= $3::date
-        AND o.created_at < ($4::date + INTERVAL '1 day')
+        AND o.order_date >= $3::date
+        AND o.order_date <= $4::date
     ),
     sales_agg AS (
       SELECT
@@ -102,29 +89,16 @@ async function getSalesDaily({
     ),
     orders_agg AS (
       SELECT
-        o.created_at::date AS day,
+        o.order_date AS day,
         COUNT(DISTINCT o.wb_order_id)::int AS orders_count,
-        COUNT(*)::int AS orders_qty,
-        COALESCE(
-          SUM(
-            COALESCE(
-              NULLIF(o.raw->>'convertedFinalPrice', '')::numeric(14,2),
-              NULLIF(o.raw->>'finalPrice', '')::numeric(14,2),
-              o.converted_price,
-              o.price,
-              0
-            )
-          ),
-          0
-        )::numeric(14,2) AS orders_amount
-      FROM public.mp_wb_orders o
-      INNER JOIN public.mp_accounts a
-        ON a.id = o.client_mp_account_id
-      WHERE a.wms_client_id = $3
+        COALESCE(SUM(o.qty), 0)::int AS orders_qty,
+        COALESCE(SUM(o.order_amount), 0)::numeric(14,2) AS orders_amount
+      FROM analytics.wb_orders_normalized o
+      WHERE o.client_id = $3
         AND o.client_mp_account_id = $4
-        AND o.created_at >= $1::date
-        AND o.created_at < ($2::date + INTERVAL '1 day')
-      GROUP BY o.created_at::date
+        AND o.order_date >= $1::date
+        AND o.order_date <= $2::date
+      GROUP BY o.order_date
     ),
     sales_agg AS (
       SELECT
