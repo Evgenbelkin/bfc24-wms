@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFC24 WMS — Аналитика селлера</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .page {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .title-wrap h1 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.15;
+    }
+
+    .title-wrap p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 12px;
+      padding: 11px 16px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+    }
+
+    .btn-secondary {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .btn-secondary:hover {
+      background: #f8fafc;
+    }
+
+    .filters-card,
+    .chart-card,
+    .table-card,
+    .summary-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(226, 232, 240, 0.9);
+    }
+
+    .filters-card {
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      height: 42px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 0 12px;
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .filters-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .summary-card {
+      padding: 18px;
+    }
+
+    .summary-label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    .summary-value {
+      font-size: 30px;
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+
+    .summary-sub {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 18px;
+    }
+
+    .chart-card,
+    .table-card {
+      padding: 18px;
+      min-height: 420px;
+    }
+
+    .card-title {
+      margin: 0 0 14px;
+      font-size: 20px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 340px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 360px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      z-index: 1;
+      text-align: left;
+      font-size: 13px;
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+
+    tbody td {
+      font-size: 14px;
+      padding: 12px 10px;
+      border-bottom: 1px solid #eef2f7;
+      vertical-align: top;
+    }
+
+    tbody tr:hover {
+      background: #fafcff;
+    }
+
+    .sku-name {
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+
+    .sku-sub {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status-line {
+      margin-top: 14px;
+      font-size: 14px;
+      color: var(--muted);
+      min-height: 20px;
+    }
+
+    .status-line.error {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    .status-line.success {
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    .quick-periods {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .quick-periods .mini-btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .quick-periods .mini-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    @media (max-width: 1180px) {
+      .filters-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        padding: 14px;
+      }
+
+      .filters-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-value {
+        font-size: 24px;
+      }
+
+      .title-wrap h1 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <div class="title-wrap">
+        <h1>Аналитика селлера</h1>
+        <p>Первый аналитический блок: заказы, выручка, средний чек, график по дням и топ SKU.</p>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-secondary" id="btnBack">Назад</button>
+        <button class="btn btn-primary" id="btnSync">Обновить аналитику</button>
+      </div>
+    </div>
+
+    <div class="filters-card">
+      <div class="filters-grid">
+        <div class="field">
+          <label for="clientId">Client ID</label>
+          <input id="clientId" type="number" value="7" />
+        </div>
+
+        <div class="field">
+          <label for="mpAccountId">MP Account ID</label>
+          <input id="mpAccountId" type="number" value="2" />
+        </div>
+
+        <div class="field">
+          <label for="dateFrom">Дата от</label>
+          <input id="dateFrom" type="date" />
+        </div>
+
+        <div class="field">
+          <label for="dateTo">Дата до</label>
+          <input id="dateTo" type="date" />
+        </div>
+
+        <div class="field">
+          <label for="fulfillmentModel">Модель продаж</label>
+          <select id="fulfillmentModel">
+            <option value="all">Все</option>
+            <option value="fbs">FBS</option>
+            <option value="fbo">FBO</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>&nbsp;</label>
+          <div class="filters-actions">
+            <button class="btn btn-primary" id="btnApply">Применить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="quick-periods">
+        <button class="mini-btn" data-days="7">7 дней</button>
+        <button class="mini-btn" data-days="14">14 дней</button>
+        <button class="mini-btn" data-days="30">30 дней</button>
+        <button class="mini-btn" data-days="90">90 дней</button>
+      </div>
+
+      <div class="status-line" id="statusLine"></div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-label">Заказы</div>
+        <div class="summary-value" id="ordersCount">0</div>
+        <div class="summary-sub">Всего заказов за период</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label">Выручка</div>
+        <div class="summary-value" id="revenueTotal">0 ₽</div>
+        <div class="summary-sub">Сумма по заказам за период</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label">Средний чек</div>
+        <div class="summary-value" id="averageOrderValue">0 ₽</div>
+        <div class="summary-sub">Выручка / количество заказов</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label">Продано, шт</div>
+        <div class="summary-value" id="itemsSold">0</div>
+        <div class="summary-sub">Суммарное количество строк/штук</div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="chart-card">
+        <h2 class="card-title">График по дням</h2>
+        <div class="chart-wrap">
+          <canvas id="salesChart"></canvas>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <h2 class="card-title">Топ SKU</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Товар</th>
+                <th>Шт</th>
+                <th>Выручка</th>
+                <th>Ср. цена</th>
+                <th>Заказы</th>
+              </tr>
+            </thead>
+            <tbody id="topSkusBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    let salesChart = null;
+
+    function getToken() {
+      return localStorage.getItem('wmsToken') || '';
+    }
+
+    function setStatus(text, type = '') {
+      const el = document.getElementById('statusLine');
+      el.textContent = text || '';
+      el.className = 'status-line' + (type ? ' ' + type : '');
+    }
+
+    function formatMoney(value) {
+      const num = Number(value || 0);
+      return num.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
+    }
+
+    function formatInt(value) {
+      return Number(value || 0).toLocaleString('ru-RU');
+    }
+
+    function todayStr() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function shiftDate(days) {
+      const d = new Date();
+      d.setDate(d.getDate() - days);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function setDefaultDates() {
+      const dateTo = document.getElementById('dateTo');
+      const dateFrom = document.getElementById('dateFrom');
+      if (!dateTo.value) dateTo.value = todayStr();
+      if (!dateFrom.value) dateFrom.value = shiftDate(30);
+    }
+
+    function getFilters() {
+      return {
+        client_id: document.getElementById('clientId').value.trim(),
+        mp_account_id: document.getElementById('mpAccountId').value.trim(),
+        date_from: document.getElementById('dateFrom').value,
+        date_to: document.getElementById('dateTo').value,
+        fulfillment_model: document.getElementById('fulfillmentModel').value
+      };
+    }
+
+    function buildQuery(filters, extra = {}) {
+      const params = new URLSearchParams({
+        ...filters,
+        ...extra
+      });
+      return params.toString();
+    }
+
+    async function apiGet(path) {
+      const token = getToken();
+      if (!token) {
+        throw new Error('Нет токена. Сначала войди в систему.');
+      }
+
+      const res = await fetch(`${API_BASE}${path}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+
+      return data;
+    }
+
+    async function apiPost(path, body) {
+      const token = getToken();
+      if (!token) {
+        throw new Error('Нет токена. Сначала войди в систему.');
+      }
+
+      const res = await fetch(`${API_BASE}${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+
+      return data;
+    }
+
+    function renderSummary(summary) {
+      document.getElementById('ordersCount').textContent = formatInt(summary.orders_count);
+      document.getElementById('revenueTotal').textContent = formatMoney(summary.revenue_total);
+      document.getElementById('averageOrderValue').textContent = formatMoney(summary.average_order_value);
+      document.getElementById('itemsSold').textContent = formatInt(summary.items_sold);
+    }
+
+    function renderTopSkus(rows) {
+      const tbody = document.getElementById('topSkusBody');
+      tbody.innerHTML = '';
+
+      if (!rows || !rows.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align:center;color:#64748b;padding:24px;">
+              Нет данных по SKU за выбранный период
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = rows.map(row => `
+        <tr>
+          <td>
+            <div class="sku-name">${escapeHtml(row.item_name || 'Без названия')}</div>
+            <div class="sku-sub">ШК: ${escapeHtml(row.barcode || '-')}</div>
+            <div class="sku-sub">Артикул: ${escapeHtml(row.vendor_code || '-')}</div>
+          </td>
+          <td>${formatInt(row.qty_sold)}</td>
+          <td>${formatMoney(row.revenue_total)}</td>
+          <td>${formatMoney(row.avg_price)}</td>
+          <td>${formatInt(row.orders_count)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function renderChart(rows) {
+      const labels = rows.map(r => r.date);
+      const revenueData = rows.map(r => Number(r.revenue_total || 0));
+      const ordersData = rows.map(r => Number(r.orders_count || 0));
+
+      const ctx = document.getElementById('salesChart').getContext('2d');
+
+      if (salesChart) {
+        salesChart.destroy();
+      }
+
+      salesChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Выручка',
+              data: revenueData,
+              yAxisID: 'y',
+              borderWidth: 1
+            },
+            {
+              type: 'line',
+              label: 'Заказы',
+              data: ordersData,
+              yAxisID: 'y1',
+              tension: 0.25
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          responsive: true,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              position: 'top'
+            },
+            tooltip: {
+              callbacks: {
+                label(context) {
+                  const label = context.dataset.label || '';
+                  const value = context.raw || 0;
+                  if (label === 'Выручка') {
+                    return `${label}: ${formatMoney(value)}`;
+                  }
+                  return `${label}: ${formatInt(value)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: {
+                maxRotation: 0,
+                autoSkip: true
+              }
+            },
+            y: {
+              position: 'left',
+              beginAtZero: true,
+              ticks: {
+                callback(value) {
+                  return Number(value).toLocaleString('ru-RU');
+                }
+              }
+            },
+            y1: {
+              position: 'right',
+              beginAtZero: true,
+              grid: {
+                drawOnChartArea: false
+              },
+              ticks: {
+                callback(value) {
+                  return Number(value).toLocaleString('ru-RU');
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    async function loadAnalytics() {
+      try {
+        setStatus('Загрузка аналитики...');
+        const filters = getFilters();
+
+        const [overview, daily, topSkus] = await Promise.all([
+          apiGet(`/seller-analytics/overview?${buildQuery(filters)}`),
+          apiGet(`/seller-analytics/sales-daily?${buildQuery(filters)}`),
+          apiGet(`/seller-analytics/top-skus?${buildQuery(filters, { limit: 10 })}`)
+        ]);
+
+        renderSummary(overview.summary || {});
+        renderChart(daily.rows || []);
+        renderTopSkus(topSkus.rows || []);
+
+        setStatus('Аналитика успешно загружена', 'success');
+      } catch (error) {
+        console.error('[seller-analytics] loadAnalytics error:', error);
+        setStatus(error.message || 'Ошибка загрузки аналитики', 'error');
+      }
+    }
+
+    async function syncAnalytics() {
+      try {
+        setStatus('Запускаю обновление аналитики...');
+        const filters = getFilters();
+
+        const result = await apiPost('/seller-analytics-admin/sync-orders', filters);
+
+        setStatus(
+          `Обновление завершено. Заказы: ${result.stats?.sales_orders_inserted || 0}, строки: ${result.stats?.sales_order_lines_inserted || 0}`,
+          'success'
+        );
+
+        await loadAnalytics();
+      } catch (error) {
+        console.error('[seller-analytics] syncAnalytics error:', error);
+        setStatus(error.message || 'Ошибка обновления аналитики', 'error');
+      }
+    }
+
+    function bindEvents() {
+      document.getElementById('btnApply').addEventListener('click', loadAnalytics);
+      document.getElementById('btnSync').addEventListener('click', syncAnalytics);
+
+      document.getElementById('btnBack').addEventListener('click', () => {
+        if (document.referrer) {
+          history.back();
+          return;
+        }
+        window.location.href = '/seller-cabinet.html';
+      });
+
+      document.querySelectorAll('.mini-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const days = Number(btn.dataset.days || 30);
+          document.getElementById('dateTo').value = todayStr();
+          document.getElementById('dateFrom').value = shiftDate(days);
+          loadAnalytics();
+        });
+      });
+    }
+
+    function bootstrapFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+
+      const clientId = params.get('client_id');
+      const mpAccountId = params.get('mp_account_id');
+      const dateFrom = params.get('date_from');
+      const dateTo = params.get('date_to');
+      const fulfillmentModel = params.get('fulfillment_model');
+
+      if (clientId) document.getElementById('clientId').value = clientId;
+      if (mpAccountId) document.getElementById('mpAccountId').value = mpAccountId;
+      if (dateFrom) document.getElementById('dateFrom').value = dateFrom;
+      if (dateTo) document.getElementById('dateTo').value = dateTo;
+      if (fulfillmentModel) document.getElementById('fulfillmentModel').value = fulfillmentModel;
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      setDefaultDates();
+      bootstrapFromUrl();
+      bindEvents();
+      await loadAnalytics();
+    });
+  </script>
+</body>
+</html>
