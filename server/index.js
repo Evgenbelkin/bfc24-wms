@@ -33,6 +33,8 @@ const sellerAnalyticsRoutes = require('./routes/sellerAnalytics');
 const sellerAnalyticsAdminRoutes = require('./routes/sellerAnalyticsAdmin');
 const wbSalesSyncRouter = require('./routes/wbSalesSync');
 const wbSalesNormalizeRouter = require('./routes/wbSalesNormalize');
+const wbOrdersSyncRouter = require('./routes/wbOrdersSync');
+const wbOrdersNormalizeRouter = require('./routes/wbOrdersNormalize');
 
 // ⬇️ WB API для складов/остатков
 const {
@@ -87,6 +89,8 @@ app.use(leadsRouter);
 app.use('/seller-analytics-admin', sellerAnalyticsAdminRoutes);
 app.use('/wb', wbSalesSyncRouter);
 app.use('/wb', wbSalesNormalizeRouter);
+app.use('/wb', wbOrdersSyncRouter);
+app.use('/wb', wbOrdersNormalizeRouter);
 
 // -------------------------------------------------------
 // ДАЛЕЕ ИДУТ ОСТАЛЬНЫЕ app.use(...), ROUTES И Т.Д.
