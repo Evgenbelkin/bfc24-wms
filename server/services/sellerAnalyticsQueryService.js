@@ -9,37 +9,78 @@ async function getOverviewSummary({
   const params = [clientId, mpAccountId, dateFrom, dateTo];
 
   const sql = `
+    WITH orders_agg AS (
+      SELECT
+        COUNT(DISTINCT o.wb_order_id)::int AS orders_count,
+        COUNT(*)::int AS orders_qty,
+        COALESCE(
+          SUM(
+            COALESCE(
+              NULLIF(o.raw->>'convertedFinalPrice', '')::numeric(14,2),
+              NULLIF(o.raw->>'finalPrice', '')::numeric(14,2),
+              o.converted_price,
+              o.price,
+              0
+            )
+          ),
+          0
+        )::numeric(14,2) AS orders_amount
+      FROM public.mp_wb_orders o
+      INNER JOIN public.mp_accounts a
+        ON a.id = o.client_mp_account_id
+      WHERE a.wms_client_id = $1
+        AND o.client_mp_account_id = $2
+        AND o.created_at >= $3::date
+        AND o.created_at < ($4::date + INTERVAL '1 day')
+    ),
+    sales_agg AS (
+      SELECT
+        COUNT(*) FILTER (WHERE n.is_sale = TRUE)::int AS sales_count,
+        COALESCE(SUM(n.qty) FILTER (WHERE n.is_sale = TRUE), 0)::int AS sales_qty,
+        COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_sale = TRUE), 0)::numeric(14,2) AS sales_amount,
+        COALESCE(SUM(n.amount_gross) FILTER (WHERE n.is_sale = TRUE), 0)::numeric(14,2) AS realization_amount,
+        COUNT(*) FILTER (WHERE n.is_return = TRUE)::int AS returns_count,
+        COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_return = TRUE), 0)::numeric(14,2) AS returns_amount
+      FROM analytics.wb_sales_normalized n
+      WHERE n.client_id = $1
+        AND n.client_mp_account_id = $2
+        AND n.event_date >= $3::date
+        AND n.event_date <= $4::date
+    )
     SELECT
-      COUNT(*) FILTER (WHERE n.is_sale = TRUE)::int AS orders_count,
-      COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_sale = TRUE), 0)::numeric(14,2) AS revenue_total,
+      o.orders_count,
+      o.orders_qty,
+      o.orders_amount,
+
+      s.sales_count,
+      s.sales_qty,
+      s.sales_amount,
+      s.realization_amount,
+
+      s.returns_count,
+      s.returns_amount,
+
       CASE
-        WHEN COUNT(*) FILTER (WHERE n.is_sale = TRUE) = 0 THEN 0::numeric(14,2)
-        ELSE ROUND(
-          COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_sale = TRUE), 0)
-          / COUNT(*) FILTER (WHERE n.is_sale = TRUE),
-          2
-        )
-      END AS average_order_value,
-      COALESCE(SUM(n.qty) FILTER (WHERE n.is_sale = TRUE), 0)::int AS items_sold,
+        WHEN COALESCE(o.orders_qty, 0) = 0 THEN 0::numeric(10,2)
+        ELSE ROUND((COALESCE(s.sales_qty, 0)::numeric / o.orders_qty::numeric) * 100, 2)
+      END AS buyout_percent
 
-      COUNT(*) FILTER (WHERE n.is_return = TRUE)::int AS returns_count,
-      COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_return = TRUE), 0)::numeric(14,2) AS returns_total
-
-    FROM analytics.wb_sales_normalized n
-    WHERE n.client_id = $1
-      AND n.client_mp_account_id = $2
-      AND n.event_date >= $3::date
-      AND n.event_date <= $4::date
+    FROM orders_agg o
+    CROSS JOIN sales_agg s
   `;
 
   const { rows } = await pool.query(sql, params);
   return rows[0] || {
     orders_count: 0,
-    revenue_total: '0.00',
-    average_order_value: '0.00',
-    items_sold: 0,
+    orders_qty: 0,
+    orders_amount: '0.00',
+    sales_count: 0,
+    sales_qty: 0,
+    sales_amount: '0.00',
+    realization_amount: '0.00',
     returns_count: 0,
-    returns_total: '0.00',
+    returns_amount: '0.00',
+    buyout_percent: '0.00',
   };
 }
 
@@ -59,14 +100,41 @@ async function getSalesDaily({
         INTERVAL '1 day'
       )::date AS day
     ),
+    orders_agg AS (
+      SELECT
+        o.created_at::date AS day,
+        COUNT(DISTINCT o.wb_order_id)::int AS orders_count,
+        COUNT(*)::int AS orders_qty,
+        COALESCE(
+          SUM(
+            COALESCE(
+              NULLIF(o.raw->>'convertedFinalPrice', '')::numeric(14,2),
+              NULLIF(o.raw->>'finalPrice', '')::numeric(14,2),
+              o.converted_price,
+              o.price,
+              0
+            )
+          ),
+          0
+        )::numeric(14,2) AS orders_amount
+      FROM public.mp_wb_orders o
+      INNER JOIN public.mp_accounts a
+        ON a.id = o.client_mp_account_id
+      WHERE a.wms_client_id = $3
+        AND o.client_mp_account_id = $4
+        AND o.created_at >= $1::date
+        AND o.created_at < ($2::date + INTERVAL '1 day')
+      GROUP BY o.created_at::date
+    ),
     sales_agg AS (
       SELECT
         n.event_date AS day,
-        COUNT(*) FILTER (WHERE n.is_sale = TRUE)::int AS orders_count,
-        COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_sale = TRUE), 0)::numeric(14,2) AS revenue_total,
-        COALESCE(SUM(n.qty) FILTER (WHERE n.is_sale = TRUE), 0)::int AS items_sold,
+        COUNT(*) FILTER (WHERE n.is_sale = TRUE)::int AS sales_count,
+        COALESCE(SUM(n.qty) FILTER (WHERE n.is_sale = TRUE), 0)::int AS sales_qty,
+        COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_sale = TRUE), 0)::numeric(14,2) AS sales_amount,
+        COALESCE(SUM(n.amount_gross) FILTER (WHERE n.is_sale = TRUE), 0)::numeric(14,2) AS realization_amount,
         COUNT(*) FILTER (WHERE n.is_return = TRUE)::int AS returns_count,
-        COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_return = TRUE), 0)::numeric(14,2) AS returns_total
+        COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_return = TRUE), 0)::numeric(14,2) AS returns_amount
       FROM analytics.wb_sales_normalized n
       WHERE n.client_id = $3
         AND n.client_mp_account_id = $4
@@ -76,14 +144,29 @@ async function getSalesDaily({
     )
     SELECT
       d.day::text AS date,
-      COALESCE(a.orders_count, 0)::int AS orders_count,
-      COALESCE(a.revenue_total, 0)::numeric(14,2) AS revenue_total,
-      COALESCE(a.items_sold, 0)::int AS items_sold,
-      COALESCE(a.returns_count, 0)::int AS returns_count,
-      COALESCE(a.returns_total, 0)::numeric(14,2) AS returns_total
+
+      COALESCE(o.orders_count, 0)::int AS orders_count,
+      COALESCE(o.orders_qty, 0)::int AS orders_qty,
+      COALESCE(o.orders_amount, 0)::numeric(14,2) AS orders_amount,
+
+      COALESCE(s.sales_count, 0)::int AS sales_count,
+      COALESCE(s.sales_qty, 0)::int AS sales_qty,
+      COALESCE(s.sales_amount, 0)::numeric(14,2) AS sales_amount,
+      COALESCE(s.realization_amount, 0)::numeric(14,2) AS realization_amount,
+
+      COALESCE(s.returns_count, 0)::int AS returns_count,
+      COALESCE(s.returns_amount, 0)::numeric(14,2) AS returns_amount,
+
+      CASE
+        WHEN COALESCE(o.orders_qty, 0) = 0 THEN 0::numeric(10,2)
+        ELSE ROUND((COALESCE(s.sales_qty, 0)::numeric / o.orders_qty::numeric) * 100, 2)
+      END AS buyout_percent
+
     FROM days d
-    LEFT JOIN sales_agg a
-      ON a.day = d.day
+    LEFT JOIN orders_agg o
+      ON o.day = d.day
+    LEFT JOIN sales_agg s
+      ON s.day = d.day
     ORDER BY d.day ASC
   `;
 
@@ -114,8 +197,9 @@ async function getTopSkus({
         'Без названия'
       ) AS item_name,
 
-      COALESCE(SUM(n.qty) FILTER (WHERE n.is_sale = TRUE), 0)::int AS qty_sold,
-      COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_sale = TRUE), 0)::numeric(14,2) AS revenue_total,
+      COALESCE(SUM(n.qty) FILTER (WHERE n.is_sale = TRUE), 0)::int AS sales_qty,
+      COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_sale = TRUE), 0)::numeric(14,2) AS sales_amount,
+      COALESCE(SUM(n.amount_gross) FILTER (WHERE n.is_sale = TRUE), 0)::numeric(14,2) AS realization_amount,
 
       CASE
         WHEN COALESCE(SUM(n.qty) FILTER (WHERE n.is_sale = TRUE), 0) = 0 THEN 0::numeric(14,2)
@@ -126,9 +210,9 @@ async function getTopSkus({
         )
       END AS avg_price,
 
-      COUNT(*) FILTER (WHERE n.is_sale = TRUE)::int AS orders_count,
+      COUNT(*) FILTER (WHERE n.is_sale = TRUE)::int AS sales_count,
       COUNT(*) FILTER (WHERE n.is_return = TRUE)::int AS returns_count,
-      COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_return = TRUE), 0)::numeric(14,2) AS returns_total
+      COALESCE(SUM(n.amount_net) FILTER (WHERE n.is_return = TRUE), 0)::numeric(14,2) AS returns_amount
 
     FROM analytics.wb_sales_normalized n
     WHERE n.client_id = $1
@@ -137,7 +221,7 @@ async function getTopSkus({
       AND n.event_date <= $4::date
       AND (n.is_sale = TRUE OR n.is_return = TRUE)
     GROUP BY n.barcode
-    ORDER BY revenue_total DESC, qty_sold DESC
+    ORDER BY sales_amount DESC, sales_qty DESC
     LIMIT $5
   `;
 
