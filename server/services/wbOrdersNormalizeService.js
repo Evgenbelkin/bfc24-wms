@@ -65,6 +65,74 @@ async function normalizeWbOrders(reqUser, body) {
     );
 
     const insertSql = `
+      WITH raw_source AS (
+        SELECT
+          r.id AS raw_id,
+          r.client_id,
+          r.client_mp_account_id,
+
+          COALESCE(r.event_datetime, r.order_datetime, r.created_at) AS event_datetime,
+          COALESCE(r.event_datetime, r.order_datetime, r.created_at)::date AS event_date,
+
+          COALESCE(r.order_datetime, r.event_datetime, r.created_at) AS order_datetime,
+          COALESCE(r.order_datetime, r.event_datetime, r.created_at)::date AS order_date,
+
+          r.source_order_id AS wb_order_id,
+          r.source_rid AS rid,
+
+          r.source_nm_id AS nm_id,
+          r.source_chrt_id AS chrt_id,
+          r.article,
+          r.barcode,
+          r.warehouse_name,
+          r.region_name,
+          r.status_raw,
+
+          1 AS qty,
+
+          r.price_raw,
+          r.converted_price_raw,
+          r.final_price_raw,
+          r.converted_final_price_raw,
+
+          COALESCE(
+            r.converted_price_raw,
+            r.converted_final_price_raw,
+            r.price_raw,
+            r.final_price_raw,
+            0
+          ) AS order_amount,
+
+          TRUE AS is_order,
+          r.raw,
+
+          COALESCE(
+            NULLIF(TRIM(r.source_rid::text), ''),
+            NULLIF(TRIM(r.source_order_id::text), ''),
+            CONCAT_WS(
+              '|',
+              COALESCE(r.source_nm_id::text, ''),
+              COALESCE(r.barcode, ''),
+              COALESCE(r.article, ''),
+              COALESCE(COALESCE(r.order_datetime, r.event_datetime, r.created_at)::date::text, ''),
+              COALESCE(r.warehouse_name, '')
+            )
+          ) AS dedupe_key
+        FROM analytics.wb_orders_raw r
+        WHERE r.client_id = $1
+          AND r.client_mp_account_id = $2
+          AND COALESCE(r.order_datetime, r.event_datetime, r.created_at)::date >= $3::date
+          AND COALESCE(r.order_datetime, r.event_datetime, r.created_at)::date <= $4::date
+      ),
+      ranked AS (
+        SELECT
+          rs.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY rs.client_id, rs.client_mp_account_id, rs.dedupe_key
+            ORDER BY rs.order_datetime DESC NULLS LAST, rs.raw_id DESC
+          ) AS rn
+        FROM raw_source rs
+      )
       INSERT INTO analytics.wb_orders_normalized (
         raw_id,
         client_id,
@@ -92,49 +160,32 @@ async function normalizeWbOrders(reqUser, body) {
         raw
       )
       SELECT
-        r.id AS raw_id,
-        r.client_id,
-        r.client_mp_account_id,
-
-        COALESCE(r.event_datetime, r.order_datetime, r.created_at) AS event_datetime,
-        COALESCE(r.event_datetime, r.order_datetime, r.created_at)::date AS event_date,
-
-        COALESCE(r.order_datetime, r.event_datetime, r.created_at) AS order_datetime,
-        COALESCE(r.order_datetime, r.event_datetime, r.created_at)::date AS order_date,
-
-        r.source_order_id AS wb_order_id,
-        r.source_rid AS rid,
-
-        r.source_nm_id AS nm_id,
-        r.source_chrt_id AS chrt_id,
-        r.article,
-        r.barcode,
-        r.warehouse_name,
-        r.region_name,
-        r.status_raw,
-
-        1 AS qty,
-
-        r.price_raw,
-        r.converted_price_raw,
-        r.final_price_raw,
-        r.converted_final_price_raw,
-
-       COALESCE(
-  r.converted_price_raw,
-  r.price_raw,
-  r.final_price_raw,
-  r.converted_final_price_raw,
-  0
-) AS order_amount,
-
-        TRUE AS is_order,
-        r.raw
-      FROM analytics.wb_orders_raw r
-      WHERE r.client_id = $1
-        AND r.client_mp_account_id = $2
-        AND COALESCE(r.order_datetime, r.event_datetime, r.created_at)::date >= $3::date
-        AND COALESCE(r.order_datetime, r.event_datetime, r.created_at)::date <= $4::date
+        raw_id,
+        client_id,
+        client_mp_account_id,
+        event_datetime,
+        event_date,
+        order_datetime,
+        order_date,
+        wb_order_id,
+        rid,
+        nm_id,
+        chrt_id,
+        article,
+        barcode,
+        warehouse_name,
+        region_name,
+        status_raw,
+        qty,
+        price_raw,
+        converted_price_raw,
+        final_price_raw,
+        converted_final_price_raw,
+        order_amount,
+        is_order,
+        raw
+      FROM ranked
+      WHERE rn = 1
     `;
 
     const insertRes = await client.query(insertSql, [

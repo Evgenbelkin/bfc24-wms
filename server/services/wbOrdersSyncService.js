@@ -75,6 +75,14 @@ function buildDateList(dateFrom, dateTo) {
   return days;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(error) {
+  return Number(error?.response?.status || 0) === 429;
+}
+
 async function fetchOrdersForDay(apiToken, dateStr) {
   const url = `${WB_STATISTICS_API_BASE}/api/v1/supplier/orders`;
 
@@ -94,6 +102,33 @@ async function fetchOrdersForDay(apiToken, dateStr) {
   }
 
   return [];
+}
+
+async function fetchOrdersForDayWithRetry(apiToken, dateStr) {
+  const maxAttempts = 6;
+  let attempt = 0;
+
+  while (attempt < maxAttempts) {
+    attempt += 1;
+
+    try {
+      const rows = await fetchOrdersForDay(apiToken, dateStr);
+      return {
+        rows,
+        attempts: attempt,
+      };
+    } catch (error) {
+      if (!isRateLimitError(error)) {
+        throw error;
+      }
+
+      const waitMs = Math.min(1500 * attempt, 8000);
+      console.warn(`[wbOrdersSync] 429 for ${dateStr}, attempt ${attempt}/${maxAttempts}, wait ${waitMs}ms`);
+      await sleep(waitMs);
+    }
+  }
+
+  throw new Error(`WB вернул 429 слишком много раз для даты ${dateStr}`);
 }
 
 async function upsertOrderRaw({
@@ -248,19 +283,24 @@ async function syncWbOrders(reqUser, body) {
 
   let fetchedDays = 0;
   let fetchedRows = 0;
+  let totalAttempts = 0;
 
   for (const day of days) {
-    const orders = await fetchOrdersForDay(account.api_token, day);
+    const { rows, attempts } = await fetchOrdersForDayWithRetry(account.api_token, day);
     fetchedDays += 1;
-    fetchedRows += orders.length;
+    fetchedRows += rows.length;
+    totalAttempts += attempts;
 
-    for (const order of orders) {
+    for (const order of rows) {
       await upsertOrderRaw({
         clientId,
         mpAccountId,
         order,
       });
     }
+
+    // мягкая пауза между днями, чтобы не ловить rate limit сериями
+    await sleep(700);
   }
 
   const countRes = await pool.query(
@@ -282,6 +322,7 @@ async function syncWbOrders(reqUser, body) {
       fetched_days: fetchedDays,
       fetched_rows_total: fetchedRows,
       raw_rows_in_range: Number(countRes.rows[0]?.cnt || 0),
+      total_attempts: totalAttempts,
     },
     filters: {
       client_id: clientId,

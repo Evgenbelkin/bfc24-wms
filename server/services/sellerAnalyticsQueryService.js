@@ -11,8 +11,8 @@ async function getOverviewSummary({
   const sql = `
     WITH orders_agg AS (
       SELECT
-        COUNT(DISTINCT o.wb_order_id)::int AS orders_count,
-        COALESCE(SUM(o.qty), 0)::int AS orders_qty,
+        COUNT(*)::int AS orders_count,
+        COALESCE(SUM(COALESCE(o.qty, 1)), 0)::int AS orders_qty,
         COALESCE(SUM(o.order_amount), 0)::numeric(14,2) AS orders_amount
       FROM analytics.wb_orders_normalized o
       WHERE o.client_id = $1
@@ -57,6 +57,7 @@ async function getOverviewSummary({
   `;
 
   const { rows } = await pool.query(sql, params);
+
   return rows[0] || {
     orders_count: 0,
     orders_qty: 0,
@@ -90,8 +91,8 @@ async function getSalesDaily({
     orders_agg AS (
       SELECT
         o.order_date AS day,
-        COUNT(DISTINCT o.wb_order_id)::int AS orders_count,
-        COALESCE(SUM(o.qty), 0)::int AS orders_qty,
+        COUNT(*)::int AS orders_count,
+        COALESCE(SUM(COALESCE(o.qty, 1)), 0)::int AS orders_qty,
         COALESCE(SUM(o.order_amount), 0)::numeric(14,2) AS orders_amount
       FROM analytics.wb_orders_normalized o
       WHERE o.client_id = $3
