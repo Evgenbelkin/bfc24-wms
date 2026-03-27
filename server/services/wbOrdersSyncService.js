@@ -67,6 +67,22 @@ async function getMpAccount(clientId, mpAccountId) {
   return row;
 }
 
+function buildDateList(dateFrom, dateTo) {
+  const days = [];
+  const current = new Date(`${dateFrom}T00:00:00Z`);
+  const end = new Date(`${dateTo}T00:00:00Z`);
+
+  while (current <= end) {
+    const yyyy = current.getUTCFullYear();
+    const mm = String(current.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(current.getUTCDate()).padStart(2, '0');
+    days.push(`${yyyy}-${mm}-${dd}`);
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return days;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -76,19 +92,21 @@ function isRateLimitError(error) {
 }
 
 function getRetryDelayMs(error, attempt) {
-  const retryAfterHeader = error?.response?.headers?.['retry-after'];
-  const retryAfterSeconds = Number(retryAfterHeader);
+  const retryAfterHeader =
+    error?.response?.headers?.['retry-after'] ||
+    error?.response?.headers?.['x-ratelimit-retry'];
 
+  const retryAfterSeconds = Number(retryAfterHeader);
   if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
     return retryAfterSeconds * 1000;
   }
 
-  const backoff = Math.min(3000 * Math.pow(2, attempt - 1), 30000);
+  const backoff = Math.min(4000 * Math.pow(2, attempt - 1), 60000);
   const jitter = Math.floor(Math.random() * 1000);
   return backoff + jitter;
 }
 
-async function fetchOrdersSince(apiToken, dateFrom) {
+async function fetchOrdersForDay(apiToken, dateStr) {
   const url = `${WB_STATISTICS_API_BASE}/api/v1/supplier/orders`;
 
   const resp = await axios.get(url, {
@@ -96,7 +114,7 @@ async function fetchOrdersSince(apiToken, dateFrom) {
       Authorization: apiToken,
     },
     params: {
-      dateFrom,
+      dateFrom: dateStr,
       flag: 1,
     },
     timeout: 120000,
@@ -109,7 +127,7 @@ async function fetchOrdersSince(apiToken, dateFrom) {
   return [];
 }
 
-async function fetchOrdersSinceWithRetry(apiToken, dateFrom) {
+async function fetchOrdersForDayWithRetry(apiToken, dateStr) {
   const maxAttempts = 7;
   let attempt = 0;
 
@@ -117,7 +135,7 @@ async function fetchOrdersSinceWithRetry(apiToken, dateFrom) {
     attempt += 1;
 
     try {
-      const rows = await fetchOrdersSince(apiToken, dateFrom);
+      const rows = await fetchOrdersForDay(apiToken, dateStr);
       return {
         rows,
         attempts: attempt,
@@ -128,36 +146,12 @@ async function fetchOrdersSinceWithRetry(apiToken, dateFrom) {
       }
 
       const waitMs = getRetryDelayMs(error, attempt);
-      console.warn(`[wbOrdersSync] 429 for dateFrom=${dateFrom}, attempt ${attempt}/${maxAttempts}, wait ${waitMs}ms`);
+      console.warn(`[wbOrdersSync] 429 for ${dateStr}, attempt ${attempt}/${maxAttempts}, wait ${waitMs}ms`);
       await sleep(waitMs);
     }
   }
 
-  throw new Error(`WB вернул 429 слишком много раз для dateFrom=${dateFrom}`);
-}
-
-function toDateOnly(value) {
-  if (!value) return null;
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  const yyyy = date.getUTCFullYear();
-  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(date.getUTCDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function isOrderInRange(order, dateFrom, dateTo) {
-  const orderDate =
-    toDateOnly(order?.date) ||
-    toDateOnly(order?.lastChangeDate);
-
-  if (!orderDate) {
-    return false;
-  }
-
-  return orderDate >= dateFrom && orderDate <= dateTo;
+  throw new Error(`WB вернул 429 слишком много раз для даты ${dateStr}`);
 }
 
 function toNumberOrNull(value) {
@@ -177,13 +171,12 @@ async function upsertOrderRaw({
   const sourceOrderId =
     order.odid ||
     order.orderId ||
-    order.srid ||
     order.gNumber ||
     null;
 
   const sourceRid =
-    order.rid ||
     order.srid ||
+    order.rid ||
     null;
 
   const orderDatetime =
@@ -205,21 +198,14 @@ async function upsertOrderRaw({
     order.barcode ||
     null;
 
-  const priceRaw =
-    toNumberOrNull(order.totalPrice);
-
-  const convertedPriceRaw =
-    toNumberOrNull(order.priceWithDisc);
-
-  const finalPriceRaw =
-    toNumberOrNull(order.finishedPrice);
-
-  const convertedFinalPriceRaw =
-    toNumberOrNull(
-      order.finishedPriceWithDisc !== undefined
-        ? order.finishedPriceWithDisc
-        : order.priceWithDisc
-    );
+  const priceRaw = toNumberOrNull(order.totalPrice);
+  const convertedPriceRaw = toNumberOrNull(order.priceWithDisc);
+  const finalPriceRaw = toNumberOrNull(order.finishedPrice);
+  const convertedFinalPriceRaw = toNumberOrNull(
+    order.finishedPriceWithDisc !== undefined
+      ? order.finishedPriceWithDisc
+      : order.priceWithDisc
+  );
 
   const statusRaw =
     order.isCancel === true
@@ -314,19 +300,30 @@ async function syncWbOrders(reqUser, body) {
   }
 
   const account = await getMpAccount(clientId, mpAccountId);
+  const days = buildDateList(body.date_from, body.date_to);
 
-  const { rows, attempts } = await fetchOrdersSinceWithRetry(account.api_token, body.date_from);
-  const filteredRows = rows.filter((order) => isOrderInRange(order, body.date_from, body.date_to));
-
+  let fetchedDays = 0;
+  let fetchedRows = 0;
+  let totalAttempts = 0;
   let upsertedRows = 0;
 
-  for (const order of filteredRows) {
-    await upsertOrderRaw({
-      clientId,
-      mpAccountId,
-      order,
-    });
-    upsertedRows += 1;
+  for (const day of days) {
+    const { rows, attempts } = await fetchOrdersForDayWithRetry(account.api_token, day);
+
+    fetchedDays += 1;
+    fetchedRows += rows.length;
+    totalAttempts += attempts;
+
+    for (const order of rows) {
+      await upsertOrderRaw({
+        clientId,
+        mpAccountId,
+        order,
+      });
+      upsertedRows += 1;
+    }
+
+    await sleep(6500);
   }
 
   const countRes = await pool.query(
@@ -335,8 +332,7 @@ async function syncWbOrders(reqUser, body) {
     FROM analytics.wb_orders_raw
     WHERE client_id = $1
       AND client_mp_account_id = $2
-      AND COALESCE(order_datetime, event_datetime, created_at) >= $3::date
-      AND COALESCE(order_datetime, event_datetime, created_at) < ($4::date + INTERVAL '1 day')
+      AND COALESCE(order_datetime, event_datetime, created_at)::date BETWEEN $3::date AND $4::date
     `,
     [clientId, mpAccountId, body.date_from, body.date_to]
   );
@@ -345,11 +341,11 @@ async function syncWbOrders(reqUser, body) {
     ok: true,
     message: 'WB orders sync completed',
     stats: {
-      fetched_rows_total: rows.length,
-      rows_in_requested_range: filteredRows.length,
+      fetched_days: fetchedDays,
+      fetched_rows_total: fetchedRows,
       raw_rows_in_range: Number(countRes.rows[0]?.cnt || 0),
       upserted_rows: upsertedRows,
-      total_attempts: attempts,
+      total_attempts: totalAttempts,
     },
     filters: {
       client_id: clientId,
