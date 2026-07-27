@@ -140,6 +140,51 @@
     .price-list li { display: flex; align-items: center; gap: 12px; font-size: 16px; color: var(--text-muted); }
     .price-list li::before { content: ""; width: 6px; height: 6px; background: var(--primary); border-radius: 50%; flex-shrink: 0; }
 
+    /* Services */
+    .service-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .service-card { padding: 30px 32px; border-radius: 16px; background: linear-gradient(135deg, rgba(37,99,235,0.32), rgba(37,99,235,0.08)); border: 1px solid rgba(37,99,235,0.35); }
+    .service-card h3 { color: #fff; font-size: 18px; margin-bottom: 10px; }
+    .service-card p { color: rgba(255,255,255,0.75); font-size: 14px; margin: 0; line-height: 1.6; }
+    .service-card.cta { background: linear-gradient(135deg, var(--accent), #0d7a63); border: none; display: flex; align-items: center; justify-content: center; text-align: center; }
+    .service-card.cta a { color: #fff; font-weight: 800; font-size: 17px; text-decoration: none; }
+
+    /* Price teaser + full table */
+    .price-teaser-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 40px 0 24px; }
+    .price-teaser-card { padding: 26px 28px; border-radius: 16px; }
+    .price-teaser-card.hl { background: linear-gradient(135deg, rgba(37,99,235,0.32), rgba(37,99,235,0.08)); border: 1px solid rgba(37,99,235,0.35); }
+    .price-teaser-card.dark { background: var(--bg-soft); border: 1px solid var(--glass-border); }
+    .price-teaser-card h4 { color: #fff; font-size: 16px; margin-bottom: 16px; }
+    .price-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-bottom: 1px dashed rgba(255,255,255,0.15); padding-bottom: 9px; margin-bottom: 12px; font-size: 14px; color: var(--text-muted); }
+    .price-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .price-row b { color: #fff; font-weight: 800; white-space: nowrap; }
+    .price-actions { display: flex; gap: 14px; justify-content: center; margin-top: 8px; }
+    .price-full { margin-top: 36px; border-top: 1px solid var(--glass-border); padding-top: 8px; }
+    .price-full > summary { cursor: pointer; color: var(--primary); font-weight: 700; font-size: 15px; padding: 16px 0; list-style: none; text-align: center; }
+    .price-full > summary::-webkit-details-marker { display: none; }
+    .price-full > summary::before { content: '+ '; }
+    .price-full[open] > summary::before { content: '− '; }
+    .price-cat { margin: 32px 0 12px; color: #fff; font-size: 16px; font-weight: 800; border-left: 3px solid var(--primary); padding-left: 12px; }
+    .price-cat:first-of-type { margin-top: 12px; }
+    table.price-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    table.price-table th, table.price-table td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--glass-border); color: var(--text-muted); }
+    table.price-table th { color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+    table.price-table td.num { color: #fff; font-weight: 700; text-align: right; white-space: nowrap; }
+    table.price-table td.note { font-size: 12px; }
+    .price-table-wrap { overflow-x: auto; }
+
+    /* Onboarding steps */
+    .onboard-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+    .onboard-card { padding: 26px 16px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 16px; text-align: center; }
+    .onboard-num { width: 34px; height: 34px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; margin: 0 auto 14px; font-size: 14px; }
+    .onboard-card h3 { font-size: 14.5px; color: #fff; margin-bottom: 8px; }
+    .onboard-card p { font-size: 12.5px; color: var(--text-muted); margin: 0; line-height: 1.5; }
+
+    /* Advantages */
+    .advantages-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .advantage-card { padding: 28px 30px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 16px; border-left: 3px solid var(--primary); }
+    .advantage-card h3 { font-size: 17px; color: #fff; margin-bottom: 10px; }
+    .advantage-card p { font-size: 14px; color: var(--text-muted); margin: 0; line-height: 1.6; }
+
     /* FAQ */
     .faq-wrap { max-width: 800px; margin: 0 auto; display: grid; gap: 16px; }
     .faq-item { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 16px; overflow: hidden; transition: var(--transition); }
@@ -174,6 +219,8 @@
     @media (max-width: 968px) {
       .footer-grid, .problems-grid, .steps-grid, .screens-grid, .cabinet-grid { grid-template-columns: 1fr; }
       .compare-wrap, .price-grid, .form-grid { grid-template-columns: 1fr; }
+      .service-grid, .price-teaser-grid, .advantages-grid { grid-template-columns: 1fr; }
+      .onboard-grid { grid-template-columns: repeat(2, 1fr); }
       .nav, .header-actions .btn-secondary { display: none; }
       .hero { padding: 80px 0 60px; }
       .lead-box { padding: 32px; }
@@ -193,6 +240,7 @@
       </a>
       <nav class="nav">
         <a href="#problems">Проблемы</a>
+        <a href="#services">Услуги</a>
         <a href="#solution">Решение</a>
         <a href="#screens">Система</a>
         <a href="#pricing">Тарифы</a>
@@ -261,6 +309,56 @@
               <div class="compare-item"><div class="dot"></div><span>Вы сами видите статус каждой сборки и отгрузки</span></div>
               <div class="compare-item"><div class="dot"></div><span>Никаких слепых зон: вы точно знаете, за что платите</span></div>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="services">
+      <div class="container">
+        <div class="section-head">
+          <h2>Наши услуги</h2>
+          <p>Закрываем весь цикл работы с товаром — от приёмки до отгрузки на маркетплейс</p>
+        </div>
+        <div class="service-grid">
+          <div class="service-card">
+            <h3>Персональный менеджер</h3>
+            <p>Отвечаем на вопросы по вашим остаткам, сборке и отгрузкам напрямую — без очереди в общем чате поддержки.</p>
+          </div>
+          <div class="service-card">
+            <h3>Приёмка товара</h3>
+            <p>Принимаем товар любых объёмов — в коробах или на паллетах, вносим в систему сразу при приёмке.</p>
+          </div>
+          <div class="service-card">
+            <h3>Упаковка</h3>
+            <p>Упаковываем строго по требованиям маркетплейсов, а также под ваши индивидуальные нужды.</p>
+          </div>
+          <div class="service-card">
+            <h3>Маркировка</h3>
+            <p>Печатаем и клеим штрихкоды/этикетки по требованиям площадок для продажи на маркетплейсах.</p>
+          </div>
+          <div class="service-card">
+            <h3>Хранение товаров</h3>
+            <p>Храним товар на адресном складе под видеонаблюдением — с учётом каждой единицы в реальном времени.</p>
+          </div>
+          <div class="service-card">
+            <h3>Доставка</h3>
+            <p>Доставляем поставки на склады Wildberries, Ozon, Яндекс.Маркет и других площадок с соблюдением сроков.</p>
+          </div>
+          <div class="service-card">
+            <h3>Обработка возвратов</h3>
+            <p>Принимаем возвраты, проверяем на брак и соответствие, годный товар возвращаем на остаток склада.</p>
+          </div>
+          <div class="service-card">
+            <h3>Работаем по FBS и FBO</h3>
+            <p>Поставляем товар на склад маркетплейса или отгружаем прямо с нашего склада по заказам FBS.</p>
+          </div>
+          <div class="service-card">
+            <h3>Дополнительные опции</h3>
+            <p>Бронирование поставок в личных кабинетах WB и Ozon, фотографирование товара и другие индивидуальные запросы.</p>
+          </div>
+          <div class="service-card cta">
+            <a href="#pricing">Рассчитать стоимость →</a>
           </div>
         </div>
       </div>
@@ -337,7 +435,7 @@
       </div>
     </section>
 
-    <sect<section class="section" id="pricing">
+    <section class="section" id="pricing">
   <div class="container">
     <div class="section-head">
       <h2>Честная стоимость без сюрпризов</h2>
@@ -399,8 +497,229 @@
       </div>
 
     </div>
+
+    <div class="price-teaser-grid">
+      <div class="price-teaser-card hl">
+        <h4>Маркировка</h4>
+        <div class="price-row"><span>Маркировка</span><b>от 8 ₽/шт</b></div>
+        <div class="price-row"><span>Честный знак (ЧЗ)</span><b>от 9 ₽/шт</b></div>
+      </div>
+      <div class="price-teaser-card dark">
+        <h4>Доставка</h4>
+        <div class="price-row"><span>За 1 короб</span><b>от 30 ₽</b></div>
+        <div class="price-row"><span>За 1 паллету</span><b>от 200 ₽</b></div>
+      </div>
+      <div class="price-teaser-card dark">
+        <h4>Упаковка</h4>
+        <div class="price-row"><span>В пакет БОПП</span><b>от 4 ₽/шт</b></div>
+        <div class="price-row"><span>В ПВД-рукав</span><b>от 21 ₽/шт</b></div>
+      </div>
+      <div class="price-teaser-card dark">
+        <h4>Короба и паллеты</h4>
+        <div class="price-row"><span>Короб 60×40×40 см</span><b>130 ₽/шт</b></div>
+        <div class="price-row"><span>Формирование паллеты</span><b>400 ₽</b></div>
+      </div>
+    </div>
+
+    <div class="price-actions">
+      <a href="#full-price" class="btn btn-secondary" onclick="document.getElementById('full-price').open=true;">Полный прайс</a>
+      <a href="#lead-form" class="btn btn-primary">Заказать расчёт</a>
+    </div>
+
+    <details class="price-full" id="full-price">
+      <summary>Показать полный прайс по всем услугам</summary>
+
+      <div class="price-cat">Разгрузка</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th></tr></thead>
+        <tbody>
+          <tr><td>Разгрузка килограммами</td><td class="num">6,5 ₽</td><td>за 1 кг</td></tr>
+          <tr><td>Разгрузка механизированная</td><td class="num">200 ₽</td><td>место/паллета</td></tr>
+          <tr><td>Снятие обрешётки/мешков — короб</td><td class="num">250 ₽</td><td>1 шт</td></tr>
+          <tr><td>Снятие обрешётки/мешков — паллета</td><td class="num">750 ₽</td><td>2 шт</td></tr>
+          <tr><td>Снятие обрешётки/мешков — мешок</td><td class="num">25 ₽</td><td>1 шт (мешок)</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">Приёмка товаров на склад</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th></tr></thead>
+        <tbody>
+          <tr><td>Приём поставки грузоместами (моно-короба) по маркировке, без внутритарного пересчёта, с размещением</td><td class="num">40 ₽</td><td>короб/место</td></tr>
+          <tr><td>Приём поставки монопаллетами по маркировке, без внутритарного пересчёта, с размещением</td><td class="num">200 ₽</td><td>паллета</td></tr>
+          <tr><td>Поштучная приёмка до 3 кг</td><td class="num">4 ₽</td><td>1 кг</td></tr>
+          <tr><td>Поштучная приёмка 3–15 кг</td><td class="num">9 ₽</td><td>1 кг</td></tr>
+          <tr><td>Идентификация груза, фото, создание ШК, маркировка</td><td class="num">90 ₽</td><td>1 шт</td></tr>
+          <tr><td>Обработка возвратов</td><td class="num">80 ₽</td><td>1 шт</td></tr>
+          <tr><td>Утилизация</td><td class="num">1 200 ₽</td><td>м³</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">Обработка груза</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th></tr></thead>
+        <tbody>
+          <tr><td>Создание макета этикетки</td><td class="num">50 ₽</td><td>1 шт</td></tr>
+          <tr><td>Маркировка</td><td class="num">8 ₽</td><td>1 шт</td></tr>
+          <tr><td>Честный знак (ЧЗ)</td><td class="num">9 ₽</td><td>1 шт</td></tr>
+          <tr><td>Пересчёт товара</td><td class="num">6 ₽</td><td>1 шт</td></tr>
+          <tr><td>Сортировка</td><td class="num">7 ₽</td><td>1 шт</td></tr>
+          <tr><td>Проверка комплектации</td><td class="num">5 ₽</td><td>2 шт</td></tr>
+          <tr><td>Укладка готового товара в короб штучно</td><td class="num">3,5 ₽</td><td>1 шт</td></tr>
+          <tr><td>Вложение вкладыша (подарок/инструкция)</td><td class="num">7 ₽</td><td>1 шт</td></tr>
+          <tr><td>Крепёж картонной бирки</td><td class="num">10 ₽</td><td>1 шт</td></tr>
+          <tr><td>Удаление картонной бирки</td><td class="num">4 ₽</td><td>1 шт</td></tr>
+          <tr><td>Сбор комплекта (3 ед. + 2 ₽ за каждую следующую)</td><td class="num">7 ₽</td><td>1 шт</td></tr>
+          <tr><td>Сборка индивидуального короба</td><td class="num">7 ₽</td><td>1 шт</td></tr>
+          <tr><td>Вложение товара в упаковку клиента</td><td class="num">7 ₽</td><td>1 шт</td></tr>
+          <tr><td>Проверка на брак визуальная</td><td class="num">7 ₽</td><td>1 шт</td></tr>
+          <tr><td>Проверка на брак детальная (по договорённости)</td><td class="num">от 10 ₽</td><td>1 шт</td></tr>
+          <tr><td>Сканирование ШК/ЧЗ по запросу заказчика</td><td class="num">5 ₽</td><td>1 шт</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">Упаковка в ПВД</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th></tr></thead>
+        <tbody>
+          <tr><td>Запайка в ПВД-рукав + материал, до 15 см</td><td class="num">21 ₽</td><td>1 шт</td></tr>
+          <tr><td>Запайка в ПВД-рукав + материал, до 20 см</td><td class="num">26 ₽</td><td>1 шт</td></tr>
+          <tr><td>Запайка в ПВД-рукав + материал, до 30 см</td><td class="num">36 ₽</td><td>1 шт</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">Упаковка в ВПП</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th></tr></thead>
+        <tbody>
+          <tr><td>Упаковка в ВПП 2-слойная + материал, до 20 см</td><td class="num">21 ₽</td><td>1 шт</td></tr>
+          <tr><td>Упаковка в ВПП 2-слойная + материал, до 35 см</td><td class="num">31 ₽</td><td>1 шт</td></tr>
+          <tr><td>Упаковка в ВПП 2-слойная + материал, до 50 см</td><td class="num">36 ₽</td><td>1 шт</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">Пакеты</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Размер</th><th>БОПП</th><th>ЗИП</th><th>Курьер-пакет</th></tr></thead>
+        <tbody>
+          <tr><td>15×20 см</td><td class="num">4 ₽</td><td class="num">14 ₽</td><td class="num">7 ₽</td></tr>
+          <tr><td>20×25 см</td><td class="num">4,5 ₽</td><td class="num">15 ₽</td><td class="num">9 ₽</td></tr>
+          <tr><td>25×35 см</td><td class="num">5,5 ₽</td><td class="num">21 ₽</td><td class="num">10 ₽</td></tr>
+          <tr><td>30×40 см</td><td class="num">6 ₽</td><td class="num">22 ₽</td><td class="num">19 ₽</td></tr>
+          <tr><td>35×45 см</td><td class="num">6,6 ₽</td><td class="num">27,5 ₽</td><td class="num">26 ₽</td></tr>
+          <tr><td>50×68 см</td><td class="num">11 ₽</td><td class="num">45 ₽</td><td class="num">—</td></tr>
+          <tr><td>80×68 см</td><td class="num">16 ₽</td><td class="num">—</td><td class="num">—</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">Короба и термоусадка</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th></tr></thead>
+        <tbody>
+          <tr><td>Короб транспортировочный/упаковочный 60×40×40</td><td class="num">130 ₽</td><td>1 шт</td></tr>
+          <tr><td>Упаковка в термоусадку</td><td class="num">8 ₽</td><td>1 шт</td></tr>
+          <tr><td>Материал термоусадки</td><td class="num">по длине × 0,95</td><td>1 шт</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">ВГХ и подбор</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th></tr></thead>
+        <tbody>
+          <tr><td>Предоставление ВГХ упаковочной единицы</td><td class="num">50 ₽</td><td>1 шт</td></tr>
+          <tr><td>Замеры по критериям заказчика</td><td class="num">150 ₽</td><td>1 артикул</td></tr>
+          <tr><td>Подробное фото/видео товара по запросу</td><td class="num">40 ₽</td><td>1 шт</td></tr>
+          <tr><td>Оформление разовой поставки в личном кабинете</td><td class="num">1 200 ₽</td><td>1 шт</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">Отгрузка</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr><td>Механизированная (паллета)</td><td class="num">200 ₽</td><td>паллета</td><td class="note">вес до 500 кг, высота до 1,8 м</td></tr>
+          <tr><td>Ручная (короб, без паллет)</td><td class="num">30 ₽</td><td>короб</td><td class="note"></td></tr>
+          <tr><td>Европаллета по требованиям маркетплейсов</td><td class="num">410 ₽</td><td>паллета</td><td class="note"></td></tr>
+          <tr><td>Формирование моно/микс-короба</td><td class="num">100 ₽</td><td>короб</td><td class="note"></td></tr>
+          <tr><td>Формирование паллеты (укладка + стрейч)</td><td class="num">400 ₽</td><td>паллета</td><td class="note"></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">Хранение и прочее</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr><td>Хранение паллет</td><td class="num">200 ₽</td><td>сутки</td><td class="note">европаллета 1,2×0,8 м, высота до 1,2 м, до 250 кг</td></tr>
+          <tr><td>Инвентаризация остатков</td><td class="num">7 ₽</td><td>1 шт</td><td class="note">сверка по штрихкодам/артикулам с учётными остатками</td></tr>
+          <tr><td>Работы в выходной/праздничный день</td><td class="num">1 500 ₽</td><td>—</td><td class="note">минимальный тариф 5 часов</td></tr>
+          <tr><td>Ведение личного кабинета маркетплейса — месяц</td><td class="num">20 000 ₽</td><td>месяц</td><td class="note">создание/привязка ШК, пропуска, лимиты</td></tr>
+          <tr><td>Ведение личного кабинета маркетплейса — квартал</td><td class="num">50 000 ₽</td><td>квартал</td><td class="note"></td></tr>
+          <tr><td>Ведение личного кабинета маркетплейса — год</td><td class="num">150 000 ₽</td><td>год</td><td class="note"></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="price-cat">FBS</div>
+      <div class="price-table-wrap"><table class="price-table">
+        <thead><tr><th>Услуга</th><th>Цена</th><th>Ед. изм.</th></tr></thead>
+        <tbody>
+          <tr><td>Приёмка поштучная</td><td class="num">от 10 ₽</td><td>1 шт (по габаритам)</td></tr>
+          <tr><td>Упаковка/проверка/вложения на приёмке</td><td class="num">по согласованию</td><td>—</td></tr>
+          <tr><td>Обработка FBS: сумма сторон до 15 см, вес до 0,3 кг</td><td class="num">31 ₽</td><td>1 шт</td></tr>
+          <tr><td>Обработка FBS: сумма сторон до 40 см, вес до 1 кг</td><td class="num">41 ₽</td><td>1 шт</td></tr>
+          <tr><td>Обработка FBS: сумма сторон до 60 см, вес до 5 кг</td><td class="num">61 ₽</td><td>1 шт</td></tr>
+          <tr><td>Обработка FBS: сумма сторон до 90 см, вес до 10 кг</td><td class="num">74 ₽</td><td>1 шт</td></tr>
+          <tr><td>Обработка FBS: сумма сторон до 120 см, вес до 20 кг</td><td class="num">94 ₽</td><td>1 шт</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+
   </div>
 </section>
+
+    <section class="section" id="onboarding">
+      <div class="container">
+        <div class="section-head">
+          <h2>Этапы работы с нами</h2>
+        </div>
+        <div class="onboard-grid">
+          <div class="onboard-card"><div class="onboard-num">1</div><h3>Заявка</h3><p>Звоните или оставляете заявку в форме обратной связи.</p></div>
+          <div class="onboard-card"><div class="onboard-num">2</div><h3>Расчёт</h3><p>Подбираем оптимальное решение под ваш объём и товар.</p></div>
+          <div class="onboard-card"><div class="onboard-num">3</div><h3>Старт</h3><p>Договариваемся об условиях и принимаем первую поставку.</p></div>
+          <div class="onboard-card"><div class="onboard-num">4</div><h3>Обработка</h3><p>Текущая работа — упаковка и отгрузка ваших заказов.</p></div>
+          <div class="onboard-card"><div class="onboard-num">5</div><h3>Отчётность</h3><p>Предоставляем отчётность по остаткам и движению товара.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section-head">
+          <h2>Наши преимущества</h2>
+        </div>
+        <div class="advantages-grid">
+          <div class="advantage-card">
+            <h3>Быстрая отгрузка</h3>
+            <p>Заказ проходит через собственную WMS, а не бумажный учёт вручную — меньше задержек и ошибок при сборке.</p>
+          </div>
+          <div class="advantage-card">
+            <h3>Умное распределение остатков по WB</h3>
+            <p>Автоматически раскидываем остатки по вашим складам FBS в заданных пропорциях — не нужно вручную двигать остатки в кабинете WB.</p>
+          </div>
+          <div class="advantage-card">
+            <h3>Полный цикл услуг</h3>
+            <p>От приёмки до отгрузки на маркетплейс — закрываем весь цикл, не нужно собирать команду из нескольких подрядчиков.</p>
+          </div>
+          <div class="advantage-card">
+            <h3>Прозрачная цена</h3>
+            <p>Платите за конкретные операции по прайсу, а не за крупный навязанный пакет услуг «на всякий случай».</p>
+          </div>
+          <div class="advantage-card">
+            <h3>Удобное расположение</h3>
+            <p>Склад в Чехове, работаем круглосуточно — привозите товар или запрашивайте забор в удобное для вас время.</p>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <section class="section" id="faq">
       <div class="container">
@@ -476,6 +795,7 @@
         <div class="footer-col">
           <h4>Навигация</h4>
           <a href="#problems" class="footer-link">Проблемы</a>
+          <a href="#services" class="footer-link">Услуги</a>
           <a href="#solution" class="footer-link">Решение</a>
           <a href="#pricing" class="footer-link">Тарифы</a>
           <a href="/login.html" class="footer-link">Вход в кабинет</a>
@@ -484,6 +804,8 @@
           <h4>Связаться с нами</h4>
           <a href="https://t.me/bfc_fulfilment" class="footer-link" target="_blank">Telegram: @bfc_fulfilment</a>
           <p class="footer-link" style="cursor: default;">Тел: 8 926 045-07-29</p>
+          <p class="footer-link" style="cursor: default;">Склад: г. Чехов, ул. Полиграфистов, д. 1</p>
+          <p class="footer-link" style="cursor: default;">Режим работы: круглосуточно, 24/7</p>
         </div>
       </div>
       <div class="footer-bottom">
